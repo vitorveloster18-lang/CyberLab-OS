@@ -117,10 +117,22 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
   },
 ]
 
+function expandPlatformNames(name: string): string[] {
+  if (process.platform !== "win32") return [name]
+  const lower = name.toLowerCase()
+  if (lower.endsWith(".exe") || lower.endsWith(".cmd") || lower.endsWith(".bat")) {
+    return [name]
+  }
+  return [`${name}.exe`, `${name}.cmd`, `${name}.bat`, name]
+}
+
 function isExecutableFile(candidatePath: string): boolean {
   try {
     const st = statSync(candidatePath, { throwIfNoEntry: false })
     if (!st || !st.isFile()) return false
+    if (process.platform === "win32") {
+      return true
+    }
     accessSync(candidatePath, constants.X_OK)
     return true
   } catch {
@@ -142,20 +154,24 @@ export function resolveExternalBinary(
 
   const localBinDir = path.join(workspaceRoot, ".cyberlab", "bin")
   for (const name of candidates) {
-    const localCandidate = path.join(localBinDir, path.basename(name))
-    if (isExecutableFile(localCandidate)) {
-      return { resolvedPath: localCandidate, sourceLocation: "workspace_local_bin" }
+    for (const variant of expandPlatformNames(path.basename(name))) {
+      const localCandidate = path.join(localBinDir, variant)
+      if (isExecutableFile(localCandidate)) {
+        return { resolvedPath: localCandidate, sourceLocation: "workspace_local_bin" }
+      }
     }
   }
 
   const envPath = process.env.PATH ?? ""
   const dirs = envPath.split(path.delimiter).filter(Boolean)
   for (const name of candidates) {
-    const safeBase = path.basename(name)
+    const variants = expandPlatformNames(path.basename(name))
     for (const dir of dirs) {
-      const sysCandidate = path.join(dir, safeBase)
-      if (isExecutableFile(sysCandidate)) {
-        return { resolvedPath: sysCandidate, sourceLocation: "system_path" }
+      for (const variant of variants) {
+        const sysCandidate = path.join(dir, variant)
+        if (isExecutableFile(sysCandidate)) {
+          return { resolvedPath: sysCandidate, sourceLocation: "system_path" }
+        }
       }
     }
   }
@@ -224,7 +240,11 @@ export async function runSafeChildProcess(params: {
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
-        HOME: process.env.HOME ?? params.cwd,
+        HOME: process.env.HOME ?? process.env.USERPROFILE ?? params.cwd,
+        ...(process.env.SYSTEMROOT ? { SYSTEMROOT: process.env.SYSTEMROOT } : {}),
+        ...(process.env.USERPROFILE ? { USERPROFILE: process.env.USERPROFILE } : {}),
+        ...(process.env.LOCALAPPDATA ? { LOCALAPPDATA: process.env.LOCALAPPDATA } : {}),
+        ...(process.env.APPDATA ? { APPDATA: process.env.APPDATA } : {}),
         LANG: "C.UTF-8",
         LC_ALL: "C.UTF-8",
       },

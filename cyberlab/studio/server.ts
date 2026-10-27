@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { execFileSync } from "node:child_process"
+import crypto from "node:crypto"
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import tls from "node:tls"
@@ -127,6 +128,99 @@ interface DemoLabState {
   tlsPort: number
 }
 
+function derLen(len: number): Uint8Array {
+  if (len < 128) return Uint8Array.from([len])
+  const bytes: number[] = []
+  let v = len
+  while (v > 0) {
+    bytes.unshift(v & 0xff)
+    v >>= 8
+  }
+  return Uint8Array.from([0x80 | bytes.length, ...bytes])
+}
+
+function derNode(tag: number, ...parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((acc, p) => acc + p.byteLength, 0)
+  const len = derLen(total)
+  const out = new Uint8Array(1 + len.byteLength + total)
+  out[0] = tag
+  out.set(len, 1)
+  let pos = 1 + len.byteLength
+  for (const p of parts) {
+    out.set(p, pos)
+    pos += p.byteLength
+  }
+  return out
+}
+
+function generatePureNodeSelfSignedPair(): { keyPem: string; certPem: string } {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" })
+  const keyPem = privateKey.export({ type: "pkcs8", format: "pem" }).toString()
+  const spkiDer = new Uint8Array(publicKey.export({ type: "spki", format: "der" }))
+
+  // OID ecdsa-with-SHA256 = 1.2.840.10045.4.3.2 -> 2a 86 48 ce 3d 04 03 02
+  const algId = derNode(0x30, derNode(0x06, Uint8Array.from([0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02])))
+  // CN=localhost -> OID 2.5.4.3 (55 04 03)
+  const cnAttr = derNode(
+    0x30,
+    derNode(
+      0x31,
+      derNode(
+        0x30,
+        derNode(0x06, Uint8Array.from([0x55, 0x04, 0x03])),
+        derNode(0x0c, new TextEncoder().encode("localhost")),
+      ),
+    ),
+  )
+  const validity = derNode(
+    0x30,
+    derNode(0x17, new TextEncoder().encode("250101000000Z")),
+    derNode(0x17, new TextEncoder().encode("350101000000Z")),
+  )
+  const version = derNode(0xa0, derNode(0x02, Uint8Array.from([0x02])))
+  const serial = derNode(0x02, Uint8Array.from([0x01, ...crypto.randomBytes(7)]))
+  const tbs = derNode(0x30, version, serial, algId, cnAttr, validity, cnAttr, spkiDer)
+  const sig = new Uint8Array(crypto.sign("sha256", tbs, privateKey))
+  const sigBits = new Uint8Array(1 + sig.byteLength)
+  sigBits.set(sig, 1)
+  const certDer = derNode(0x30, tbs, algId, derNode(0x03, sigBits))
+  const b64 = Buffer.from(certDer).toString("base64").replace(/(.{64})/g, "$1\n").trim()
+  const certPem = `-----BEGIN CERTIFICATE-----\n${b64}\n-----END CERTIFICATE-----\n`
+  return { keyPem, certPem }
+}
+
+function generateSelfSignedTlsPair(keyFile: string, certFile: string): { keyPem: string; certPem: string } {
+  try {
+    execFileSync(
+      "openssl",
+      [
+        "req",
+        "-x509",
+        "-newkey",
+        "ec",
+        "-pkeyopt",
+        "ec_paramgen_curve:prime256v1",
+        "-keyout",
+        keyFile,
+        "-out",
+        certFile,
+        "-days",
+        "5",
+        "-nodes",
+        "-subj",
+        "/CN=localhost",
+      ],
+      { stdio: "ignore" },
+    )
+    return { keyPem: readFileSync(keyFile, "utf8"), certPem: readFileSync(certFile, "utf8") }
+  } catch {
+    const pair = generatePureNodeSelfSignedPair()
+    writeFileSync(keyFile, pair.keyPem)
+    writeFileSync(certFile, pair.certPem)
+    return pair
+  }
+}
+
 async function setupDemoLab(workspaceRoot: string): Promise<DemoLabState> {
   const labDir = path.join(workspaceRoot, ".cyberlab", "demo-lab")
   mkdirSync(labDir, { recursive: true })
@@ -193,30 +287,11 @@ async function setupDemoLab(workspaceRoot: string): Promise<DemoLabState> {
     },
   })
 
-  // 3. Local 127.0.0.1 demo TLS server with ephemeral self-signed EC cert
+  // 3. Local 127.0.0.1 demo TLS server with ephemeral self-signed EC cert (works with or without OpenSSL CLI)
   const keyFile = path.join(labDir, "demo-tls-key.pem")
   const certFile = path.join(labDir, "demo-tls-cert.pem")
-  execFileSync("openssl", [
-    "req",
-    "-x509",
-    "-newkey",
-    "ec",
-    "-pkeyopt",
-    "ec_paramgen_curve:prime256v1",
-    "-keyout",
-    keyFile,
-    "-out",
-    certFile,
-    "-days",
-    "5",
-    "-nodes",
-    "-subj",
-    "/CN=localhost",
-  ])
-  const tlsSrv = tls.createServer(
-    { key: readFileSync(keyFile), cert: readFileSync(certFile) },
-    (sock) => sock.end("TLS Lab Ready\r\n"),
-  )
+  const { keyPem, certPem } = generateSelfSignedTlsPair(keyFile, certFile)
+  const tlsSrv = tls.createServer({ key: keyPem, cert: certPem }, (sock) => sock.end("TLS Lab Ready\r\n"))
   await new Promise<void>((resolve) => tlsSrv.listen(0, "127.0.0.1", resolve))
   const addr = tlsSrv.address()
   const tlsPort = typeof addr === "object" && addr ? addr.port : 8443
