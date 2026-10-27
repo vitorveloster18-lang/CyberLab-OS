@@ -23,6 +23,18 @@ import {
   WorkspaceAuditExecutor,
   WorkspaceAuditInputSchema,
 } from "../integrations/code-analysis/workspace-audit-executor.js"
+import {
+  HTTP_SECURITY_INSPECTOR_INPUT_SCHEMA_ID,
+  HttpSecurityInspectorCapability,
+  HttpSecurityInspectorInputSchema,
+  WebHttpSecurityInspectorExecutor,
+} from "../integrations/web-security/http-security-inspector.js"
+import {
+  TCP_SURFACE_PROBE_INPUT_SCHEMA_ID,
+  TcpSurfaceInspectorExecutor,
+  TcpSurfaceProbeCapability,
+  TcpSurfaceProbeInputSchema,
+} from "../integrations/network-observation/tcp-banner-inspector.js"
 
 const repoSkillsDir = fileURLToPath(new URL("../skills", import.meta.url))
 
@@ -125,6 +137,15 @@ export class CyberLabWorkspace {
     this.schemas.registerEffectSchema(WORKSPACE_AUDIT_INPUT_SCHEMA_ID, WorkspaceAuditInputSchema)
     this.executors.registerExecutor(new WorkspaceAuditExecutor())
     await this.capabilities.register(WorkspaceAuditCapability)
+
+    // Register license-approved passive web & lab network assessment capabilities
+    this.schemas.registerEffectSchema(HTTP_SECURITY_INSPECTOR_INPUT_SCHEMA_ID, HttpSecurityInspectorInputSchema)
+    this.executors.registerExecutor(new WebHttpSecurityInspectorExecutor())
+    await this.capabilities.register(HttpSecurityInspectorCapability)
+
+    this.schemas.registerEffectSchema(TCP_SURFACE_PROBE_INPUT_SCHEMA_ID, TcpSurfaceProbeInputSchema)
+    this.executors.registerExecutor(new TcpSurfaceInspectorExecutor())
+    await this.capabilities.register(TcpSurfaceProbeCapability)
 
     // Load CyberLab skills
     this.skills.loadFromDirectory(repoSkillsDir)

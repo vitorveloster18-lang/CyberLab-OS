@@ -1,0 +1,22 @@
+{
+  "id": "cyberlab-tcp-surface-probe",
+  "version": "1.0.0",
+  "source": "https://github.com/vitorveloster18-lang/CyberLab-OS",
+  "commit": "first-party",
+  "license": {
+    "spdx": "MIT",
+    "reviewStatus": "approved_embed",
+    "reviewNotes": [
+      "First-party MIT passive TCP reachability and unsolicited greeting banner observer.",
+      "Uses node:net Socket with strict AbortSignal cancellation and 1024-byte banner cap."
+    ]
+  },
+  "integration": {
+    "mode": "embedded",
+    "executorId": "tcp-surface-probe-executor",
+    "linuxRequired": false
+  },
+  "dependenciesReviewed": true,
+  "noticesRecorded": true,
+  "lastReviewedAt": "2026-10-26T00:00:00.000Z"
+}

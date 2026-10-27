@@ -1,11 +1,12 @@
 # Third-Party Notices — CyberLab OS
 
-Este arquivo registra os componentes de software de terceiros incorporados ao repositório **CyberLab OS**, suas origens, commits fixados e textos de licença aplicáveis.
+Este arquivo registra os componentes de software incorporados ao repositório **CyberLab OS**, suas origens, commits fixados e licenças aplicáveis. Nenhum componente sob licenças copyleft restritivas (`GPL`, `AGPL`, `SSPL`), `NPSL` ou proprietárias é embutido neste produto.
 
 ---
 
-## 1. OpenCode V2 (`anomalyco/opencode`)
+## 1. `opencode-v2-core` — OpenCode V2 (`anomalyco/opencode`)
 
+- **ID de Manifesto**: `opencode-v2-core`
 - **Componente**: OpenCode V2 (pacotes de produto em `packages/`, scripts base em `script/`, patches de dependências em `patches/`)
 - **Versão**: `2.1.4`
 - **Origem**: `https://github.com/anomalyco/opencode`
@@ -38,6 +39,19 @@ SOFTWARE.
 
 ---
 
-## 2. Componentes Próprios Nativos do CyberLab OS
+## 2. Componentes Nativos Aprovados do CyberLab OS (`MIT`)
 
-Os módulos em `cyberlab/`, `integrations/`, `skills/` e `tests/cyberlab/` são obras originais do projeto **CyberLab OS**, licenciadas sob `MIT`, projetadas para interoperar com o núcleo OpenCode V2 sem incorporar código proprietário, AGPL ou NPSL de ferramentas externas.
+Os seguintes adaptadores e executores em `cyberlab/` e `integrations/` são implementações originais `MIT` do **CyberLab OS**, auditadas quanto a dependências transitivas e registradas em `vendor/manifests/`:
+
+- **`cyberlab-workspace-audit`** (`integrations/code-analysis/workspace-audit-executor.ts`) — Auditoria somente leitura de configuração e segredos no workspace (`MIT`).
+- **`cyberlab-http-security-inspector`** (`integrations/web-security/http-security-inspector.ts`) — Inspetor passivo de cabeçalhos HTTP de segurança, flags de cookies e CORS (`MIT`).
+- **`cyberlab-tcp-surface-probe`** (`integrations/network-observation/tcp-banner-inspector.ts`) — Sonda controlada de conectividade TCP e observação passiva de banners em laboratório (`MIT`).
+
+---
+
+## 3. Principais Dependências Runtime Permissivas
+
+- **Effect (`effect@4.0.1`)** — `MIT` (`https://github.com/Effect-TS/effect`)
+- **SolidJS (`solid-js@1.9.15`)** — `MIT` (`https://github.com/solidjs/solid`)
+- **Hono (`hono@4.10.7`)** — `MIT` (`https://github.com/honojs/hono`)
+- **Drizzle ORM (`drizzle-orm@1.0.0-rc.5`)** — `Apache-2.0` (`https://github.com/drizzle-team/drizzle-orm`)
