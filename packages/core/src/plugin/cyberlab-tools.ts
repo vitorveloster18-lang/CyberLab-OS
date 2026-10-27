@@ -65,10 +65,15 @@ const ProposeFindingOutput = Schema.Struct({
 
 const DelegatePartnerInput = Schema.Struct({
   objective: Schema.String.annotate({
-    description: "Analysis objective sent to the external partner agent (e.g. chat.py via chat_py_bridge.py)",
+    description: "Analysis objective sent to one CDI specialist or multiple CDIs in parallel",
   }),
   evidenceIds: Schema.optionalKey(Schema.Array(Schema.String)),
   partnerId: Schema.optionalKey(Schema.String),
+  partnerIds: Schema.optionalKey(
+    Schema.Array(Schema.String).annotate({
+      description: "Optional list of CDI IDs (e.g. ['salem','kairos','naia']) to call in parallel",
+    }),
+  ),
 })
 
 const DelegatePartnerOutput = Schema.Struct({
@@ -250,17 +255,21 @@ export const Plugin = {
           name: "cyberlab_partner_delegate",
           options: { codemode: false },
           description:
-            "Delegate a redacted analysis task to an authenticated external partner runtime (such as chat.py via chat_py_bridge.py).",
+            "Delegate a redacted analysis task to one CDI partner specialist (e.g. salem) or to multiple CDI partners in parallel (e.g. ['salem', 'kairos', 'naia']).",
           input: DelegatePartnerInput,
           output: DelegatePartnerOutput,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const targetPartner = input.partnerId ?? "chat-py-agent"
+              const multiTargets =
+                input.partnerIds && input.partnerIds.length > 0
+                  ? [...input.partnerIds]
+                  : [input.partnerId ?? "chat-py-agent"]
+
               yield* permission
                 .assert({
                   action: "cyberlab_partner_delegate",
-                  resources: [targetPartner],
-                  save: [targetPartner],
+                  resources: multiTargets,
+                  save: multiTargets,
                   sessionID: context.sessionID,
                   agent: context.agent,
                   source: { type: "tool", messageID: context.messageID, id: context.id },
@@ -268,6 +277,39 @@ export const Plugin = {
                 .pipe(Effect.mapError((e) => failTool("cyberlab_partner_delegate", e)))
 
               const ws = yield* getWorkspace()
+              if (multiTargets.length > 1) {
+                const report = yield* Effect.tryPromise({
+                  try: () =>
+                    ws.delegateToMultiplePartners({
+                      partnerIds: multiTargets,
+                      objective: input.objective,
+                      evidenceIds: input.evidenceIds ? [...input.evidenceIds] : [],
+                    }),
+                  catch: (e) => failTool("cyberlab_partner_delegate", e),
+                })
+                const totalFindings = report.results.reduce(
+                  (acc, r) => acc + (r.outcome?.createdFindings.length ?? 0),
+                  0,
+                )
+                const mergedSummary = report.results
+                  .map((r) =>
+                    r.ok
+                      ? `[${r.displayName} (${r.durationMs}ms)]: ${r.outcome?.result?.summary ?? "ok"}`
+                      : `[${r.displayName} FAILED]: ${r.error}`,
+                  )
+                  .join("\n\n")
+                const status = report.failedCount === 0 ? "completed" : report.succeededCount > 0 ? "partial" : "failed"
+                return {
+                  output: {
+                    status,
+                    summary: mergedSummary,
+                    unreviewedFindingCount: totalFindings,
+                  },
+                  content: `[parallel CDIs (${report.succeededCount}/${report.totalDispatched}) ${status}]\n${mergedSummary}`,
+                }
+              }
+
+              const targetPartner = multiTargets[0]!
               const outcome = yield* Effect.tryPromise({
                 try: () =>
                   ws.delegateToPartner({

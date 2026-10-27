@@ -1,0 +1,59 @@
+{
+  "version": "1.0",
+  "sharedSecret": "DEFINA_OU_GERE_UM_SECRET_HMAC_DE_32_OU_64_CARACTERES_AQUI",
+  "cyberlabCallbackUrl": "http://127.0.0.1:4180/api/studio/partner-gateway",
+  "partners": [
+    {
+      "partnerId": "salem",
+      "displayName": "Salem",
+      "specialty": "Analise de Logs, Triagem de CVEs, Resposta a Incidentes e Correlacao de Alertas",
+      "endpointUrl": "http://127.0.0.1:8788/cyberlab/partner",
+      "enabled": true,
+      "permissions": {
+        "readProjectState": true,
+        "readEvidenceAndFiles": true,
+        "createArtifactsAndFindings": true,
+        "initiateActions": "allow_readonly_propose_others"
+      }
+    },
+    {
+      "partnerId": "kairos",
+      "displayName": "Kairos",
+      "specialty": "Arquitetura de Seguranca, Modelagem de Ameacas e Estrategia de Mitigacao",
+      "endpointUrl": "http://127.0.0.1:8789/cyberlab/partner",
+      "enabled": true,
+      "permissions": {
+        "readProjectState": true,
+        "readEvidenceAndFiles": true,
+        "createArtifactsAndFindings": true,
+        "initiateActions": "allow_readonly_propose_others"
+      }
+    },
+    {
+      "partnerId": "naia",
+      "displayName": "Naia",
+      "specialty": "Pesquisa Profunda, Forense Digital, Evidencias e Inteligencia de Ameacas",
+      "endpointUrl": "http://127.0.0.1:8790/cyberlab/partner",
+      "enabled": true,
+      "permissions": {
+        "readProjectState": true,
+        "readEvidenceAndFiles": true,
+        "createArtifactsAndFindings": true,
+        "initiateActions": "allow_readonly_propose_others"
+      }
+    },
+    {
+      "partnerId": "cdi-4",
+      "displayName": "CDI-04",
+      "specialty": "Auditoria de Codigo, Revisao de Superficie de Ataque e Validacao Tecnica",
+      "endpointUrl": "http://127.0.0.1:8791/cyberlab/partner",
+      "enabled": true,
+      "permissions": {
+        "readProjectState": true,
+        "readEvidenceAndFiles": true,
+        "createArtifactsAndFindings": true,
+        "initiateActions": "allow_readonly_propose_others"
+      }
+    }
+  ]
+}

@@ -310,6 +310,9 @@ export async function startCyberLabStudioServer() {
   if (enableDemoLab) {
     demoLab = await setupDemoLab(repoRoot)
     await ws.controlProxy({ action: "start", port: 0, scopeOnly: true })
+    if (ws.cdiHub.getOverview().partners.length === 0) {
+      ws.cdiHub.loadFourCdiPreset()
+    }
   }
 
   const jsonResp = (data: unknown, status = 200) =>
@@ -365,6 +368,7 @@ export async function startCyberLabStudioServer() {
               tools,
             },
             proxy,
+            cdiHub: ws.cdiHub.getOverview(),
             demoLab,
           })
         }
@@ -451,6 +455,83 @@ export async function startCyberLabStudioServer() {
 
         if (req.method === "GET" && url.pathname === "/api/studio/report") {
           return jsonResp({ markdown: await ws.generateMarkdownReport() })
+        }
+
+        // Bidirectional CDI -> CyberLab OS HMAC-SHA256 Gateway
+        if (req.method === "POST" && url.pathname === "/api/studio/partner-gateway") {
+          const rawText = await req.text()
+          const gw = await ws.cdiHub.handleInboundGatewayRequest(rawText)
+          return jsonResp(gw.body, gw.httpStatus)
+        }
+
+        // CDI Partner Hub Management & Multi-CDI Dispatch
+        if (req.method === "POST" && url.pathname === "/api/studio/partners/manage") {
+          const body = (await req.json()) as {
+            operation: "upsert" | "remove" | "preset_4"
+            partnerId?: string
+            displayName?: string
+            specialty?: string
+            endpointUrl?: string
+            enabled?: boolean
+            secretOverride?: string
+            baseHost?: string
+            permissions?: {
+              readProjectState: boolean
+              readEvidenceAndFiles: boolean
+              createArtifactsAndFindings: boolean
+              initiateActions: "disabled" | "propose_only" | "allow_readonly_propose_others"
+            }
+          }
+          if (body.operation === "preset_4") {
+            ws.cdiHub.loadFourCdiPreset(body.baseHost)
+          } else if (body.operation === "remove" && body.partnerId) {
+            ws.cdiHub.removePartner(body.partnerId)
+          } else if (body.partnerId) {
+            ws.cdiHub.upsertPartner({
+              partnerId: body.partnerId,
+              displayName: body.displayName ?? body.partnerId,
+              ...(body.specialty !== undefined ? { specialty: body.specialty } : {}),
+              endpointUrl: body.endpointUrl ?? "http://127.0.0.1:8788/cyberlab/partner",
+              ...(body.enabled !== undefined ? { enabled: body.enabled } : {}),
+              ...(body.secretOverride !== undefined ? { secretOverride: body.secretOverride } : {}),
+              ...(body.permissions !== undefined ? { permissions: body.permissions } : {}),
+            })
+          }
+          return jsonResp(ws.cdiHub.getOverview())
+        }
+
+        if (req.method === "POST" && url.pathname === "/api/studio/partners/secret") {
+          const body = (await req.json()) as {
+            operation: "reveal" | "generate" | "custom"
+            customSecret?: string
+            cyberlabCallbackUrl?: string
+          }
+          if (body.operation === "reveal") {
+            return jsonResp(ws.cdiHub.revealSharedSecret())
+          }
+          return jsonResp(
+            ws.cdiHub.configureSecretAndGateway({
+              mode: body.operation,
+              ...(body.customSecret !== undefined ? { customSecret: body.customSecret } : {}),
+              ...(body.cyberlabCallbackUrl !== undefined ? { cyberlabCallbackUrl: body.cyberlabCallbackUrl } : {}),
+            }),
+          )
+        }
+
+        if (req.method === "POST" && url.pathname === "/api/studio/partners/ping") {
+          const body = (await req.json()) as { partnerId: string }
+          return jsonResp(await ws.cdiHub.pingPartner(body.partnerId))
+        }
+
+        if (req.method === "POST" && url.pathname === "/api/studio/partners/dispatch") {
+          const body = (await req.json()) as {
+            partnerIds: string[]
+            objective: string
+            evidenceIds?: string[]
+            contextText?: string
+            timeoutMs?: number
+          }
+          return jsonResp(await ws.delegateToMultiplePartners(body))
         }
 
         return jsonResp({ error: "Not found" }, 404)

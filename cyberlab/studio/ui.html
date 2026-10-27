@@ -244,6 +244,7 @@
     <button data-tab="packets">5. Packet Dissector (.pcap / Wireshark)</button>
     <button data-tab="forensics">6. Reverse &amp; Mobile (ELF/PE/APK/MVT)</button>
     <button data-tab="cockpit">7. Scope, Approvals, External Radar &amp; Custody</button>
+    <button data-tab="cdi">8. Agentes CDI (Bridge Bidirecional 8788-8791)</button>
   </nav>
 
   <div id="noticeBar"></div>
@@ -539,6 +540,76 @@
           </div>
         </div>
 
+        <!-- TAB 8: CDI AGENTS & BIDIRECTIONAL BRIDGE -->
+        <div class="tab-section" id="tab-cdi">
+          <div class="card">
+            <div class="row" style="justify-content:space-between">
+              <strong>Segredo HMAC &amp; Gateway Bidirecional (CDI ↔ CyberLab OS)</strong>
+              <span class="badge ok" id="cdiSecretBadge">HMAC-SHA256</span>
+            </div>
+            <div class="row">
+              <label class="field">
+                <span>CYBERLAB_PARTNER_SECRET (Gerado pelo OS ou definido por você)</span>
+                <input type="text" id="cdiSecretInput" placeholder="Clique em Revelar, Gerar Novo (64 hex) ou digite seu próprio segredo (>=16 chars)" />
+              </label>
+            </div>
+            <div class="row">
+              <label class="field">
+                <span>URL de Callback Bidirecional (onde os CDIs enviam comandos para o CyberLab OS)</span>
+                <input type="text" id="cdiCallbackUrlInput" value="http://127.0.0.1:4180/api/studio/partner-gateway" />
+              </label>
+            </div>
+            <div class="row">
+              <button class="btn primary" onclick="cdiSecretAction('generate')">Gerar Novo Secret (256-bit)</button>
+              <button class="btn" onclick="cdiSecretAction('custom')">Salvar Secret Customizado</button>
+              <button class="btn" onclick="cdiSecretAction('reveal')">Revelar / Copiar Env PowerShell</button>
+            </div>
+            <pre id="cdiEnvSnippet" style="display:none"></pre>
+          </div>
+
+          <div class="card">
+            <div class="row" style="justify-content:space-between">
+              <strong>Registo de Agentes Parceiros CDI (Portas 8788–8791)</strong>
+              <button class="btn primary" onclick="loadFourCdiPreset()">Carregar Preset 4 CDIs (Salem, Kairós, Naia, CDI-04)</button>
+            </div>
+            <div id="cdiPartnersTable"></div>
+            <div class="row" style="padding-top:6px">
+              <input type="text" id="newCdiId" style="width:105px" placeholder="ID (ex: salem)" />
+              <input type="text" id="newCdiName" style="width:125px" placeholder="Nome (Salem)" />
+              <input type="text" id="newCdiUrl" style="flex:1" placeholder="http://127.0.0.1:8788/cyberlab/partner" />
+              <select id="newCdiInitMode" style="width:190px">
+                <option value="allow_readonly_propose_others">Read-Only Direto + Propor Ativas</option>
+                <option value="propose_only">Apenas Propor (Fila Humana)</option>
+                <option value="disabled">Sem Iniciar Ações</option>
+              </select>
+              <button class="btn" onclick="upsertCdiPartner()">+ Salvar CDI</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <strong>Delegar Tarefa (1 CDI Especialista OU Múltiplos CDIs em Paralelo)</strong>
+            <div id="cdiDispatchCheckboxes" class="row"></div>
+            <label class="field">
+              <span>Objetivo da Análise / Missão para os CDIs selecionados</span>
+              <textarea id="cdiObjective" rows="3" placeholder="Ex.: Analisar este log de segurança, correlacionar CVEs e verificar configurações expostas no projeto..."></textarea>
+            </label>
+            <label class="field">
+              <span>IDs de Evidência para Anexar (opcional, separados por vírgula — já saem redigidos)</span>
+              <input type="text" id="cdiEvidenceIds" placeholder="ev-..." />
+            </label>
+            <div class="row">
+              <button class="btn primary" onclick="dispatchSelectedCdis()">Enviar aos CDIs Selecionados (Paralelo / Individual)</button>
+              <button class="chip" onclick="selectAllCdis(true)">Marcar Todos</button>
+              <button class="chip" onclick="selectAllCdis(false)">Limpar Seleção</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <strong>Atividade Bidirecional em Tempo Real (Chamadas Iniciadas pelos CDIs → CyberLab OS)</strong>
+            <div id="cdiInboundLogWrap"></div>
+          </div>
+        </div>
+
       </div>
     </section>
 
@@ -683,6 +754,10 @@
             <div class="v" style="color:${t.available ? 'var(--accent-2)' : 'var(--muted)'}">${escapeHtml(t.toolId)}: ${t.available ? "READY" : "MISSING"}</div>
           </div>
         `).join("");
+
+        if (s.cdiHub) {
+          renderCdiHub(s.cdiHub);
+        }
 
         renderCustodySummary(s);
       } catch (err) {
@@ -1052,6 +1127,174 @@
         <div id="custodySummaryBox"></div>
       `;
       if (currentState) renderCustodySummary(currentState);
+    }
+
+    // Tab 8: CDI Partner Hub & Bidirectional Bridge
+    let selectedCdiIds = new Set();
+
+    function renderCdiHub(hub) {
+      document.getElementById("cdiSecretBadge").textContent = "Secret: " + hub.secretPreview;
+      const cbInput = document.getElementById("cdiCallbackUrlInput");
+      if (!cbInput.dataset.edited) cbInput.value = hub.cyberlabCallbackUrl;
+
+      const pTable = document.getElementById("cdiPartnersTable");
+      if (!hub.partners || hub.partners.length === 0) {
+        pTable.innerHTML = `<div style="color:var(--muted)">Nenhum CDI registado ainda. Clique em "Carregar Preset 4 CDIs" acima!</div>`;
+      } else {
+        if (selectedCdiIds.size === 0) {
+          hub.partners.filter((p) => p.enabled).forEach((p) => selectedCdiIds.add(p.partnerId));
+        }
+        pTable.innerHTML = `<table><thead><tr><th>CDI</th><th>Endpoint</th><th>Permissão Bidirecional</th><th>Ações</th></tr></thead><tbody>` +
+          hub.partners.map((p) => `
+            <tr>
+              <td><strong>${escapeHtml(p.displayName)}</strong> (<code>${escapeHtml(p.partnerId)}</code>)<br/><span style="color:var(--muted);font-size:10.5px">${escapeHtml(p.specialty)}</span></td>
+              <td><code>${escapeHtml(p.endpointUrl)}</code></td>
+              <td><span class="badge ok">${escapeHtml(p.permissions.initiateActions)}</span></td>
+              <td>
+                <button class="chip" onclick="pingCdi('${escapeHtml(p.partnerId)}')">Ping /health</button>
+                <button class="chip" onclick="removeCdi('${escapeHtml(p.partnerId)}')">×</button>
+              </td>
+            </tr>
+          `).join("") + `</tbody></table>`;
+      }
+
+      document.getElementById("cdiDispatchCheckboxes").innerHTML = (hub.partners || []).map((p) => `
+        <label style="display:flex;align-items:center;gap:5px;background:#0b1322;border:1px solid var(--border);padding:4px 9px;border-radius:5px">
+          <input type="checkbox" ${selectedCdiIds.has(p.partnerId) ? "checked" : ""} onchange="toggleCdiSelect('${escapeHtml(p.partnerId)}', this.checked)" />
+          <strong>${escapeHtml(p.displayName)}</strong>
+        </label>
+      `).join("");
+
+      const act = hub.inboundActivity || [];
+      document.getElementById("cdiInboundLogWrap").innerHTML = act.length === 0
+        ? `<div style="color:var(--muted);font-size:11.5px">Nenhuma ação autónoma recebida dos CDIs ainda. Assim que um CDI usar <code>CyberLabOSClient</code> (ler ficheiros/evidências, ver estado, criar artifacts ou iniciar ferramentas), aparecerá aqui em tempo real.</div>`
+        : `<table><thead><tr><th>CDI</th><th>Ação</th><th>Status</th><th>Resumo</th></tr></thead><tbody>` +
+          act.slice(0, 15).map((a) => `
+            <tr>
+              <td><strong>${escapeHtml(a.partnerId)}</strong></td>
+              <td><code>${escapeHtml(a.action)}</code></td>
+              <td><span class="badge ${a.outcome === 'allowed' ? 'ok' : a.outcome === 'queued_for_approval' ? 'warn' : 'err'}">${escapeHtml(a.outcome)}</span></td>
+              <td>${escapeHtml(a.summary)}</td>
+            </tr>
+          `).join("") + `</tbody></table>`;
+    }
+
+    function toggleCdiSelect(id, checked) {
+      if (checked) selectedCdiIds.add(id);
+      else selectedCdiIds.delete(id);
+    }
+
+    function selectAllCdis(flag) {
+      selectedCdiIds.clear();
+      if (flag && currentState?.cdiHub?.partners) {
+        currentState.cdiHub.partners.forEach((p) => selectedCdiIds.add(p.partnerId));
+      }
+      if (currentState?.cdiHub) renderCdiHub(currentState.cdiHub);
+    }
+
+    async function cdiSecretAction(operation) {
+      const customSecret = document.getElementById("cdiSecretInput").value.trim();
+      const cyberlabCallbackUrl = document.getElementById("cdiCallbackUrlInput").value.trim();
+      try {
+        const res = await api("/api/studio/partners/secret", {
+          method: "POST",
+          body: JSON.stringify({ operation, customSecret, cyberlabCallbackUrl })
+        });
+        document.getElementById("cdiSecretInput").value = res.sharedSecret;
+        const snip = document.getElementById("cdiEnvSnippet");
+        snip.style.display = "block";
+        snip.textContent =
+          `# PowerShell (cole no terminal onde roda o seu CDI Runtime / chat_py_bridge.py):\n` +
+          `$env:CYBERLAB_PARTNER_SECRET="${res.sharedSecret}"\n` +
+          `$env:CYBERLAB_CALLBACK_URL="${res.cyberlabCallbackUrl}"\n\n` +
+          `# Linux / WSL2:\n` +
+          `export CYBERLAB_PARTNER_SECRET="${res.sharedSecret}"\n` +
+          `export CYBERLAB_CALLBACK_URL="${res.cyberlabCallbackUrl}"`;
+        showNotice("Segredo HMAC pronto e salvo em .cyberlab/partners.json");
+        await refreshAll();
+      } catch (err) {
+        showNotice("Erro no segredo CDI: " + err.message);
+      }
+    }
+
+    async function loadFourCdiPreset() {
+      await api("/api/studio/partners/manage", { method: "POST", body: JSON.stringify({ operation: "preset_4" }) });
+      showNotice("4 CDIs registados nas portas 8788–8791 (Salem, Kairós, Naia, CDI-04)");
+      await refreshAll();
+    }
+
+    async function upsertCdiPartner() {
+      const partnerId = document.getElementById("newCdiId").value.trim();
+      const displayName = document.getElementById("newCdiName").value.trim() || partnerId;
+      const endpointUrl = document.getElementById("newCdiUrl").value.trim() || "http://127.0.0.1:8788/cyberlab/partner";
+      const initiateActions = document.getElementById("newCdiInitMode").value;
+      if (!partnerId) return showNotice("Informe o ID do CDI (ex: salem)");
+      await api("/api/studio/partners/manage", {
+        method: "POST",
+        body: JSON.stringify({
+          operation: "upsert",
+          partnerId,
+          displayName,
+          endpointUrl,
+          permissions: {
+            readProjectState: true,
+            readEvidenceAndFiles: true,
+            createArtifactsAndFindings: true,
+            initiateActions
+          }
+        })
+      });
+      document.getElementById("newCdiId").value = "";
+      document.getElementById("newCdiName").value = "";
+      await refreshAll();
+    }
+
+    async function removeCdi(partnerId) {
+      selectedCdiIds.delete(partnerId);
+      await api("/api/studio/partners/manage", { method: "POST", body: JSON.stringify({ operation: "remove", partnerId }) });
+      await refreshAll();
+    }
+
+    async function pingCdi(partnerId) {
+      const res = await api("/api/studio/partners/ping", { method: "POST", body: JSON.stringify({ partnerId }) });
+      showNotice(res.reachable ? `CDI ${partnerId} ONLINE: ${res.details}` : `CDI ${partnerId} OFFLINE (${res.details})`);
+    }
+
+    async function dispatchSelectedCdis() {
+      const partnerIds = Array.from(selectedCdiIds);
+      const objective = document.getElementById("cdiObjective").value.trim();
+      const evidenceIds = document.getElementById("cdiEvidenceIds").value.split(",").map((s) => s.trim()).filter(Boolean);
+      if (!partnerIds.length) return showNotice("Marque pelo menos 1 CDI para enviar a tarefa.");
+      if (!objective) return showNotice("Descreva o objetivo da tarefa para os CDIs.");
+      showNotice(`Enviando tarefa (${partnerIds.length > 1 ? "PARALELO" : "INDIVIDUAL"}) para: ${partnerIds.join(", ")} ...`);
+      try {
+        const rep = await api("/api/studio/partners/dispatch", {
+          method: "POST",
+          body: JSON.stringify({ partnerIds, objective, evidenceIds })
+        });
+        const cards = rep.results.map((r) => `
+          <div class="card">
+            <div class="row" style="justify-content:space-between">
+              <strong>${escapeHtml(r.displayName)} (<code>${escapeHtml(r.partnerId)}</code>)</strong>
+              <span class="badge ${r.ok ? 'ok' : 'err'}">${r.ok ? `OK (${r.durationMs}ms)` : "FALHOU"}</span>
+            </div>
+            ${r.ok
+              ? `<pre>${escapeHtml(r.outcome?.result?.summary || "")}</pre>
+                 <div style="font-size:11px;color:var(--accent)">Findings propostos: ${(r.outcome?.createdFindings || []).length} · Evidência: ${escapeHtml(r.outcome?.storedEvidenceId || "n/a")}</div>`
+              : `<div style="color:var(--danger);font-family:var(--mono)">${escapeHtml(r.error)}</div>`}
+          </div>
+        `).join("");
+        document.getElementById("inspectorOutput").innerHTML = `
+          <div class="card">
+            <strong>Resultado Colaborativo CDI (${escapeHtml(rep.mode.toUpperCase())}: ${rep.succeededCount}/${rep.totalDispatched} responderam)</strong>
+          </div>
+          ${cards}
+          <div id="custodySummaryBox"></div>
+        `;
+        await refreshAll();
+      } catch (err) {
+        showNotice("Erro no dispatch CDI: " + err.message);
+      }
     }
 
     renderHeaderRows();

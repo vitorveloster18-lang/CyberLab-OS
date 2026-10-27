@@ -339,6 +339,84 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
         }),
       ),
   )
+  .add(
+    HttpApiEndpoint.get("cyberlab.partners.overview", "/api/cyberlab/partners", {
+      query: LocationQuery,
+      success: Location.response(CyberLab.CdiHubOverview),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.partners.overview",
+          summary: "Get registered CDI partner agents, secret status, and bidirectional activity",
+          description: "Inspect registered external CDI agents (e.g. Salem, Kairos, Naia) and inbound gateway logs.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.partners.manage", "/api/cyberlab/partners/manage", {
+      query: LocationQuery,
+      payload: CyberLab.CdiPartnerManageInput,
+      success: Location.response(CyberLab.CdiHubOverview),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.partners.manage",
+          summary: "Register, update, remove, or load 4-CDI preset in CyberLab OS",
+          description: "Manage external CDI partner agents and their bidirectional permissions.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.partners.secret", "/api/cyberlab/partners/secret", {
+      query: LocationQuery,
+      payload: CyberLab.CdiSecretManageInput,
+      success: Location.response(CyberLab.CdiSecretManageOutput),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.partners.secret",
+          summary: "Generate, set, or reveal CYBERLAB_PARTNER_SECRET and callback URL",
+          description: "Manage the shared HMAC-SHA256 secret used by external CDI agents.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.partners.dispatch", "/api/cyberlab/partners/dispatch", {
+      query: LocationQuery,
+      payload: CyberLab.CdiMultiDispatchInput,
+      success: Location.response(Schema.Unknown),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.partners.dispatch",
+          summary: "Dispatch an analysis task to 1 CDI or multiple CDIs in parallel",
+          description: "Supports both single-specialist routing and parallel multi-CDI collaboration.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.partners.gateway", "/api/cyberlab/partner-gateway", {
+      query: LocationQuery,
+      payload: Schema.Unknown,
+      success: Location.response(Schema.Unknown),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.partners.gateway",
+          summary: "Bidirectional CDI -> CyberLab OS HMAC-SHA256 Gateway",
+          description: "Allows external CDI agents to read project state, read evidence/files, create artifacts, and initiate governed actions.",
+        }),
+      ),
+  )
   .annotateMerge(
     OpenApi.annotations({
       title: "cyberlab",

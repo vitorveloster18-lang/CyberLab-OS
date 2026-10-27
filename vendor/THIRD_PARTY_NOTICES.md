@@ -56,6 +56,7 @@ Os seguintes adaptadores e executores em `cyberlab/` e `integrations/` são impl
 - **`cyberlab-external-control-plane`** (`cyberlab/external/control-plane.ts`) — Plano de controle unificado `MIT` para descoberta, supervisão (`shell=false` + kill-switch), ingestão de sessões manuais externas e sincronização `.cyberlab/inbox/` com custódia `SHA-256` (`MIT`).
 - **`cyberlab-http-proxy`** (`cyberlab/proxy/http-proxy.ts`) — Proxy HTTP local `MIT` (`127.0.0.1`) de captura de tráfego com validação `ScopeController`, proteção SSRF, redação automática de cabeçalhos sensíveis e integração direta com Repeater/Comparer e custódia `SHA-256` (`MIT`).
 - **`cyberlab-security-studio`** (`packages/gui-plugins/src/cyberlab/` e `cyberlab/studio/`) — Interface manual visual completa integrada ao OpenCode V2 e em janela cheia no navegador para todas as 7 disciplinas de segurança, sem dependência de UIs externas (`MIT`).
+- **`cyberlab-cdi-hub`** (`cyberlab/partners/cdi-hub.ts` e `integrations/partners/chat_py_bridge.py`) — Hub Multi-CDI e Gateway Bidirecional `HMAC-SHA256` para colaboração individual ou em paralelo de múltiplos agentes CDI externos com acesso governado a estado, evidências, ficheiros, artifacts `SHA-256` e iniciação de capabilities (`MIT`).
 
 ---
 

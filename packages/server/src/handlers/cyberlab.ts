@@ -372,5 +372,84 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
           return yield* runBadRequest(() => ws.persistProxyEntry(payload.entryId, "http-workbench"))
         }),
       ),
+    )
+    .handle("cyberlab.partners.overview", () =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return ws.cdiHub.getOverview()
+        }),
+      ),
+    )
+    .handle("cyberlab.partners.manage", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(async () => {
+            if (payload.operation === "preset_4") {
+              ws.cdiHub.loadFourCdiPreset(payload.baseHost)
+            } else if (payload.operation === "remove") {
+              if (!payload.partnerId) throw new Error("partnerId is required for remove")
+              ws.cdiHub.removePartner(payload.partnerId)
+            } else {
+              if (!payload.partnerId) throw new Error("partnerId is required for upsert")
+              ws.cdiHub.upsertPartner({
+                partnerId: payload.partnerId,
+                displayName: payload.displayName ?? payload.partnerId,
+                ...(payload.specialty !== undefined ? { specialty: payload.specialty } : {}),
+                endpointUrl: payload.endpointUrl ?? "http://127.0.0.1:8788/cyberlab/partner",
+                ...(payload.enabled !== undefined ? { enabled: payload.enabled } : {}),
+                ...(payload.secretOverride !== undefined ? { secretOverride: payload.secretOverride } : {}),
+                ...(payload.permissions !== undefined ? { permissions: payload.permissions } : {}),
+              })
+            }
+            return ws.cdiHub.getOverview()
+          })
+        }),
+      ),
+    )
+    .handle("cyberlab.partners.secret", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(async () => {
+            if (payload.operation === "reveal") {
+              return ws.cdiHub.revealSharedSecret()
+            }
+            const res = ws.cdiHub.configureSecretAndGateway({
+              mode: payload.operation,
+              ...(payload.customSecret !== undefined ? { customSecret: payload.customSecret } : {}),
+              ...(payload.cyberlabCallbackUrl !== undefined ? { cyberlabCallbackUrl: payload.cyberlabCallbackUrl } : {}),
+            })
+            return { sharedSecret: res.sharedSecret, cyberlabCallbackUrl: res.cyberlabCallbackUrl }
+          })
+        }),
+      ),
+    )
+    .handle("cyberlab.partners.dispatch", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() =>
+            ws.delegateToMultiplePartners({
+              partnerIds: [...payload.partnerIds],
+              objective: payload.objective,
+              ...(payload.evidenceIds !== undefined ? { evidenceIds: [...payload.evidenceIds] } : {}),
+              ...(payload.contextText !== undefined ? { contextText: payload.contextText } : {}),
+              ...(payload.timeoutMs !== undefined ? { timeoutMs: payload.timeoutMs } : {}),
+            }),
+          )
+        }),
+      ),
+    )
+    .handle("cyberlab.partners.gateway", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          const res = yield* Effect.promise(() => ws.cdiHub.handleInboundGatewayRequest(payload))
+          return res.body
+        }),
+      ),
     ),
 )
+

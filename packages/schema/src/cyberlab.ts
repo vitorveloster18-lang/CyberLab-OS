@@ -294,4 +294,71 @@ export namespace CyberLab {
     evidenceId: Schema.String,
     sha256: Schema.String,
   })
+
+  export const CdiPermissionsInfo = Schema.Struct({
+    readProjectState: Schema.Boolean,
+    readEvidenceAndFiles: Schema.Boolean,
+    createArtifactsAndFindings: Schema.Boolean,
+    initiateActions: Schema.Literals(["disabled", "propose_only", "allow_readonly_propose_others"]),
+  })
+
+  export const CdiPartnerInfo = Schema.Struct({
+    partnerId: Schema.String,
+    displayName: Schema.String,
+    specialty: Schema.String,
+    endpointUrl: Schema.String,
+    enabled: Schema.Boolean,
+    usesCustomSecret: Schema.Boolean,
+    permissions: CdiPermissionsInfo,
+  })
+
+  export const CdiInboundActivityInfo = Schema.Struct({
+    activityId: Schema.String,
+    partnerId: Schema.String,
+    action: Schema.String,
+    outcome: Schema.Literals(["allowed", "queued_for_approval", "denied"]),
+    summary: Schema.String,
+    timestamp: Schema.String,
+  })
+
+  export const CdiHubOverview = Schema.Struct({
+    secretConfigured: Schema.Boolean,
+    secretPreview: Schema.String,
+    cyberlabCallbackUrl: Schema.String,
+    configFilePath: Schema.String,
+    partners: Schema.Array(CdiPartnerInfo),
+    inboundActivity: Schema.Array(CdiInboundActivityInfo),
+  })
+
+  export const CdiPartnerManageInput = Schema.Struct({
+    operation: Schema.Literals(["upsert", "remove", "preset_4"]),
+    partnerId: optional(Schema.String),
+    displayName: optional(Schema.String),
+    specialty: optional(Schema.String),
+    endpointUrl: optional(Schema.String),
+    enabled: optional(Schema.Boolean),
+    secretOverride: optional(Schema.String),
+    baseHost: optional(Schema.String),
+    permissions: optional(CdiPermissionsInfo),
+  })
+
+  export const CdiSecretManageInput = Schema.Struct({
+    operation: Schema.Literals(["reveal", "generate", "custom"]),
+    customSecret: optional(Schema.String),
+    cyberlabCallbackUrl: optional(Schema.String),
+  })
+
+  export const CdiSecretManageOutput = Schema.Struct({
+    sharedSecret: Schema.String,
+    cyberlabCallbackUrl: Schema.String,
+  })
+
+  export const CdiMultiDispatchInput = Schema.Struct({
+    partnerIds: Schema.Array(Schema.String),
+    objective: Schema.String,
+    evidenceIds: optional(Schema.Array(Schema.String)),
+    contextText: optional(Schema.String),
+    timeoutMs: optional(Schema.Number),
+  })
 }
+

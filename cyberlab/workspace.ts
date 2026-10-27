@@ -10,6 +10,7 @@ import { EvidenceStore, type IntegrityCheckResult } from "./evidence/store.js"
 import { CyberLabExecutionDispatcher } from "./execution/dispatcher.js"
 import { PartnerAuthenticator } from "./partners/authentication.js"
 import { PartnerBridge, type PartnerDispatchOutcome } from "./partners/bridge.js"
+import { CdiPartnerHub, type MultiCdiDispatchReport } from "./partners/cdi-hub.js"
 import { HttpPartnerTransport } from "./partners/transport.js"
 import {
   EXTERNAL_FFUF_INPUT_SCHEMA_ID,
@@ -140,6 +141,7 @@ export class CyberLabWorkspace {
   readonly skills: CyberLabSkillCatalog
   readonly partnerAuth: PartnerAuthenticator
   readonly partnerBridge: PartnerBridge
+  readonly cdiHub: CdiPartnerHub
   readonly externalControl: ExternalControlPlane
   readonly httpProxy: CyberLabHttpProxy
   private initialized = false
@@ -188,6 +190,20 @@ export class CyberLabWorkspace {
       projectId: this.projectId,
       scopes: this.scopes,
       evidenceStore: this.evidenceStore,
+    })
+    this.cdiHub = new CdiPartnerHub({
+      projectId: this.projectId,
+      workspaceRoot: this.workspaceRoot,
+      persistToDisk: !options.inMemoryDb,
+      capabilities: this.capabilities,
+      scopes: this.scopes,
+      approvals: this.approvals,
+      policy: this.policy,
+      dispatcher: this.dispatcher,
+      evidenceStore: this.evidenceStore,
+      partnerAuth: this.partnerAuth,
+      partnerBridge: this.partnerBridge,
+      getStatusSnapshot: () => this.getStatus(),
     })
   }
 
@@ -605,6 +621,17 @@ export class CyberLabWorkspace {
       },
       { ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}) },
     )
+  }
+
+  async delegateToMultiplePartners(params: {
+    partnerIds: string[]
+    objective: string
+    evidenceIds?: string[]
+    contextText?: string
+    timeoutMs?: number
+  }): Promise<MultiCdiDispatchReport> {
+    await this.ensureInitialized()
+    return this.cdiHub.dispatchTasks(params)
   }
 
   close(): void {

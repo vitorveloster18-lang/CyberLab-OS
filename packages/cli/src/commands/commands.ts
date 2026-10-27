@@ -629,23 +629,45 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           description: "Render a reproducible Markdown assessment report for the workspace",
         }),
         Spec.make("partner", {
-          description: "Delegate a redacted analysis task to an external partner runtime (e.g. chat_py_bridge.py)",
+          description:
+            "Configure CDI partner agents (Salem, Kairos, Naia, etc.), manage CYBERLAB_PARTNER_SECRET, or dispatch tasks (single or parallel)",
           params: {
             objective: Flag.String("objective").pipe(
               Flag.withAlias("o"),
-              Flag.withDescription("Task objective sent to the external partner agent"),
+              Flag.withDescription("Task objective sent to the CDI agent(s)"),
+              Flag.optional,
             ),
             partnerId: Flag.String("partner-id").pipe(
-              Flag.withDescription("Partner ID (defaults to CYBERLAB_PARTNER_ID or chat-py-agent)"),
+              Flag.withDescription("Single CDI partner ID (e.g. salem)"),
+              Flag.optional,
+            ),
+            partners: Flag.String("partners").pipe(
+              Flag.withDescription("Comma-separated CDI IDs for parallel collaboration (e.g. salem,kairos,naia or *)"),
               Flag.optional,
             ),
             endpoint: Flag.String("endpoint").pipe(
-              Flag.withDescription("Partner HTTP endpoint (defaults to CYBERLAB_PARTNER_URL or http://127.0.0.1:8788/cyberlab/partner)"),
+              Flag.withDescription("Partner HTTP endpoint override"),
               Flag.optional,
             ),
             evidence: Flag.String("evidence").pipe(
               Flag.withAlias("e"),
               Flag.withDescription("Comma-separated Evidence IDs to redact and attach"),
+              Flag.optional,
+            ),
+            list: Flag.Boolean("list").pipe(
+              Flag.withDescription("List registered CDI partners, callback URL, and secret preview"),
+              Flag.withDefault(false),
+            ),
+            preset4: Flag.Boolean("preset-4").pipe(
+              Flag.withDescription("Register the 4 default CDI agents on ports 8788-8791 (salem, kairos, naia, cdi-4)"),
+              Flag.withDefault(false),
+            ),
+            generateSecret: Flag.Boolean("generate-secret").pipe(
+              Flag.withDescription("Generate and save a new 64-char HMAC secret in .cyberlab/partners.json"),
+              Flag.withDefault(false),
+            ),
+            setSecret: Flag.String("set-secret").pipe(
+              Flag.withDescription("Save a custom CYBERLAB_PARTNER_SECRET (>= 16 chars) in .cyberlab/partners.json"),
               Flag.optional,
             ),
             json: Flag.Boolean("json").pipe(Flag.withDescription("Output full outcome as JSON"), Flag.withDefault(false)),

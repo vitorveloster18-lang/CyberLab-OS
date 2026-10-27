@@ -227,55 +227,77 @@ bun run cyberlab external \
 
 ---
 
-## 4. Como Conectar os Agentes do Seu Runtime Externo (`chat.py`)
+## 4. Hub Multi-CDI & Bridge Bidirecional (`Salem`, `Kairós`, `Naia`, `CDI-04` — Portas `8788–8791`)
 
-**Sim — exatamente como você usa um script conector para o Telegram, o CyberLab OS já inclui pronto o script conector oficial em Python: [`integrations/partners/chat_py_bridge.py`](integrations/partners/chat_py_bridge.py)!**
+O CyberLab OS implementa um **Bridge Bidirecional v2.0** completo (`cyberlab/partners/cdi-hub.ts` + [`integrations/partners/chat_py_bridge.py`](integrations/partners/chat_py_bridge.py) + modelo em [`config/partners.example.json`](config/partners.example.json)):
 
-### Por que usar o conector `chat_py_bridge.py`?
-1. Você **não precisa reescrever o seu `chat.py`** nem acoplar código interno dele ao TypeScript/Bun.
-2. O `chat_py_bridge.py` sobe um micro-servidor local em `127.0.0.1:8788/cyberlab/partner` usando apenas biblioteca padrão do Python 3 (zero dependências extras).
-3. Antes de enviar qualquer evidência ao seu `chat.py`, o CyberLab OS **redige automaticamente tokens, cookies, chaves privadas e credenciais**, assina o envelope com `HMAC-SHA256`, o `chat_py_bridge.py` valida a assinatura, chama o seu `chat.py` e devolve a resposta assinada para o CyberLab OS registrar como `unreviewed` (sem risco de execução arbitrária de comandos).
+### Respostas diretas para a configuração do seu CDI Runtime
+1. **Como o CyberLab OS regista parceiros?**
+   - Pela interface visual na **Aba `8. Agentes CDI (Bridge Bidirecional 8788-8791)`** do Security Studio (`http://localhost:4180`), pela CLI (`bun run cyberlab partner --preset-4`) ou editando `.cyberlab/partners.json` (modelo pronto em `config/partners.example.json`). Com 1 clique no botão **"Carregar Preset 4 CDIs"**, o sistema regista automaticamente `salem` (`8788`), `kairos` (`8789`), `naia` (`8790`) e `cdi-4` (`8791`).
+2. **O `CYBERLAB_PARTNER_SECRET` — o OS gera ou você define?**
+   - **Suporta ambos!** Você pode clicar em **"Gerar Novo Secret (256-bit)"** (`bun run cyberlab partner --generate-secret`) para o CyberLab OS gerar e salvar um segredo criptográfico de 64 caracteres hex em `.cyberlab/partners.json`, **ou** definir o seu próprio segredo (`bun run cyberlab partner --set-secret "seu-segredo..."` ou variável `CYBERLAB_PARTNER_SECRET`). Todos os 4 CDIs podem compartilhar o mesmo `CYBERLAB_PARTNER_SECRET` (ou ter `secretOverride` individual).
+3. **Os CDIs são chamados em paralelo ou 1 por tarefa?**
+   - **Suporta ambos nativamente!**
+     - **Especialista único**: escolher apenas 1 CDI (ex.: `--partner-id salem`).
+     - **Colaboração em paralelo (`Promise.all`)**: selecionar múltiplos CDIs na Aba 8 ou rodar `--partners salem,kairos,naia` (ou `partnerIds: ["salem", "kairos", "naia"]` na tool de IA `cyberlab_partner_delegate`).
 
-### Passo a passo em 2 terminais
+### O que os CDIs agora fazem autonomamente de dentro do Python (`CyberLabOSClient`)
+Importando `CyberLabOSClient` de `integrations/partners/chat_py_bridge.py` dentro do seu `chat.py` / `process_message()`, qualquer CDI pode enviar mensagens assinadas **do CDI → para o CyberLab OS** (`POST /api/studio/partner-gateway` ou `POST /api/cyberlab/partner-gateway`):
 
-**Terminal 1 — Subir a ponte conectada ao seu `chat.py`:**
+```python
+from chat_py_bridge import CyberLabOSClient, build_cyberlab_cdi_tools
 
-Escolha um dos 3 modos conforme o seu `chat.py` recebe mensagens hoje:
+# Lê automaticamente CYBERLAB_PARTNER_ID, CYBERLAB_PARTNER_SECRET e CYBERLAB_CALLBACK_URL
+cyberlab = CyberLabOSClient.from_env(default_partner_id="salem")
 
-```bash
-export CYBERLAB_PARTNER_SECRET="minha-chave-hmac-super-forte-2026-cyberlab"
+# 1. Ver o estado dos projetos em tempo real (escopo, capabilities, findings, aprovações)
+estado = cyberlab.get_project_state()
 
-# Opção A (--mode arg): se você chama `python3 chat.py "mensagem"`
-python3 integrations/partners/chat_py_bridge.py \
-  --mode arg \
-  --script /caminho/para/seu/chat.py \
-  --port 8788
+# 2. Aceder diretamente às evidências e ficheiros em escopo do OS (segredos já saem redigidos)
+evidencias = cyberlab.list_evidence()
+conteudo_ev = cyberlab.read_evidence(evidencias[0]["evidenceId"])
+ficheiro_log = cyberlab.read_workspace_file("logs/security.log")
 
-# Opção B (--mode stdin): se o seu chat.py lê a pergunta pelo input()/stdin
-python3 integrations/partners/chat_py_bridge.py \
-  --mode stdin \
-  --script /caminho/para/seu/chat.py \
-  --port 8788
+# 3. Criar artifacts SHA-256 e findings diretamente no CyberLab OS
+artifact = cyberlab.create_artifact(
+    title="Parse Estruturado de Log pelo Salem",
+    content={"alertas_criticos": 3, "cve": "CVE-2024-9999"},
+    kind="json",
+)
+cyberlab.propose_finding(
+    title="CVE-2024-9999 correlacionada pelo Salem",
+    description="Identificada a partir do log e confirmada via pesquisa CVE.",
+    severity="high",
+    confidence=0.85,
+    evidence_ids=[artifact["evidenceId"]],
+)
 
-# Opção C (--mode import): se você quer importar direto uma função Python do seu chat.py (ex.: def responder(msg): ...)
-python3 integrations/partners/chat_py_bridge.py \
-  --mode import \
-  --callable /caminho/para/seu/chat.py:responder \
-  --port 8788
+# 4. Iniciar ações/ferramentas no CyberLab OS por conta própria!
+# - Capabilities read_only executam na hora; capabilities ativas entram na fila de aprovação humana.
+execucao = cyberlab.initiate_action("code-analysis.workspace-audit", {"maxFiles": 25})
+
+# Opcional: obter lista pronta de tools para plugar direto no loop de tools do chat.py:
+tools_cyberlab = build_cyberlab_cdi_tools(cyberlab)
 ```
 
-**Terminal 2 — Delegar tarefa do CyberLab OS para o seu `chat.py`:**
+### Subindo as pontes dos 4 CDIs (Portas `8788–8791`) e despachando em paralelo
 
 ```bash
-export CYBERLAB_PARTNER_SECRET="minha-chave-hmac-super-forte-2026-cyberlab"
-export CYBERLAB_PARTNER_URL="http://127.0.0.1:8788/cyberlab/partner"
+# Gerar segredo + registar os 4 CDIs (Salem 8788, Kairós 8789, Naia 8790, CDI-04 8791):
+bun run cyberlab partner --generate-secret --preset-4
 
-# Via CLI direta (opcionalmente anexando IDs de evidências já coletadas com -e):
-bun run cyberlab partner \
-  -o "Analise as evidências coletadas e sugira hipóteses de validação defensiva" \
-  -e ev-1234
+# Em cada CDI (ex.: --mode import apontando para process_message do seu chat.py):
+python3 integrations/partners/chat_py_bridge.py --partner-id salem  --port 8788 --mode import --callable /caminho/salem/chat.py:process_message
+python3 integrations/partners/chat_py_bridge.py --partner-id kairos --port 8789 --mode import --callable /caminho/kairos/chat.py:process_message
+python3 integrations/partners/chat_py_bridge.py --partner-id naia   --port 8790 --mode import --callable /caminho/naia/chat.py:process_message
+python3 integrations/partners/chat_py_bridge.py --partner-id cdi-4  --port 8791 --mode import --callable /caminho/cdi4/chat.py:process_message
+
+# Chamar apenas 1 especialista (ex.: Salem):
+bun run cyberlab partner --partner-id salem -o "Analisar este log de segurança"
+
+# Ou chamar Kairós + Naia + Salem EM PARALELO na mesma tarefa:
+bun run cyberlab partner --partners salem,kairos,naia -o "Analisar arquitetura, logs e inteligência de ameaças em paralelo"
 ```
-*(E nas sessões de IA do OpenCode V2, basta pedir ao assistente para consultar o parceiro `chat-py-agent`: ele usará automaticamente a tool `cyberlab_partner_delegate`!).*
 
 ---
 

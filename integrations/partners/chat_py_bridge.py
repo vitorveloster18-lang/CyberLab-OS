@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
 """
-CyberLab OS <-> chat.py Partner Bridge Daemon (cyberlab-partner v1.0)
+CyberLab OS <-> CDI Runtime Bidirectional Bridge & Python SDK (v2.0)
 
-Funciona exatamente como um conector de Telegram para o seu runtime externo em Python (`chat.py`),
-mas em vez de fazer polling na API do Telegram, expõe um endpoint HTTP local autenticado via
-HMAC-SHA256 (127.0.0.1:8788/cyberlab/partner) compatível com o PartnerBridge do CyberLab OS.
+Conecta os seus CDIs externos (`chat.py` / `process_message()`, portas 8788-8791) ao CyberLab OS
+de forma **bidirecional** e autenticada via HMAC-SHA256 (`canonicalJson` + `compare_digest`):
 
-Modos de invocação do seu `chat.py`:
-  1. --mode arg    -> executa: python3 /caminho/chat.py "<prompt>"
-  2. --mode stdin  -> envia <prompt> na entrada padrão (stdin) de: python3 /caminho/chat.py
-  3. --mode import -> importa uma função Python diretamente (--callable /caminho/chat.py:responder)
+1. Direção CyberLab OS -> CDI (`/cyberlab/partner`):
+   - Recebe `task.submit` de forma individual (ex.: só Salem) ou em paralelo (ex.: Kairós + Naia).
+   - Repassa contexto redigido + `CYBERLAB_CALLBACK_URL` para o CDI.
 
-Uso:
-  export CYBERLAB_PARTNER_SECRET="troque-por-um-segredo-forte-com-32-caracteres"
-  python3 integrations/partners/chat_py_bridge.py \
-    --script /caminho/para/chat.py \
-    --mode arg \
-    --partner-id chat-py-agent \
-    --host 127.0.0.1 \
-    --port 8788
+2. Direção CDI -> CyberLab OS (`CyberLabOSClient` + `build_cyberlab_cdi_tools()`):
+   - `get_project_state()`          -> Ver estado do projeto, escopo, capabilities e findings em tempo real.
+   - `list_evidence()`              -> Listar evidências SHA-256 gravadas no OS.
+   - `read_evidence(evidence_id)`   -> Ler conteúdo redigido de qualquer evidência do OS.
+   - `list_workspace_files(subpath)`-> Listar ficheiros em escopo do workspace no OS.
+   - `read_workspace_file(path)`    -> Ler diretamente ficheiros do OS (protegido pelo ScopeController).
+   - `create_artifact(...)`         -> Criar artifacts SHA-256 diretamente no EvidenceStore do CyberLab.
+   - `propose_finding(...)`         -> Registar findings estruturados no CyberLab.
+   - `initiate_action(...)`         -> Iniciar ações/ferramentas no CyberLab por conta própria!
+   - `get_execution_status(exec_id)`-> Consultar status/evidências de uma ação iniciada pelo CDI.
+
+Como importar dentro do seu `chat.py` / CDI Runtime:
+  from chat_py_bridge import CyberLabOSClient, build_cyberlab_cdi_tools
+  cyberlab = CyberLabOSClient.from_env()
+  state = cyberlab.get_project_state()
 """
 
 from __future__ import annotations
@@ -29,8 +34,11 @@ import hmac
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 import uuid
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -60,15 +68,243 @@ def compute_envelope_hmac(envelope: dict[str, Any], secret: str) -> str:
     return hmac.new(secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
+class CyberLabOSClient:
+    """
+    Cliente Python Bidirecional (CDI -> CyberLab OS).
+    Permite que qualquer CDI (Salem, Kairós, Naia, etc.) consulte o estado dos projetos,
+    aceda a evidências/ficheiros, crie artifacts SHA-256 e inicie ações governadas no CyberLab OS
+    mesmo fora de uma chamada `task.submit` (100% autónomo ou durante uma tarefa!).
+    """
+
+    def __init__(
+        self,
+        partner_id: str,
+        shared_secret: str,
+        gateway_url: str = "http://127.0.0.1:4180/api/studio/partner-gateway",
+        timeout_sec: int = 20,
+    ) -> None:
+        if len(shared_secret) < 16:
+            raise ValueError("CYBERLAB_PARTNER_SECRET precisa ter pelo menos 16 caracteres.")
+        self.partner_id = partner_id.strip()
+        self.shared_secret = shared_secret
+        self.gateway_url = gateway_url.strip()
+        self.timeout_sec = timeout_sec
+
+    @classmethod
+    def from_env(cls, default_partner_id: str = "salem") -> "CyberLabOSClient":
+        partner_id = os.environ.get("CYBERLAB_PARTNER_ID", default_partner_id)
+        secret = os.environ.get("CYBERLAB_PARTNER_SECRET", "")
+        gateway_url = os.environ.get(
+            "CYBERLAB_CALLBACK_URL",
+            "http://127.0.0.1:4180/api/studio/partner-gateway",
+        )
+        return cls(partner_id=partner_id, shared_secret=secret, gateway_url=gateway_url)
+
+    def _call_gateway(self, action: str, params: dict[str, Any] | None = None) -> Any:
+        envelope: dict[str, Any] = {
+            "protocol": "cyberlab-cdi-gateway",
+            "protocolVersion": "1.0",
+            "messageId": f"cdi-msg-{uuid.uuid4()}",
+            "sentAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "partnerId": self.partner_id,
+            "action": action,
+            "params": params or {},
+        }
+        envelope["signature"] = compute_envelope_hmac(envelope, self.shared_secret)
+        raw_req = json.dumps(envelope, ensure_ascii=False).encode("utf-8")
+
+        req = urllib.request.Request(
+            self.gateway_url,
+            data=raw_req,
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout_sec) as resp:
+                body_bytes = resp.read()
+        except urllib.error.HTTPError as exc:
+            err_body = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"CyberLab Gateway HTTP {exc.code}: {err_body}") from exc
+
+        parsed = json.loads(body_bytes.decode("utf-8"))
+        if isinstance(parsed, dict) and "signature" in parsed:
+            expected_sig = compute_envelope_hmac(parsed, self.shared_secret)
+            if not hmac.compare_digest(str(parsed.get("signature") or ""), expected_sig):
+                raise RuntimeError("Assinatura HMAC da resposta do CyberLab OS inválida!")
+        if not parsed.get("ok"):
+            raise RuntimeError(f"CyberLab Gateway recusou {action}: {parsed.get('error')}")
+        return parsed.get("data")
+
+    def get_project_state(self) -> dict[str, Any]:
+        """Vê o estado em tempo real do projeto, escopo ativo, capabilities, execuções e findings."""
+        return self._call_gateway("project.state")
+
+    def list_evidence(self) -> list[dict[str, Any]]:
+        """Lista todos os registos de evidência SHA-256 do projeto atual."""
+        res = self._call_gateway("evidence.list")
+        return res.get("evidence", []) if isinstance(res, dict) else []
+
+    def read_evidence(self, evidence_id: str) -> dict[str, Any]:
+        """Lê o conteúdo (com segredos redigidos) de uma evidência específica pelo evidenceId."""
+        return self._call_gateway("evidence.read", {"evidenceId": evidence_id})
+
+    def list_workspace_files(self, subpath: str = ".") -> dict[str, Any]:
+        """Lista ficheiros e pastas do workspace dentro do escopo autorizado."""
+        return self._call_gateway("workspace.list_files", {"subpath": subpath})
+
+    def read_workspace_file(self, path: str) -> dict[str, Any]:
+        """Lê diretamente um ficheiro em escopo do workspace no CyberLab OS."""
+        return self._call_gateway("workspace.read_file", {"path": path})
+
+    def create_artifact(
+        self,
+        title: str,
+        content: str | dict[str, Any] | list[Any],
+        kind: str = "json",
+        media_type: str | None = None,
+    ) -> dict[str, Any]:
+        """Cria um artifact forense no EvidenceStore do CyberLab OS (retorna evidenceId + sha256)."""
+        payload: dict[str, Any] = {"title": title, "content": content, "kind": kind}
+        if media_type:
+            payload["mediaType"] = media_type
+        return self._call_gateway("artifact.create", payload)
+
+    def propose_finding(
+        self,
+        title: str,
+        description: str,
+        severity: str = "medium",
+        confidence: float = 0.8,
+        evidence_ids: list[str] | None = None,
+        affected_assets: list[str] | None = None,
+        proposed_remediation: str | None = None,
+    ) -> dict[str, Any]:
+        """Regista um SecurityFinding estruturado no CyberLab OS."""
+        payload: dict[str, Any] = {
+            "title": title,
+            "description": description,
+            "severity": severity,
+            "confidence": confidence,
+            "evidenceIds": evidence_ids or [],
+            "affectedAssets": affected_assets or [],
+        }
+        if proposed_remediation:
+            payload["proposedRemediation"] = proposed_remediation
+        return self._call_gateway("finding.propose", payload)
+
+    def initiate_action(
+        self,
+        capability_id: str,
+        input_params: dict[str, Any] | None = None,
+        rationale: str = "",
+    ) -> dict[str, Any]:
+        """
+        Inicia uma capability no CyberLab OS por conta própria!
+        - Capabilities `read_only` executam imediatamente (se permitido no perfil do CDI) e devolvem `resultEvidenceIds`.
+        - Capabilities ativas (`low`/`moderate`) entram na fila `awaiting_approval` do operador humano.
+        """
+        return self._call_gateway(
+            "action.initiate",
+            {
+                "capabilityId": capability_id,
+                "input": input_params or {},
+                "rationale": rationale,
+            },
+        )
+
+    def get_execution_status(self, execution_id: str) -> dict[str, Any]:
+        """Consulta o estado e os `resultEvidenceIds` de uma execução iniciada pelo CDI."""
+        return self._call_gateway("execution.status", {"executionId": execution_id})
+
+
+def build_cyberlab_cdi_tools(client: CyberLabOSClient) -> list[dict[str, Any]]:
+    """
+    Devolve definições prontas de tools (schema + função `handler`) para registar diretamente
+    no loop de tools do `chat.py` de cada CDI (ao lado de `web_search` e `execute_code`).
+    """
+    return [
+        {
+            "name": "cyberlab_project_state",
+            "description": "Ver o estado em tempo real do projeto no CyberLab OS (escopo, capabilities, findings, aprovações).",
+            "parameters": {"type": "object", "properties": {}},
+            "handler": lambda **_: client.get_project_state(),
+        },
+        {
+            "name": "cyberlab_list_evidence",
+            "description": "Listar todas as evidências SHA-256 disponíveis no projeto do CyberLab OS.",
+            "parameters": {"type": "object", "properties": {}},
+            "handler": lambda **_: client.list_evidence(),
+        },
+        {
+            "name": "cyberlab_read_evidence",
+            "description": "Ler o conteúdo técnico de uma evidência do CyberLab OS pelo evidenceId.",
+            "parameters": {
+                "type": "object",
+                "properties": {"evidence_id": {"type": "string"}},
+                "required": ["evidence_id"],
+            },
+            "handler": lambda evidence_id, **_: client.read_evidence(evidence_id),
+        },
+        {
+            "name": "cyberlab_read_file",
+            "description": "Ler diretamente um ficheiro dentro do workspace autorizado no CyberLab OS.",
+            "parameters": {
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "required": ["path"],
+            },
+            "handler": lambda path, **_: client.read_workspace_file(path),
+        },
+        {
+            "name": "cyberlab_create_artifact",
+            "description": "Guardar um artifact analítico/relatório/JSON no CyberLab OS com custódia SHA-256.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "content": {"type": "string"},
+                    "kind": {"type": "string", "enum": ["json", "log", "note", "file"]},
+                },
+                "required": ["title", "content"],
+            },
+            "handler": lambda title, content, kind="note", **_: client.create_artifact(
+                title=title, content=content, kind=kind
+            ),
+        },
+        {
+            "name": "cyberlab_initiate_action",
+            "description": "Iniciar uma ferramenta/capability governada no CyberLab OS (read_only roda direto; ativa pede aprovação).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "capability_id": {"type": "string"},
+                    "input_params": {"type": "object"},
+                    "rationale": {"type": "string"},
+                },
+                "required": ["capability_id"],
+            },
+            "handler": lambda capability_id, input_params=None, rationale="", **_: client.initiate_action(
+                capability_id=capability_id, input_params=input_params, rationale=rationale
+            ),
+        },
+    ]
+
+
+def extract_callback_url_from_task(task: dict[str, Any], fallback_url: str) -> str:
+    ctx_text = str((task.get("contextBundle") or {}).get("text") or "")
+    m = re.search(r"callbackUrl=(https?://[^\s|]+)", ctx_text)
+    return m.group(1) if m else fallback_url
+
+
 def build_prompt_from_task(task: dict[str, Any]) -> str:
     ctx = task.get("contextBundle") or {}
     evidence_ids = ", ".join(ctx.get("evidenceIds") or []) or "nenhuma"
     redacted_text = ctx.get("text") or ""
     allowed = ", ".join(task.get("allowedActions") or []) or "analyze.evidence"
-    prohibited = ", ".join(task.get("prohibitedActions") or []) or "execução direta de comandos"
+    prohibited = ", ".join(task.get("prohibitedActions") or []) or "execução direta não governada"
 
     parts = [
-        "[CyberLab OS — Tarefa Delegada ao Agente Parceiro]",
+        "[CyberLab OS — Tarefa Delegada ao Agente Parceiro CDI]",
         f"Task ID: {task.get('taskId', 'unknown')}",
         f"Projeto: {task.get('projectId', 'unknown')}",
         f"Objetivo: {task.get('objective', '')}",
@@ -80,9 +316,10 @@ def build_prompt_from_task(task: dict[str, Any]) -> str:
         parts.append(f"Contexto Técnico (já redigido pelo CyberLab OS):\n{redacted_text}")
 
     parts.append(
-        "Se possível, responda em JSON estruturado no formato:\n"
-        '{"summary":"...","findings":[{"title":"...","description":"...","evidenceRefs":[],"confidence":0.7}],"limitations":["..."]}\n'
-        "Caso responda em texto livre, o conector encapsulará o texto como resumo analítico não revisado."
+        "Dica Bidirecional: Você pode usar CyberLabOSClient.from_env() para consultar o estado do projeto, "
+        "ler evidências/ficheiros do OS, criar artifacts SHA-256 ou iniciar capabilities governadas.\n"
+        "Responda preferencialmente em JSON estruturado no formato:\n"
+        '{"summary":"...","findings":[{"title":"...","description":"...","evidenceRefs":[],"confidence":0.85}],"artifactRefs":[],"limitations":["..."]}'
     )
     return "\n\n".join(parts)
 
@@ -106,7 +343,7 @@ def load_python_callable(spec: str) -> Callable[[str], Any]:
     mod_spec.loader.exec_module(module)
     fn = getattr(module, func_name, None)
     if not callable(fn):
-        raise AttributeError(f" Função '{func_name}' não encontrada ou não invocável em {script_path}")
+        raise AttributeError(f"Função '{func_name}' não encontrada ou não invocável em {script_path}")
     return fn
 
 
@@ -118,11 +355,15 @@ class ChatPyRunner:
         callable_spec: str | None,
         python_bin: str,
         timeout_sec: int,
+        partner_id: str,
+        default_callback_url: str,
     ) -> None:
         self.mode = mode
         self.script_path = str(Path(script_path).expanduser().resolve()) if script_path else None
         self.python_bin = python_bin
         self.timeout_sec = timeout_sec
+        self.partner_id = partner_id
+        self.default_callback_url = default_callback_url
         self._callable = load_python_callable(callable_spec) if mode == "import" and callable_spec else None
 
         if mode in ("arg", "stdin"):
@@ -131,7 +372,10 @@ class ChatPyRunner:
         elif mode == "import" and self._callable is None:
             raise ValueError("Modo 'import' exige --callable /caminho/para/chat.py:funcao")
 
-    def invoke(self, prompt: str) -> str:
+    def invoke(self, prompt: str, callback_url: str) -> str:
+        os.environ["CYBERLAB_PARTNER_ID"] = self.partner_id
+        os.environ["CYBERLAB_CALLBACK_URL"] = callback_url
+
         if self.mode == "import" and self._callable is not None:
             result = self._callable(prompt)
             if isinstance(result, (dict, list)):
@@ -140,10 +384,16 @@ class ChatPyRunner:
 
         assert self.script_path is not None
         cwd = str(Path(self.script_path).parent)
+        child_env = {
+            **os.environ,
+            "CYBERLAB_PARTNER_ID": self.partner_id,
+            "CYBERLAB_CALLBACK_URL": callback_url,
+        }
         if self.mode == "arg":
             proc = subprocess.run(
                 [self.python_bin, self.script_path, prompt],
                 cwd=cwd,
+                env=child_env,
                 capture_output=True,
                 text=True,
                 timeout=self.timeout_sec,
@@ -153,6 +403,7 @@ class ChatPyRunner:
             proc = subprocess.run(
                 [self.python_bin, self.script_path],
                 cwd=cwd,
+                env=child_env,
                 input=prompt,
                 capture_output=True,
                 text=True,
@@ -168,7 +419,7 @@ class ChatPyRunner:
 
 def normalize_chat_output(task_id: str, raw_output: str) -> dict[str, Any]:
     limitations = [
-        "Resposta originada de runtime externo via chat_py_bridge.py; requer validação humana contra evidências brutas."
+        "Resposta originada de runtime CDI externo via chat_py_bridge.py; validada sob governança do CyberLab OS."
     ]
     try:
         parsed = json.loads(raw_output)
@@ -189,15 +440,18 @@ def normalize_chat_output(task_id: str, raw_output: str) -> dict[str, Any]:
                     clean_findings.append(clean_entry)
 
             extra_lims = [str(x) for x in (parsed.get("limitations") or []) if isinstance(x, str)]
+            artifact_refs = [
+                str(r) for r in (parsed.get("artifactRefs") or []) if isinstance(r, str)
+            ]
             return {
                 "taskId": task_id,
                 "status": parsed.get("status")
-                if parsed.get("status") in ("completed", "partial", "failed", "rejected")
+                if parsed.get("status") in ("completed", "partial", "failed")
                 else "completed",
-                "summary": str(parsed.get("summary") or "Análise concluída pelo chat.py")[:16000],
+                "summary": str(parsed.get("summary") or "Análise concluída pelo CDI")[:16000],
                 "findings": clean_findings,
                 "limitations": extra_lims + limitations,
-                "artifactRefs": [],
+                "artifactRefs": artifact_refs,
             }
     except Exception:
         pass
@@ -208,14 +462,14 @@ def normalize_chat_output(task_id: str, raw_output: str) -> dict[str, Any]:
         "summary": (raw_output or "Resposta vazia do chat.py")[:16000],
         "findings": [],
         "limitations": [
-            "chat.py retornou texto livre (não-JSON); convertido em resumo não revisado sem privilégio de execução."
+            "chat.py retornou texto livre (não-JSON); convertido em resumo analítico não revisado."
         ]
         + limitations,
         "artifactRefs": [],
     }
 
 
-def make_handler(partner_id: str, secret: str, runner: ChatPyRunner):
+def make_handler(partner_id: str, secret: str, runner: ChatPyRunner, default_callback_url: str):
     class PartnerBridgeHandler(BaseHTTPRequestHandler):
         def _send_json(self, status_code: int, payload: Any) -> None:
             raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -227,7 +481,15 @@ def make_handler(partner_id: str, secret: str, runner: ChatPyRunner):
 
         def do_GET(self) -> None:  # noqa: N802
             if self.path == "/health":
-                self._send_json(200, {"ok": True, "partnerId": partner_id, "protocol": "cyberlab-partner/1.0"})
+                self._send_json(
+                    200,
+                    {
+                        "ok": True,
+                        "partnerId": partner_id,
+                        "protocol": "cyberlab-partner/2.0-bidirectional",
+                        "cyberlabCallbackUrl": default_callback_url,
+                    },
+                )
                 return
             self._send_json(404, {"error": "Not found"})
 
@@ -288,10 +550,11 @@ def make_handler(partner_id: str, secret: str, runner: ChatPyRunner):
 
             task = inbound.get("payload") or {}
             task_id = str(task.get("taskId") or f"task-{uuid.uuid4()}")
+            callback_url = extract_callback_url_from_task(task, default_callback_url)
             prompt = build_prompt_from_task(task)
 
             try:
-                raw_reply = runner.invoke(prompt)
+                raw_reply = runner.invoke(prompt, callback_url)
                 result_payload = normalize_chat_output(task_id, raw_reply)
                 out_type = "task.result"
             except Exception as exc:
@@ -320,21 +583,26 @@ def make_handler(partner_id: str, secret: str, runner: ChatPyRunner):
             self._send_json(200, [outbound])
 
         def log_message(self, fmt: str, *args: Any) -> None:
-            sys.stderr.write(f"[chat_py_bridge] {self.address_string()} - {fmt % args}\n")
+            sys.stderr.write(f"[chat_py_bridge:{partner_id}] {self.address_string()} - {fmt % args}\n")
 
     return PartnerBridgeHandler
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Conector CyberLab OS <-> chat.py (HMAC-SHA256)")
+    parser = argparse.ArgumentParser(description="Conector Bidirecional CyberLab OS <-> CDI chat.py (HMAC-SHA256)")
     parser.add_argument("--partner-id", default=os.environ.get("CYBERLAB_PARTNER_ID", "chat-py-agent"))
     parser.add_argument("--host", default=os.environ.get("CYBERLAB_BRIDGE_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("CYBERLAB_BRIDGE_PORT", "8788")))
+    parser.add_argument(
+        "--cyberlab-url",
+        default=os.environ.get("CYBERLAB_CALLBACK_URL", "http://127.0.0.1:4180/api/studio/partner-gateway"),
+        help="URL do gateway bidirecional do CyberLab OS para chamadas autónomas do CDI",
+    )
     parser.add_argument("--mode", choices=["arg", "stdin", "import"], default="arg")
     parser.add_argument("--script", help="Caminho para o seu chat.py (usado em --mode arg ou --mode stdin)")
-    parser.add_argument("--callable", help="Ex.: /caminho/chat.py:responder (usado em --mode import)")
+    parser.add_argument("--callable", help="Ex.: /caminho/chat.py:process_message (usado em --mode import)")
     parser.add_argument("--python-bin", default=sys.executable, help="Interpretador Python para rodar chat.py")
-    parser.add_argument("--timeout", type=int, default=60, help="Timeout em segundos por chamada ao chat.py")
+    parser.add_argument("--timeout", type=int, default=90, help="Timeout em segundos por chamada ao chat.py")
     args = parser.parse_args()
 
     secret = os.environ.get("CYBERLAB_PARTNER_SECRET", "")
@@ -350,12 +618,17 @@ def main() -> None:
         callable_spec=args.callable,
         python_bin=args.python_bin,
         timeout_sec=args.timeout,
+        partner_id=args.partner_id,
+        default_callback_url=args.cyberlab_url,
     )
 
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(args.partner_id, secret, runner))
+    server = ThreadingHTTPServer(
+        (args.host, args.port),
+        make_handler(args.partner_id, secret, runner, args.cyberlab_url),
+    )
     sys.stderr.write(
-        f"[chat_py_bridge] Ativo em http://{args.host}:{args.port}/cyberlab/partner "
-        f"(partnerId={args.partner_id}, mode={args.mode})\n"
+        f"[chat_py_bridge] CDI '{args.partner_id}' ativo em http://{args.host}:{args.port}/cyberlab/partner "
+        f"(callback={args.cyberlab_url}, mode={args.mode})\n"
     )
     try:
         server.serve_forever()
