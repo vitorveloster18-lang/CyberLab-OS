@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@tsconfig/bun/tsconfig.json",
+  "compilerOptions": {
+    "types": ["bun", "node"],
+    "noUnusedLocals": true,
+    "lib": ["ESNext"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "paths": {
+      "effect": ["./node_modules/effect"],
+      "effect/*": ["./node_modules/effect/*"],
+      "@opencode/schema": ["../packages/schema/src/index.ts"],
+      "@opencode/schema/*": ["../packages/schema/src/*.ts"]
+    },
+    "allowImportingTsExtensions": false,
+    "allowJs": false,
+    "noUncheckedIndexedAccess": false
+  },
+  "include": [
+    "./**/*.ts",
+    "../integrations/**/*.ts",
+    "../tests/cyberlab/**/*.ts"
+  ]
+}
