@@ -1,0 +1,16 @@
+export default {
+  "tab.title": "CyberLab",
+  "command.open": "Open CyberLab workspace",
+  "command.category.view": "View",
+  "panel.heading": "CyberLab OS Workspace",
+  "panel.refresh": "Refresh",
+  "panel.runAudit": "Run Workspace Audit",
+  "panel.scopeTitle": "Active Scope",
+  "panel.capabilitiesTitle": "Capabilities",
+  "panel.executionsTitle": "Executions",
+  "panel.evidenceTitle": "SHA-256 Evidence",
+  "panel.findingsTitle": "Security Findings",
+  "panel.verify": "Verify SHA-256",
+  "panel.accept": "Confirm",
+  "panel.reject": "Reject",
+}

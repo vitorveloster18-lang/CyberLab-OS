@@ -81,6 +81,14 @@ const Handlers = Runtime.handlers(Commands, {
     unset: () => import("./commands/handlers/service/unset"),
   },
   serve: () => import("./commands/handlers/serve"),
+  cyberlab: {
+    status: () => import("./commands/handlers/cyberlab/status"),
+    capabilities: () => import("./commands/handlers/cyberlab/capabilities"),
+    run: () => import("./commands/handlers/cyberlab/run"),
+    evidence: () => import("./commands/handlers/cyberlab/evidence"),
+    findings: () => import("./commands/handlers/cyberlab/findings"),
+    report: () => import("./commands/handlers/cyberlab/report"),
+  },
 })
 
 Effect.gen(function* () {

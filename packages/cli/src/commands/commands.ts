@@ -579,6 +579,57 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         stdio: Flag.Boolean("stdio").pipe(Flag.withDefault(false)),
       },
     }),
+    Spec.make("cyberlab", {
+      description: "Manage CyberLab OS security workspace, scope, executions, and SHA-256 evidence",
+      commands: [
+        Spec.make("status", {
+          description: "Show unified CyberLab workspace status and scope summary",
+          params: {
+            json: Flag.Boolean("json").pipe(Flag.withDescription("Output status as JSON"), Flag.withDefault(false)),
+          },
+        }),
+        Spec.make("capabilities", {
+          description: "List registered local CyberLab capabilities and risk levels",
+          params: {
+            json: Flag.Boolean("json").pipe(Flag.withDescription("Output capabilities as JSON"), Flag.withDefault(false)),
+          },
+        }),
+        Spec.make("run", {
+          description: "Submit a structured capability execution in the CyberLab workspace",
+          params: {
+            capability: Flag.String("capability").pipe(
+              Flag.withAlias("c"),
+              Flag.withDescription("Capability ID (e.g. code-analysis.workspace-audit)"),
+            ),
+            input: Flag.String("input").pipe(
+              Flag.withAlias("i"),
+              Flag.withDescription("JSON-encoded structured input parameters"),
+              Flag.withDefault("{}"),
+            ),
+            json: Flag.Boolean("json").pipe(Flag.withDescription("Output execution record as JSON"), Flag.withDefault(false)),
+          },
+        }),
+        Spec.make("evidence", {
+          description: "List or verify SHA-256 evidence records in the CyberLab workspace",
+          params: {
+            verify: Flag.String("verify").pipe(
+              Flag.withDescription("Evidence ID to verify SHA-256 custody integrity"),
+              Flag.optional,
+            ),
+            json: Flag.Boolean("json").pipe(Flag.withDescription("Output as JSON"), Flag.withDefault(false)),
+          },
+        }),
+        Spec.make("findings", {
+          description: "List CyberLab security findings and review statuses",
+          params: {
+            json: Flag.Boolean("json").pipe(Flag.withDescription("Output findings as JSON"), Flag.withDefault(false)),
+          },
+        }),
+        Spec.make("report", {
+          description: "Render a reproducible Markdown assessment report for the workspace",
+        }),
+      ],
+    }),
   ],
 })
 

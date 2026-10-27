@@ -133,6 +133,7 @@
         "@agentclientprotocol/sdk": "1.6.0",
         "@clack/core": "1.0.0-alpha.1",
         "@clack/prompts": "1.0.0-alpha.1",
+        "@cyberlab/core": "workspace:*",
         "@effect/platform-node": "catalog:",
         "@opencode-ai/pty": "0.3.1",
         "@opencode/client": "workspace:*",
@@ -237,6 +238,7 @@
         "@ai-sdk/provider": "3.0.8",
         "@ai-sdk/provider-utils": "4.0.23",
         "@ai-sdk/vercel": "2.0.39",
+        "@cyberlab/core": "workspace:*",
         "@ff-labs/fff-bun": "0.10.5",
         "@ff-labs/fff-node": "0.10.5",
         "@lydell/node-pty": "catalog:",
@@ -589,6 +591,7 @@
       "name": "@opencode/server",
       "version": "2.1.4",
       "dependencies": {
+        "@cyberlab/core": "workspace:*",
         "@effect/platform-node": "catalog:",
         "@effect/platform-node-shared": "catalog:",
         "@opencode/core": "workspace:*",

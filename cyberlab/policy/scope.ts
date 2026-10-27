@@ -204,24 +204,25 @@ export class ScopeController {
 
     // 1. Validate workspace paths against workspaceRoot and optional workspace_path rules
     for (const candidatePath of targets.workspacePaths) {
+      if (!isPathInsideRoot(candidatePath, scope.workspaceRoot)) {
+        return {
+          allowed: false,
+          reason: `Path "${candidatePath}" escapes project workspaceRoot "${scope.workspaceRoot}"`,
+          violatedTarget: candidatePath,
+        }
+      }
+
+      const resolvedCandidate = path.resolve(scope.workspaceRoot, candidatePath)
       const blockedPathRule = scope.blockedTargets.find(
         (rule) =>
           rule.kind === "workspace_path" &&
-          isPathInsideRoot(candidatePath, path.resolve(scope.workspaceRoot, rule.value)),
+          isPathInsideRoot(resolvedCandidate, path.resolve(scope.workspaceRoot, rule.value)),
       )
       if (blockedPathRule) {
         return {
           allowed: false,
           reason: `Path "${candidatePath}" is inside blocked workspace path "${blockedPathRule.value}"`,
           matchedRule: blockedPathRule,
-          violatedTarget: candidatePath,
-        }
-      }
-
-      if (!isPathInsideRoot(candidatePath, scope.workspaceRoot)) {
-        return {
-          allowed: false,
-          reason: `Path "${candidatePath}" escapes project workspaceRoot "${scope.workspaceRoot}"`,
           violatedTarget: candidatePath,
         }
       }

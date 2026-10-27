@@ -1,6 +1,7 @@
 export * as PluginInternal from "./internal.js"
 
 import { LLMClient } from "@opencode/ai/effect"
+import { CyberLabToolsPlugin } from "./cyberlab-tools.js"
 import type { Plugin } from "@opencode/plugin/effect/plugin"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
@@ -245,6 +246,7 @@ const pre = [
   ReadTool.Plugin,
   ShellTool.Plugin,
   SkillTool.Plugin,
+  CyberLabToolsPlugin.Plugin,
   SubagentTool.Plugin,
   TodoTool.Plugin,
   WebFetchTool.Plugin,
