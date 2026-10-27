@@ -1,0 +1,22 @@
+{
+  "id": "cyberlab-tls-inspector",
+  "version": "1.0.0",
+  "source": "https://github.com/vitorveloster18-lang/CyberLab-OS",
+  "commit": "first-party",
+  "license": {
+    "spdx": "MIT",
+    "reviewStatus": "approved_embed",
+    "reviewNotes": [
+      "First-party MIT TLS handshake, cipher suite, and X.509 certificate chain/SAN/expiry inspector.",
+      "Uses Node.js standard node:tls module with AbortSignal and socket timeout enforcement."
+    ]
+  },
+  "integration": {
+    "mode": "embedded",
+    "executorId": "tls-certificate-inspector-executor",
+    "linuxRequired": false
+  },
+  "dependenciesReviewed": true,
+  "noticesRecorded": true,
+  "lastReviewedAt": "2026-10-27T00:00:00.000Z"
+}

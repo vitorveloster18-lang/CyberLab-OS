@@ -1,0 +1,22 @@
+{
+  "id": "cyberlab-binary-triage",
+  "version": "1.0.0",
+  "source": "https://github.com/vitorveloster18-lang/CyberLab-OS",
+  "commit": "first-party",
+  "license": {
+    "spdx": "MIT",
+    "reviewStatus": "approved_embed",
+    "reviewNotes": [
+      "First-party MIT static reverse-engineering binary triage for ELF, Windows PE/COFF, and Mach-O samples.",
+      "Computes SHA-256, checks NX/ASLR/PIE flags, measures per-section Shannon packer entropy, and extracts strings offline without executing samples."
+    ]
+  },
+  "integration": {
+    "mode": "embedded",
+    "executorId": "binary-static-triage-executor",
+    "linuxRequired": false
+  },
+  "dependenciesReviewed": true,
+  "noticesRecorded": true,
+  "lastReviewedAt": "2026-10-27T00:00:00.000Z"
+}

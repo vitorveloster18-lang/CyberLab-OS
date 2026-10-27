@@ -60,7 +60,7 @@ cp .env.example .env
 Principais variáveis:
 | Variável | Função | Padrão |
 |---|---|---|
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` / `OPENROUTER_API_KEY` | Chaves de API dos modelos LLM usados nas sessões do OpenCode V2 (ou faça login interativo com `bun packages/cli/src/index.ts auth login`) | — |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` / `OPENROUTER_API_KEY` | Chaves de API dos modelos LLM usados nas sessões do OpenCode V2 (ou faça login interativo com `bun run dev auth login`) | — |
 | `CYBERLAB_PARTNER_ID` | Identificador do seu runtime externo de agentes | `chat-py-agent` |
 | `CYBERLAB_PARTNER_SECRET` | Segredo compartilhado `HMAC-SHA256` (mínimo 16 caracteres, recomendado 32+) entre o CyberLab OS e o `chat_py_bridge.py` | — |
 | `CYBERLAB_PARTNER_URL` | Endpoint HTTP local do conector `chat_py_bridge.py` | `http://127.0.0.1:8788/cyberlab/partner` |
@@ -98,44 +98,51 @@ Para conectar ferramentas externas via **MCP (Model Context Protocol)** nativo d
 Você pode executar auditorias, verificar integridade `SHA-256` e gerar relatórios Markdown sem sequer precisar de chave de IA:
 
 ```bash
-# Ver status do workspace, plataforma (Linux/WSL2), escopo ativo, skills e contadores
-bun packages/cli/src/index.ts cyberlab status
+# Ver status do workspace, plataforma (Linux/WSL2), escopo ativo, skills e as 10 capacidades nativas
+bun run cyberlab status
 
-# Listar capacidades locais registradas e seus níveis de risco
-bun packages/cli/src/index.ts cyberlab capabilities
+# Listar todas as 10 capacidades locais registradas e seus níveis de risco
+bun run cyberlab capabilities
 
-# 1) Executar auditoria estática somente leitura de código/segredos no workspace
-bun packages/cli/src/index.ts cyberlab run \
+# 1) Auditoria estática somente leitura de código/segredos no workspace
+bun run cyberlab run \
   -c code-analysis.workspace-audit \
   -i '{"subpath":"cyberlab","maxFiles":50}'
 
-# 2) Executar inspeção passiva de cabeçalhos HTTP de segurança em um alvo local autorizado
-bun packages/cli/src/index.ts cyberlab run \
-  -c web-assessment.http-security-headers \
-  -i '{"url":"http://127.0.0.1:8080/","method":"GET"}'
+# 2) HTTP Repeater & Comparer nativo (estilo OpenTRAP/Burp) com redação automática de segredos
+bun run cyberlab run \
+  -c web-assessment.http-repeater \
+  -i '{"url":"http://127.0.0.1:8080/api/admin","baselineUrl":"http://127.0.0.1:8080/api/guest"}'
 
-# 3) Executar sonda controlada de porta TCP e banner em laboratório local
-bun packages/cli/src/index.ts cyberlab run \
-  -c network-assessment.tcp-surface-probe \
-  -i '{"host":"127.0.0.1","port":8080}'
+# 3) Decoder encadeado + Inspetor JWT + Sequencer de entropia de tokens
+bun run cyberlab run \
+  -c web-assessment.decoder-sequencer \
+  -i '{"tokenSamples":["a9f18c7d4e20b11983fa9012bc7788e1","f4029d81bc77201948ea661209bc4410"]}'
+
+# 4) Scanner de superfície web / templates (estilo Nuclei/ffuf) + TLS/X.509 + PCAP + Binários + APK
+bun run cyberlab run -c web-assessment.surface-discovery -i '{"baseUrl":"http://127.0.0.1:8080"}'
+bun run cyberlab run -c network-assessment.tls-inspector -i '{"host":"127.0.0.1","port":8443}'
+bun run cyberlab run -c network-assessment.pcap-analyzer -i '{"pcapPath":"captura.pcap"}'
+bun run cyberlab run -c reverse-engineering.binary-triage -i '{"binaryPath":"amostra.elf"}'
+bun run cyberlab run -c mobile-forensics.artifact-triage -i '{"artifactPath":"app.apk"}'
 
 # Listar evidências gravadas e verificar integridade criptográfica SHA-256 de uma evidência
-bun packages/cli/src/index.ts cyberlab evidence
-bun packages/cli/src/index.ts cyberlab evidence --verify <EVIDENCE_ID>
+bun run cyberlab evidence
+bun run cyberlab evidence --verify <EVIDENCE_ID>
 
 # Listar findings e gerar relatório técnico reproduzível em Markdown
-bun packages/cli/src/index.ts cyberlab findings
-bun packages/cli/src/index.ts cyberlab report > relatorio-cyberlab.md
+bun run cyberlab findings
+bun run cyberlab report > relatorio-cyberlab.md
 ```
 
 ### Modo 2 — Interface Interativa TUI + Agente de IA + Skills Nativas
 
 ```bash
 # Autenticar seu provedor de modelo preferido (Anthropic, OpenAI, Google, OpenRouter, etc.)
-bun packages/cli/src/index.ts auth login
+bun run dev auth login
 
 # Iniciar a interface interativa do OpenCode V2 + CyberLab OS no projeto atual
-bun packages/cli/src/index.ts
+bun run dev
 ```
 
 Dentro da sessão interativa, o agente já dispõe automaticamente:
@@ -146,7 +153,7 @@ Dentro da sessão interativa, o agente já dispõe automaticamente:
 
 ```bash
 # Iniciar o servidor OpenCode V2 + rotas /api/cyberlab/*
-bun packages/cli/src/index.ts serve --hostname 127.0.0.1 --port 4096
+bun run dev serve --hostname 127.0.0.1 --port 4096
 ```
 
 - Endpoints REST disponíveis em `http://127.0.0.1:4096/api/cyberlab/*` (`status`, `capabilities`, `scope`, `executions`, `approvals`, `evidence`, `evidence/verify`, `findings`, `findings/review`, `report`).
@@ -198,7 +205,7 @@ export CYBERLAB_PARTNER_SECRET="minha-chave-hmac-super-forte-2026-cyberlab"
 export CYBERLAB_PARTNER_URL="http://127.0.0.1:8788/cyberlab/partner"
 
 # Via CLI direta (opcionalmente anexando IDs de evidências já coletadas com -e):
-bun packages/cli/src/index.ts cyberlab partner \
+bun run cyberlab partner \
   -o "Analise as evidências coletadas e sugira hipóteses de validação defensiva" \
   -e ev-1234
 ```
@@ -210,29 +217,47 @@ bun packages/cli/src/index.ts cyberlab partner \
 
 Conforme auditado em [`docs/TOOL_INVENTORY.md`](docs/TOOL_INVENTORY.md) e [`docs/LICENSE_POLICY.md`](docs/LICENSE_POLICY.md):
 
-### A. Já Implementados e Embutidos no Repositório (`approved_embed` — prontos para uso)
-| Software / Componente | Licença | Status Atual no Repositório |
-|---|---|---|
-| **OpenCode V2 (`2.1.4`)** | `MIT` | **Implementado e fixado** (`packages/*`, TUI, CLI, Server, MCP client, GUI SolidJS) |
-| **CyberLab Core (`@cyberlab/core`)** | `MIT` | **Implementado** (`PolicyEngine`, `ScopeController`, `ApprovalManager`, `EvidenceStore` SQLite+SHA256, `PartnerBridge`) |
-| **Workspace Audit (`code-analysis.workspace-audit`)** | `MIT` | **Implementado** (`integrations/code-analysis/workspace-audit-executor.ts`) |
-| **HTTP Security Inspector (`web-assessment.http-security-headers`)** | `MIT` | **Implementado** (`integrations/web-security/http-security-inspector.ts`) |
-| **TCP Surface Probe (`network-assessment.tcp-surface-probe`)** | `MIT` | **Implementado** (`integrations/network-observation/tcp-banner-inspector.ts`) |
-| **6 Skills Nativas (`SKILL.md`)** | `MIT` | **Implementadas** (`skills/{network-assessment,web-assessment,code-audit,mobile-forensics,reverse-engineering,evidence-review}`) |
-| **Conector `chat_py_bridge.py`** | `MIT` | **Implementado** (`integrations/partners/chat_py_bridge.py` + `opencode cyberlab partner`) |
+### A. Suíte Nativa Embutida Diretamente no Projeto (`approved_embed` — 100% `MIT`, zero dependências externas)
+Para máxima produtividade e integração unificada com `PolicyEngine`, `ScopeController` e `EvidenceStore` (`SHA-256`), o CyberLab OS traz **10 capacidades nativas prontas para uso imediato dentro de `integrations/`**:
 
-### B. Adicionados via Plug-in Externo ou Servidor MCP (`plugin_only` / `approved_internal_process`)
-Ferramentas instaladas localmente pelo operador no Linux/WSL2 (nunca embutidas no código distribuído quando possuem licenças restritivas/copyleft):
-| Software | Licença | Forma de Integração no CyberLab OS |
+| Capacidade (`capabilityId`) | Substituto / Inspiração Open-Source | Arquivo no Repositório (`MIT`) |
 |---|---|---|
-| **Nuclei** | `MIT` | Processo interno estruturado (`approved_internal_process`) ou servidor MCP local |
-| **ffuf** | `MIT` | Processo interno estruturado (`approved_internal_process`) com aprovação humana obrigatória |
-| **Ghidra (Headless)** | `Apache-2.0` | Processo interno / MCP local em Linux/WSL2 consumindo binários do workspace |
+| **`code-analysis.workspace-audit`** | Auditoria estática de segredos e configs | `integrations/code-analysis/workspace-audit-executor.ts` |
+| **`web-assessment.http-security-headers`** | Inspetor passivo HSTS/CSP/CORS/Cookies | `integrations/web-security/http-security-inspector.ts` |
+| **`web-assessment.http-repeater`** | **OpenTRAP / Burp Repeater + Comparer** | `integrations/web-security/http-repeater-comparer.ts` |
+| **`web-assessment.decoder-sequencer`** | **OpenTRAP / Burp Decoder + JWT + Sequencer** | `integrations/web-security/decoder-sequencer.ts` |
+| **`web-assessment.surface-discovery`** | **Nuclei / ffuf** (templates anti-soft-404) | `integrations/web-security/surface-discovery.ts` |
+| **`network-assessment.tcp-surface-probe`** | **Nmap** (sonda TCP controlada + banners) | `integrations/network-observation/tcp-banner-inspector.ts` |
+| **`network-assessment.tls-inspector`** | **testssl / sslscan** (TLS + cadeia X.509/SAN) | `integrations/network-observation/tls-certificate-inspector.ts` |
+| **`network-assessment.pcap-analyzer`** | **Wireshark / `tshark`** (parser binário `.pcap`) | `integrations/network-observation/pcap-packet-analyzer.ts` |
+| **`reverse-engineering.binary-triage`** | **REA / radare2** (`ELF`/`PE`/`Mach-O` + entropia) | `integrations/reverse-forensics/binary-static-triage.ts` |
+| **`mobile-forensics.artifact-triage`** | **MVT / MobSF** (`.apk`/`.ipa`/backups + IoCs) | `integrations/reverse-forensics/mobile-artifact-triage.ts` |
+
+Além dos 10 executores nativos, também já estão embutidos:
+- **OpenCode V2 (`2.1.4`, `MIT`)**: TUI, CLI, Server Hono, MCP Client e GUI SolidJS (`Ctrl+Alt+L`).
+- **6 Skills Nativas (`SKILL.md`)** + **Conector Python `integrations/partners/chat_py_bridge.py`** (`HMAC-SHA256`).
+
+### B. Bootstrap Local Autossuficiente (`.cyberlab/bin`) + Plug-ins / MCP (`plugin_only`)
+Quando você também quiser motores binários pesados rodando localmente **dentro da própria pasta do seu projeto** (em `.cyberlab/bin/`, ignorado pelo Git para manter o repositório enxuto e 100% `MIT`), basta rodar:
+
+```bash
+# Baixa binários standalone MIT (Nuclei + ffuf) direto para .cyberlab/bin/
+./script/bootstrap-local-tools.sh
+
+# Opcional: inclui também o OpenTRAP Desktop AppImage (Java 17 + ZAP, AGPL-3.0) em Linux x86_64
+./script/bootstrap-local-tools.sh --with-agpl
+```
+
+| Software | Licença | Como Opera com o CyberLab OS |
+|---|---|---|
+| **OpenTRAP (`opentrap/opentrap`)** | `AGPL-3.0` | Auditado: desktop Java 17 sobre OWASP ZAP sem IA. Como é `AGPL-3.0`, seu código Java não é copiado para o repo `MIT`; você já tem Repeater/Comparer/Decoder/Sequencer nativos embutidos e pode baixar o `.AppImage` em `.cyberlab/bin/` com `--with-agpl` |
+| **Nuclei / ffuf** | `MIT` | Já contam com scanner nativo leve (`web-assessment.surface-discovery`) + download automático dos binários Go completos em `.cyberlab/bin/` |
+| **Ghidra (Headless)** | `Apache-2.0` | Complementa o `reverse-engineering.binary-triage` nativo para descompilação profunda via Linux/WSL2 |
 | **OWASP ZAP** | `Apache-2.0` | `plugin_only` / MCP via API daemon local do ZAP |
-| **Nmap** | `NPSL-0.95` | **Exclusivamente `plugin_only` / MCP** chamando `/usr/bin/nmap` instalado pelo usuário (jamais embutido devido à licença NPSL) |
-| **Wireshark / `tshark`** | `GPL-2.0+` | **Exclusivamente `plugin_only` / MCP** lendo arquivos `.pcap` via CLI externa sem linkar código GPL |
-| **Burp Suite** | Proprietária | **Exclusivamente `plugin_only` / MCP** conectado à instância licenciada do analista |
-| **MVT (Mobile Verification Toolkit)** | MVT License | **Exclusivamente `plugin_only`** para triagem forense autorizada de backups/logs móveis |
+| **Nmap** | `NPSL-0.95` | **Exclusivamente `plugin_only` / MCP** chamando `/usr/bin/nmap` (complementando `tcp-surface-probe` e `tls-inspector` nativos) |
+| **Wireshark / `tshark`** | `GPL-2.0+` | **Exclusivamente `plugin_only` / MCP** (enquanto `network-assessment.pcap-analyzer` já analisa `.pcap` nativamente em TypeScript `MIT`) |
+| **Burp Suite** | Proprietária | **Exclusivamente `plugin_only` / MCP** (substituído nativamente no dia a dia por `http-repeater` e `decoder-sequencer`) |
+| **MVT (Mobile Verification Toolkit)** | MVT License | **Exclusivamente `plugin_only`** (substituído nativamente na triagem inicial por `mobile-forensics.artifact-triage`) |
 
 ### C. Conectados via `PartnerBridge` (`partner` — Agentes Externos Isolados)
 | Software / Agente | Licença | Como Conecta |

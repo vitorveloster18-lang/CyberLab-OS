@@ -45,7 +45,14 @@ Os seguintes adaptadores e executores em `cyberlab/` e `integrations/` são impl
 
 - **`cyberlab-workspace-audit`** (`integrations/code-analysis/workspace-audit-executor.ts`) — Auditoria somente leitura de configuração e segredos no workspace (`MIT`).
 - **`cyberlab-http-security-inspector`** (`integrations/web-security/http-security-inspector.ts`) — Inspetor passivo de cabeçalhos HTTP de segurança, flags de cookies e CORS (`MIT`).
+- **`cyberlab-http-repeater`** (`integrations/web-security/http-repeater-comparer.ts`) — Repeater HTTP nativo e Comparer diferencial de respostas com redação automática de segredos (`MIT`).
+- **`cyberlab-decoder-sequencer`** (`integrations/web-security/decoder-sequencer.ts`) — Decoder encadeado de payloads, inspetor de segurança JWT e Sequencer de entropia de Shannon (`MIT`).
+- **`cyberlab-web-surface-discovery`** (`integrations/web-security/surface-discovery.ts`) — Scanner nativo de superfície web e templates de exposição com controle de concorrência (`MIT`).
 - **`cyberlab-tcp-surface-probe`** (`integrations/network-observation/tcp-banner-inspector.ts`) — Sonda controlada de conectividade TCP e observação passiva de banners em laboratório (`MIT`).
+- **`cyberlab-tls-inspector`** (`integrations/network-observation/tls-certificate-inspector.ts`) — Inspetor nativo de handshake TLS/SSL, cifras e certificados X.509 (`MIT`).
+- **`cyberlab-pcap-analyzer`** (`integrations/network-observation/pcap-packet-analyzer.ts`) — Analisador nativo TypeScript de capturas de pacotes `.pcap` sem dependências GPL (`MIT`).
+- **`cyberlab-binary-triage`** (`integrations/reverse-forensics/binary-static-triage.ts`) — Triagem estática nativa de binários `ELF`, `PE/COFF` e `Mach-O`, flags NX/ASLR/PIE e entropia de packers (`MIT`).
+- **`cyberlab-mobile-triage`** (`integrations/reverse-forensics/mobile-artifact-triage.ts`) — Forense nativa em memória de pacotes mobile `.apk`/`.ipa`/backups e detecção de permissões críticas e IoCs (`MIT`).
 
 ---
 

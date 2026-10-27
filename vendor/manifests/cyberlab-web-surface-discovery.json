@@ -1,0 +1,22 @@
+{
+  "id": "cyberlab-web-surface-discovery",
+  "version": "1.0.0",
+  "source": "https://github.com/vitorveloster18-lang/CyberLab-OS",
+  "commit": "first-party",
+  "license": {
+    "spdx": "MIT",
+    "reviewStatus": "approved_embed",
+    "reviewNotes": [
+      "First-party MIT rate-limited Web Surface & Exposure Template Scanner (Nuclei/ffuf native equivalent).",
+      "Validates body signatures against soft-404 HTML responses and enforces strict concurrency/timeout caps."
+    ]
+  },
+  "integration": {
+    "mode": "embedded",
+    "executorId": "web-surface-discovery-executor",
+    "linuxRequired": false
+  },
+  "dependenciesReviewed": true,
+  "noticesRecorded": true,
+  "lastReviewedAt": "2026-10-27T00:00:00.000Z"
+}

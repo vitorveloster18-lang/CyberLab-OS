@@ -31,11 +31,53 @@ import {
   WebHttpSecurityInspectorExecutor,
 } from "../integrations/web-security/http-security-inspector.js"
 import {
+  HTTP_REPEATER_INPUT_SCHEMA_ID,
+  HttpRepeaterCapability,
+  HttpRepeaterComparerExecutor,
+  HttpRepeaterInputSchema,
+} from "../integrations/web-security/http-repeater-comparer.js"
+import {
+  DECODER_SEQUENCER_INPUT_SCHEMA_ID,
+  DecoderSequencerCapability,
+  DecoderSequencerExecutor,
+  DecoderSequencerInputSchema,
+} from "../integrations/web-security/decoder-sequencer.js"
+import {
+  WEB_SURFACE_DISCOVERY_INPUT_SCHEMA_ID,
+  WebSurfaceDiscoveryCapability,
+  WebSurfaceDiscoveryExecutor,
+  WebSurfaceDiscoveryInputSchema,
+} from "../integrations/web-security/surface-discovery.js"
+import {
   TCP_SURFACE_PROBE_INPUT_SCHEMA_ID,
   TcpSurfaceInspectorExecutor,
   TcpSurfaceProbeCapability,
   TcpSurfaceProbeInputSchema,
 } from "../integrations/network-observation/tcp-banner-inspector.js"
+import {
+  TLS_INSPECTOR_INPUT_SCHEMA_ID,
+  TlsCertificateInspectorExecutor,
+  TlsInspectorCapability,
+  TlsInspectorInputSchema,
+} from "../integrations/network-observation/tls-certificate-inspector.js"
+import {
+  PCAP_ANALYZER_INPUT_SCHEMA_ID,
+  PcapAnalyzerCapability,
+  PcapAnalyzerInputSchema,
+  PcapPacketAnalyzerExecutor,
+} from "../integrations/network-observation/pcap-packet-analyzer.js"
+import {
+  BINARY_TRIAGE_INPUT_SCHEMA_ID,
+  BinaryStaticTriageCapability,
+  BinaryStaticTriageExecutor,
+  BinaryStaticTriageInputSchema,
+} from "../integrations/reverse-forensics/binary-static-triage.js"
+import {
+  MOBILE_TRIAGE_INPUT_SCHEMA_ID,
+  MobileArtifactTriageCapability,
+  MobileArtifactTriageExecutor,
+  MobileArtifactTriageInputSchema,
+} from "../integrations/reverse-forensics/mobile-artifact-triage.js"
 
 const repoSkillsDir = fileURLToPath(new URL("../skills", import.meta.url))
 
@@ -144,9 +186,37 @@ export class CyberLabWorkspace {
     this.executors.registerExecutor(new WebHttpSecurityInspectorExecutor())
     await this.capabilities.register(HttpSecurityInspectorCapability)
 
+    this.schemas.registerEffectSchema(HTTP_REPEATER_INPUT_SCHEMA_ID, HttpRepeaterInputSchema)
+    this.executors.registerExecutor(new HttpRepeaterComparerExecutor())
+    await this.capabilities.register(HttpRepeaterCapability)
+
+    this.schemas.registerEffectSchema(DECODER_SEQUENCER_INPUT_SCHEMA_ID, DecoderSequencerInputSchema)
+    this.executors.registerExecutor(new DecoderSequencerExecutor())
+    await this.capabilities.register(DecoderSequencerCapability)
+
+    this.schemas.registerEffectSchema(WEB_SURFACE_DISCOVERY_INPUT_SCHEMA_ID, WebSurfaceDiscoveryInputSchema)
+    this.executors.registerExecutor(new WebSurfaceDiscoveryExecutor())
+    await this.capabilities.register(WebSurfaceDiscoveryCapability)
+
     this.schemas.registerEffectSchema(TCP_SURFACE_PROBE_INPUT_SCHEMA_ID, TcpSurfaceProbeInputSchema)
     this.executors.registerExecutor(new TcpSurfaceInspectorExecutor())
     await this.capabilities.register(TcpSurfaceProbeCapability)
+
+    this.schemas.registerEffectSchema(TLS_INSPECTOR_INPUT_SCHEMA_ID, TlsInspectorInputSchema)
+    this.executors.registerExecutor(new TlsCertificateInspectorExecutor())
+    await this.capabilities.register(TlsInspectorCapability)
+
+    this.schemas.registerEffectSchema(PCAP_ANALYZER_INPUT_SCHEMA_ID, PcapAnalyzerInputSchema)
+    this.executors.registerExecutor(new PcapPacketAnalyzerExecutor())
+    await this.capabilities.register(PcapAnalyzerCapability)
+
+    this.schemas.registerEffectSchema(BINARY_TRIAGE_INPUT_SCHEMA_ID, BinaryStaticTriageInputSchema)
+    this.executors.registerExecutor(new BinaryStaticTriageExecutor())
+    await this.capabilities.register(BinaryStaticTriageCapability)
+
+    this.schemas.registerEffectSchema(MOBILE_TRIAGE_INPUT_SCHEMA_ID, MobileArtifactTriageInputSchema)
+    this.executors.registerExecutor(new MobileArtifactTriageExecutor())
+    await this.capabilities.register(MobileArtifactTriageCapability)
 
     // Load CyberLab skills
     this.skills.loadFromDirectory(repoSkillsDir)

@@ -1,0 +1,22 @@
+{
+  "id": "cyberlab-decoder-sequencer",
+  "version": "1.0.0",
+  "source": "https://github.com/vitorveloster18-lang/CyberLab-OS",
+  "commit": "first-party",
+  "license": {
+    "spdx": "MIT",
+    "reviewStatus": "approved_embed",
+    "reviewNotes": [
+      "First-party MIT offline payload Decoder, JWT claim security auditor, and Shannon entropy token Sequencer.",
+      "Zero external dependencies; uses Node.js built-in crypto/Buffer primitives."
+    ]
+  },
+  "integration": {
+    "mode": "embedded",
+    "executorId": "decoder-sequencer-executor",
+    "linuxRequired": false
+  },
+  "dependenciesReviewed": true,
+  "noticesRecorded": true,
+  "lastReviewedAt": "2026-10-27T00:00:00.000Z"
+}

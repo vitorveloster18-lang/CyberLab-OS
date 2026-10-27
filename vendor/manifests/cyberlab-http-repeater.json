@@ -1,0 +1,22 @@
+{
+  "id": "cyberlab-http-repeater",
+  "version": "1.0.0",
+  "source": "https://github.com/vitorveloster18-lang/CyberLab-OS",
+  "commit": "first-party",
+  "license": {
+    "spdx": "MIT",
+    "reviewStatus": "approved_embed",
+    "reviewNotes": [
+      "First-party MIT HTTP Repeater and baseline Response Comparer (OpenTRAP/Burp clean-room alternative).",
+      "Enforces PolicyEngine URL origin scope on both url and baselineUrl and redacts sensitive headers/cookies."
+    ]
+  },
+  "integration": {
+    "mode": "embedded",
+    "executorId": "http-repeater-comparer-executor",
+    "linuxRequired": false
+  },
+  "dependenciesReviewed": true,
+  "noticesRecorded": true,
+  "lastReviewedAt": "2026-10-27T00:00:00.000Z"
+}
