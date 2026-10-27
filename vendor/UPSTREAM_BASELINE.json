@@ -1,0 +1,67 @@
+{
+  "upstreamRepository": "https://github.com/anomalyco/opencode",
+  "pinnedBranchAtSnapshot": "dev",
+  "pinnedCommitSha": "dae4077a96243257ea0a2086068504b791629f10",
+  "upstreamVersion": "2.1.4",
+  "upstreamLicense": "MIT",
+  "pinnedAt": "2026-10-26",
+  "packageManager": "bun@1.4.4",
+  "distributionProfile": "product-lean",
+  "includedWorkspaces": [
+    "packages/ai",
+    "packages/app",
+    "packages/cli",
+    "packages/client",
+    "packages/codemode",
+    "packages/core",
+    "packages/desktop",
+    "packages/gui-plugins",
+    "packages/http-recorder",
+    "packages/httpapi-codegen",
+    "packages/latex",
+    "packages/merman",
+    "packages/patchmark",
+    "packages/plugin",
+    "packages/plugin-browser",
+    "packages/protocol",
+    "packages/schema",
+    "packages/script",
+    "packages/sdk",
+    "packages/server",
+    "packages/session-ui",
+    "packages/simulation",
+    "packages/stories",
+    "packages/theme",
+    "packages/tui",
+    "packages/ui",
+    "packages/util"
+  ],
+  "excludedUpstreamCloudPaths": [
+    "packages/console",
+    "packages/web",
+    "packages/stats",
+    "packages/function",
+    "packages/posts",
+    "packages/plugins/figma",
+    "services",
+    "salesforce",
+    "infra",
+    "sst.config.ts",
+    "sst-env.d.ts"
+  ],
+  "baselineVerification": {
+    "installCommand": "ELECTRON_SKIP_BINARY_DOWNLOAD=1 bun install --ignore-scripts && bun run --cwd packages/core fix-node-pty",
+    "typecheckCommands": [
+      "bun --cwd packages/schema typecheck",
+      "bun --cwd packages/core typecheck",
+      "bun --cwd packages/server typecheck",
+      "bun --cwd packages/cli typecheck",
+      "bun --cwd packages/gui-plugins typecheck"
+    ],
+    "testBaseline": {
+      "packages/schema": { "passed": 89, "failed": 0 },
+      "packages/util": { "passed": 135, "failed": 0 },
+      "packages/core (database + bus)": { "passed": 56, "failed": 0 }
+    }
+  }
+}
