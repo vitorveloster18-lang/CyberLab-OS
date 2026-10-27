@@ -88,6 +88,7 @@ const Handlers = Runtime.handlers(Commands, {
     evidence: () => import("./commands/handlers/cyberlab/evidence"),
     findings: () => import("./commands/handlers/cyberlab/findings"),
     report: () => import("./commands/handlers/cyberlab/report"),
+    partner: () => import("./commands/handlers/cyberlab/partner"),
   },
 })
 

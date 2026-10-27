@@ -1,0 +1,34 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "scope": {
+    "name": "Escopo Padrão de Laboratório Local",
+    "allowExternalTargets": false,
+    "allowedTargets": [
+      { "kind": "ip", "value": "127.0.0.1", "notes": "Loopback local de laboratório" },
+      { "kind": "domain", "value": "localhost", "notes": "Hostname local" },
+      { "kind": "cidr", "value": "172.28.0.0/16", "notes": "Rede Docker isolada de alvos de laboratório" }
+    ],
+    "blockedTargets": [
+      { "kind": "ip", "value": "172.28.0.1", "notes": "Gateway do host Docker bloqueado" },
+      { "kind": "workspace_path", "value": ".git", "notes": "Protege metadados Git do workspace" }
+    ]
+  },
+  "partners": [
+    {
+      "partnerId": "chat-py-agent",
+      "displayName": "Runtime Externo Python (chat.py)",
+      "endpointUrl": "http://127.0.0.1:8788/cyberlab/partner",
+      "secretEnvVar": "CYBERLAB_PARTNER_SECRET",
+      "allowedActions": ["analyze.evidence", "propose.check"],
+      "prohibitedActions": ["shell.exec", "exploit.execute"],
+      "enabled": true
+    }
+  ],
+  "mcp": {
+    "nmap-local": {
+      "type": "local",
+      "enabled": false,
+      "note": "Exemplo de servidor MCP externo (plugin_only) para binários instalados pelo analista no Linux/WSL2"
+    }
+  }
+}

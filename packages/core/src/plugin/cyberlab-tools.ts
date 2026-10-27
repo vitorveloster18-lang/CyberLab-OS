@@ -63,6 +63,20 @@ const ProposeFindingOutput = Schema.Struct({
   output: Schema.String,
 })
 
+const DelegatePartnerInput = Schema.Struct({
+  objective: Schema.String.annotate({
+    description: "Analysis objective sent to the external partner agent (e.g. chat.py via chat_py_bridge.py)",
+  }),
+  evidenceIds: Schema.optionalKey(Schema.Array(Schema.String)),
+  partnerId: Schema.optionalKey(Schema.String),
+})
+
+const DelegatePartnerOutput = Schema.Struct({
+  status: Schema.String,
+  summary: Schema.String,
+  unreviewedFindingCount: Schema.Number,
+})
+
 const failTool = (label: string, error?: unknown) =>
   new ToolFailure({
     message: `CyberLab tool ${label} failed: ${error instanceof Error ? error.message : String(error ?? "unknown")}`,
@@ -215,6 +229,50 @@ export const Plugin = {
               return {
                 output: { findingId: finding.findingId, status: finding.status, output: summary },
                 content: summary,
+              }
+            }),
+        })
+
+        editor.add({
+          name: "cyberlab_partner_delegate",
+          options: { codemode: false },
+          description:
+            "Delegate a redacted analysis task to an authenticated external partner runtime (such as chat.py via chat_py_bridge.py).",
+          input: DelegatePartnerInput,
+          output: DelegatePartnerOutput,
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              const targetPartner = input.partnerId ?? "chat-py-agent"
+              yield* permission
+                .assert({
+                  action: "cyberlab_partner_delegate",
+                  resources: [targetPartner],
+                  save: [targetPartner],
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  source: { type: "tool", messageID: context.messageID, id: context.id },
+                })
+                .pipe(Effect.mapError((e) => failTool("cyberlab_partner_delegate", e)))
+
+              const ws = yield* getWorkspace()
+              const outcome = yield* Effect.tryPromise({
+                try: () =>
+                  ws.delegateToPartner({
+                    objective: input.objective,
+                    partnerId: targetPartner,
+                    evidenceIds: input.evidenceIds ? [...input.evidenceIds] : [],
+                  }),
+                catch: (e) => failTool("cyberlab_partner_delegate", e),
+              })
+              const status = outcome.result?.status ?? "no_result"
+              const summary = outcome.result?.summary ?? "No partner summary returned."
+              return {
+                output: {
+                  status,
+                  summary,
+                  unreviewedFindingCount: outcome.createdFindings.length,
+                },
+                content: `[partner:${targetPartner} ${status}] ${summary} (unreviewed findings: ${outcome.createdFindings.length})`,
               }
             }),
         })

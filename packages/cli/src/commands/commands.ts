@@ -628,6 +628,29 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         Spec.make("report", {
           description: "Render a reproducible Markdown assessment report for the workspace",
         }),
+        Spec.make("partner", {
+          description: "Delegate a redacted analysis task to an external partner runtime (e.g. chat_py_bridge.py)",
+          params: {
+            objective: Flag.String("objective").pipe(
+              Flag.withAlias("o"),
+              Flag.withDescription("Task objective sent to the external partner agent"),
+            ),
+            partnerId: Flag.String("partner-id").pipe(
+              Flag.withDescription("Partner ID (defaults to CYBERLAB_PARTNER_ID or chat-py-agent)"),
+              Flag.optional,
+            ),
+            endpoint: Flag.String("endpoint").pipe(
+              Flag.withDescription("Partner HTTP endpoint (defaults to CYBERLAB_PARTNER_URL or http://127.0.0.1:8788/cyberlab/partner)"),
+              Flag.optional,
+            ),
+            evidence: Flag.String("evidence").pipe(
+              Flag.withAlias("e"),
+              Flag.withDescription("Comma-separated Evidence IDs to redact and attach"),
+              Flag.optional,
+            ),
+            json: Flag.Boolean("json").pipe(Flag.withDescription("Output full outcome as JSON"), Flag.withDefault(false)),
+          },
+        }),
       ],
     }),
   ],

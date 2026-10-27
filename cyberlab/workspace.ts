@@ -9,7 +9,8 @@ import type { ApprovalTicket, ProjectScope, ScopeTargetRule } from "./contracts/
 import { EvidenceStore, type IntegrityCheckResult } from "./evidence/store.js"
 import { CyberLabExecutionDispatcher } from "./execution/dispatcher.js"
 import { PartnerAuthenticator } from "./partners/authentication.js"
-import { PartnerBridge } from "./partners/bridge.js"
+import { PartnerBridge, type PartnerDispatchOutcome } from "./partners/bridge.js"
+import { HttpPartnerTransport } from "./partners/transport.js"
 import { ApprovalManager } from "./policy/approval.js"
 import { PolicyEngine } from "./policy/authorize.js"
 import { ScopeController } from "./policy/scope.js"
@@ -149,6 +150,22 @@ export class CyberLabWorkspace {
 
     // Load CyberLab skills
     this.skills.loadFromDirectory(repoSkillsDir)
+
+    // Auto-register external partner (e.g. chat_py_bridge.py) when CYBERLAB_PARTNER_SECRET is configured
+    const envPartnerSecret = process.env.CYBERLAB_PARTNER_SECRET
+    if (envPartnerSecret && envPartnerSecret.length >= 16) {
+      const partnerId = process.env.CYBERLAB_PARTNER_ID?.trim() || "chat-py-agent"
+      const endpointUrl = process.env.CYBERLAB_PARTNER_URL?.trim() || "http://127.0.0.1:8788/cyberlab/partner"
+      this.partnerAuth.registerPartner({
+        partnerId,
+        displayName: `External Partner Runtime (${partnerId})`,
+        sharedSecret: envPartnerSecret,
+        allowedActions: ["analyze.evidence", "propose.check"],
+        prohibitedActions: ["shell.exec", "exploit.execute"],
+        enabled: true,
+      })
+      this.partnerBridge.registerTransport(partnerId, new HttpPartnerTransport(endpointUrl))
+    }
 
     for (const hook of globalBootstrapHooks) {
       await hook(this)
@@ -316,6 +333,63 @@ export class CyberLabWorkspace {
       evidence: this.evidenceStore.listEvidence(this.projectId),
       findings: this.evidenceStore.listFindings(this.projectId),
     })
+  }
+
+  async delegateToPartner(params: {
+    partnerId?: string
+    endpointUrl?: string
+    sharedSecret?: string
+    objective: string
+    evidenceIds?: string[]
+    contextText?: string
+    timeoutMs?: number
+  }): Promise<PartnerDispatchOutcome> {
+    await this.ensureInitialized()
+    const partnerId = params.partnerId?.trim() || process.env.CYBERLAB_PARTNER_ID?.trim() || "chat-py-agent"
+    const secret = params.sharedSecret ?? process.env.CYBERLAB_PARTNER_SECRET
+    const endpoint = params.endpointUrl?.trim() || process.env.CYBERLAB_PARTNER_URL?.trim()
+
+    if (!this.partnerAuth.getPublicProfile(partnerId)) {
+      if (!secret || secret.length < 16) {
+        throw new Error(
+          `Partner "${partnerId}" is not configured. Set CYBERLAB_PARTNER_SECRET (>= 16 chars) and run integrations/partners/chat_py_bridge.py.`,
+        )
+      }
+      this.partnerAuth.registerPartner({
+        partnerId,
+        displayName: `External Partner Runtime (${partnerId})`,
+        sharedSecret: secret,
+        allowedActions: ["analyze.evidence", "propose.check"],
+        prohibitedActions: ["shell.exec", "exploit.execute"],
+        enabled: true,
+      })
+    }
+
+    if (endpoint) {
+      this.partnerBridge.registerTransport(partnerId, new HttpPartnerTransport(endpoint))
+    }
+
+    return this.partnerBridge.submitTask(
+      partnerId,
+      {
+        taskId: `ptask-${crypto.randomUUID()}`,
+        projectId: this.projectId,
+        objective: params.objective,
+        contextBundle: {
+          evidenceIds: params.evidenceIds ?? [],
+          ...(params.contextText !== undefined ? { text: params.contextText } : {}),
+        },
+        allowedActions: ["analyze.evidence", "propose.check"],
+        prohibitedActions: ["shell.exec", "exploit.execute"],
+        requestedOutput: {
+          summary: true,
+          findings: true,
+          evidenceReferences: true,
+          limitations: true,
+        },
+      },
+      { ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}) },
+    )
   }
 
   close(): void {
