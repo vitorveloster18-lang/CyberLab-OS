@@ -164,7 +164,19 @@ export class EvidenceStore {
   }
 
   storeEvidence(projectId: string, draft: EvidenceDraft, options: StoreEvidenceOptions = {}): EvidenceRecord {
-    const validatedDraft = validateEvidenceDraft(draft)
+    const normalizedInputDraft: EvidenceDraft =
+      options.rawBytes !== undefined &&
+      draft.content.inlineText === undefined &&
+      draft.content.storageKey === undefined
+        ? {
+            ...draft,
+            content: {
+              ...draft.content,
+              storageKey: sha256Hex(options.rawBytes),
+            },
+          }
+        : draft
+    const validatedDraft = validateEvidenceDraft(normalizedInputDraft)
     const now = new Date().toISOString()
     const evidenceId = `ev-${crypto.randomUUID()}`
 

@@ -86,12 +86,32 @@ export class PromptChatPartnerTransport implements PartnerTransport {
       .join("\n\n")
 
     const rawReply = await this.chatFn(prompt, options.signal)
-    const parsedJson = JSON.parse(rawReply) as Record<string, unknown>
+    let parsedJson: Record<string, unknown>
+    const extraLimitations: string[] = []
+    try {
+      const candidate = JSON.parse(rawReply) as unknown
+      if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+        parsedJson = candidate as Record<string, unknown>
+      } else {
+        throw new Error("Non-object JSON reply")
+      }
+    } catch {
+      parsedJson = {
+        status: "completed",
+        summary: String(rawReply).slice(0, 4_000) || "Empty partner reply",
+        findings: [],
+        limitations: [],
+        artifactRefs: [],
+      }
+      extraLimitations.push("Partner returned non-JSON unstructured text; coerced safely without execution.")
+    }
+
     const validated = validatePartnerResult({
       ...parsedJson,
       taskId: task.taskId,
       limitations: [
         ...(Array.isArray(parsedJson["limitations"]) ? (parsedJson["limitations"] as string[]) : []),
+        ...extraLimitations,
         "Bridged via unstructured prompt-chat adapter; verify against raw EvidenceStore artifacts.",
       ],
     })
