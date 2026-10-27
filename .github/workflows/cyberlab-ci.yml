@@ -39,4 +39,4 @@ jobs:
           bun --cwd packages/schema test
           bun --cwd packages/util test
           if [ -f script/check-cyberlab-licenses.ts ]; then bun run script/check-cyberlab-licenses.ts; fi
-          if [ -d tests/cyberlab ]; then bun test tests/cyberlab; fi
+          if [ -f cyberlab/package.json ]; then bun --cwd cyberlab test; fi
