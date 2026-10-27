@@ -1,0 +1,22 @@
+{
+  "id": "cyberlab-security-studio",
+  "version": "1.0.0",
+  "source": "https://github.com/vitorveloster18-lang/CyberLab-OS",
+  "commit": "first-party",
+  "license": {
+    "spdx": "MIT",
+    "reviewStatus": "approved_embed",
+    "reviewNotes": [
+      "First-party MIT unified manual visual Security Studio inside OpenCode V2 (packages/gui-plugins/src/cyberlab/) and standalone full-screen workbench (cyberlab/studio/).",
+      "Zero external CDN or copyleft UI dependencies."
+    ]
+  },
+  "integration": {
+    "mode": "embedded",
+    "executorId": "cyberlab-studio-server",
+    "linuxRequired": false
+  },
+  "dependenciesReviewed": true,
+  "noticesRecorded": true,
+  "lastReviewedAt": "2026-10-27T00:00:00.000Z"
+}

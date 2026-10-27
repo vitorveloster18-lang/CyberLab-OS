@@ -334,5 +334,43 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
           return yield* runBadRequest(() => ws.syncExternalInbox("http-control-plane"))
         }),
       ),
+    )
+    .handle("cyberlab.evidence.read", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() => ws.readEvidenceContent(payload.evidenceId, "http-workbench"))
+        }),
+      ),
+    )
+    .handle("cyberlab.proxy.overview", () =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* Effect.promise(() => ws.getProxyOverview())
+        }),
+      ),
+    )
+    .handle("cyberlab.proxy.control", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() =>
+            ws.controlProxy({
+              action: payload.action,
+              ...(payload.port !== undefined ? { port: payload.port } : {}),
+              ...(payload.scopeOnly !== undefined ? { scopeOnly: payload.scopeOnly } : {}),
+            }),
+          )
+        }),
+      ),
+    )
+    .handle("cyberlab.proxy.persist", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() => ws.persistProxyEntry(payload.entryId, "http-workbench"))
+        }),
+      ),
     ),
 )

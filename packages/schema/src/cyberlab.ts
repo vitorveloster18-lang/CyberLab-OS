@@ -233,4 +233,65 @@ export namespace CyberLab {
     ),
     skippedReasons: Schema.Array(Schema.String),
   })
+
+  export const ReadEvidenceInput = Schema.Struct({
+    evidenceId: Schema.String,
+  })
+
+  export const ReadEvidenceOutput = Schema.Struct({
+    evidenceId: Schema.String,
+    kind: Schema.String,
+    title: Schema.String,
+    mediaType: Schema.String,
+    sha256: Schema.String,
+    redacted: Schema.Boolean,
+    text: Schema.String,
+  })
+
+  export const ProxyStatusInfo = Schema.Struct({
+    running: Schema.Boolean,
+    listenHost: Schema.String,
+    listenPort: Schema.NullOr(Schema.Number),
+    scopeOnly: Schema.Boolean,
+    capturedCount: Schema.Number,
+  })
+
+  export const ProxyHistoryEntryInfo = Schema.Struct({
+    entryId: Schema.String,
+    timestamp: Schema.String,
+    method: Schema.String,
+    url: Schema.String,
+    host: Schema.String,
+    path: Schema.String,
+    statusCode: Schema.Number,
+    elapsedMs: Schema.Number,
+    requestHeaders: Schema.Record(Schema.String, Schema.String),
+    requestBody: Schema.String,
+    responseHeaders: Schema.Record(Schema.String, Schema.String),
+    responseBody: Schema.String,
+    responseBytes: Schema.Number,
+    blockedByScope: Schema.Boolean,
+    blockReason: optional(Schema.String),
+    persistedEvidenceId: optional(Schema.String),
+  })
+
+  export const ProxyOverview = Schema.Struct({
+    status: ProxyStatusInfo,
+    history: Schema.Array(ProxyHistoryEntryInfo),
+  })
+
+  export const ProxyControlInput = Schema.Struct({
+    action: Schema.Literals(["start", "stop", "clear", "set_scope_only"]),
+    port: optional(Schema.Number),
+    scopeOnly: optional(Schema.Boolean),
+  })
+
+  export const ProxyPersistInput = Schema.Struct({
+    entryId: Schema.String,
+  })
+
+  export const ProxyPersistOutput = Schema.Struct({
+    evidenceId: Schema.String,
+    sha256: Schema.String,
+  })
 }

@@ -34,6 +34,7 @@ import {
   type IngestExternalActionInput,
   type IngestExternalActionResult,
 } from "./external/control-plane.js"
+import { CyberLabHttpProxy, type ProxyHistoryEntry, type ProxyStatus } from "./proxy/http-proxy.js"
 import { ApprovalManager } from "./policy/approval.js"
 import { PolicyEngine } from "./policy/authorize.js"
 import { ScopeController } from "./policy/scope.js"
@@ -140,6 +141,7 @@ export class CyberLabWorkspace {
   readonly partnerAuth: PartnerAuthenticator
   readonly partnerBridge: PartnerBridge
   readonly externalControl: ExternalControlPlane
+  readonly httpProxy: CyberLabHttpProxy
   private initialized = false
 
   constructor(options: { projectId: string; workspaceRoot: string; inMemoryDb?: boolean }) {
@@ -179,6 +181,11 @@ export class CyberLabWorkspace {
     this.externalControl = new ExternalControlPlane({
       projectId: this.projectId,
       workspaceRoot: this.workspaceRoot,
+      scopes: this.scopes,
+      evidenceStore: this.evidenceStore,
+    })
+    this.httpProxy = new CyberLabHttpProxy({
+      projectId: this.projectId,
       scopes: this.scopes,
       evidenceStore: this.evidenceStore,
     })
@@ -409,6 +416,69 @@ export class CyberLabWorkspace {
     return this.evidenceStore.verifyIntegrity(evidenceId, actor)
   }
 
+  async readEvidenceContent(
+    evidenceId: string,
+    actor = "operator:workbench",
+  ): Promise<{
+    evidenceId: string
+    kind: string
+    title: string
+    mediaType: string
+    sha256: string
+    redacted: boolean
+    text: string
+  }> {
+    await this.ensureInitialized()
+    const rec = this.evidenceStore.getEvidence(evidenceId)
+    if (!rec || rec.projectId !== this.projectId) {
+      throw new Error(`Evidence "${evidenceId}" not found in project "${this.projectId}"`)
+    }
+    const shared = this.evidenceStore.readRedactedForSharing(evidenceId, actor)
+    return {
+      evidenceId: rec.evidenceId,
+      kind: rec.kind,
+      title: rec.title,
+      mediaType: rec.content.mediaType,
+      sha256: shared.sha256,
+      redacted: shared.redacted,
+      text: shared.text,
+    }
+  }
+
+  async getProxyOverview(): Promise<{ status: ProxyStatus; history: ProxyHistoryEntry[] }> {
+    await this.ensureInitialized()
+    return {
+      status: this.httpProxy.getStatus(),
+      history: this.httpProxy.listHistory(),
+    }
+  }
+
+  async controlProxy(params: {
+    action: "start" | "stop" | "clear" | "set_scope_only"
+    port?: number
+    scopeOnly?: boolean
+  }): Promise<{ status: ProxyStatus; history: ProxyHistoryEntry[] }> {
+    await this.ensureInitialized()
+    if (params.action === "start") {
+      await this.httpProxy.start({
+        ...(params.port !== undefined ? { port: params.port } : {}),
+        ...(params.scopeOnly !== undefined ? { scopeOnly: params.scopeOnly } : {}),
+      })
+    } else if (params.action === "stop") {
+      await this.httpProxy.stop()
+    } else if (params.action === "clear") {
+      this.httpProxy.clearHistory()
+    } else if (params.action === "set_scope_only") {
+      this.httpProxy.setScopeOnly(params.scopeOnly ?? true)
+    }
+    return this.getProxyOverview()
+  }
+
+  async persistProxyEntry(entryId: string, actor?: string): Promise<{ evidenceId: string; sha256: string }> {
+    await this.ensureInitialized()
+    return this.httpProxy.persistEntryToEvidence(entryId, actor)
+  }
+
   async listFindings(): Promise<SecurityFinding[]> {
     await this.ensureInitialized()
     return this.evidenceStore.listFindings(this.projectId)
@@ -538,6 +608,7 @@ export class CyberLabWorkspace {
   }
 
   close(): void {
+    void this.httpProxy.stop()
     this.evidenceStore.close()
   }
 }

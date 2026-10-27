@@ -91,9 +91,38 @@ Para conectar ferramentas externas via **MCP (Model Context Protocol)** nativo d
 
 ---
 
-## 3. Como Usar o Sistema (4 Modos de Operação)
+## 3. Como Usar o Sistema (Security Studio Visual + CLI + TUI + IA)
 
-### Modo 1 — Linha de Comando Direta (`cyberlab` CLI)
+### Modo Principal — Security Studio Visual Completo (7 Abas Manuais Interativas, sem sair do CyberLab OS)
+
+Você **não precisa sair do CyberLab OS** para abrir a UI do Burp Suite, Wireshark, Zenmap ou digitar JSON cru na mão. Todas as ferramentas — **tanto os motores internos `MIT` quanto os binários externos (`nmap`, `nuclei`, `ffuf`, `tshark`)** — possuem **controles visuais dedicados, presets, seletores, tabelas e comparadores** dentro do próprio CyberLab OS:
+
+1. **Aba `1. Proxy & Repeater`**:
+   - **Proxy HTTP Local de Captura (`127.0.0.1:8899`)** com botão *Start/Stop*, filtro de escopo (`ScopeController`), bloqueio anti-SSRF (`169.254.169.254`), tabela de histórico ao vivo e botões de 1 clique **`→ Repeater`**, **`→ Baseline`** e **`Save SHA-256`**.
+   - **HTTP Repeater & Comparer** estilo Burp/OpenTRAP: seletor de método (`GET`/`POST`/`PUT`/`PATCH`/`DELETE`/`HEAD`/`OPTIONS`), editor chave-valor de cabeçalhos com checkboxes e presets (`+ JSON`, `+ Bearer`, `+ XFF`), editor de body e diff visual contra URL de baseline.
+2. **Aba `2. Decoder & JWT`**: pipeline visual encadeado em 1 clique (`URL`, `Base64`, `Base64URL`, `Hex`, `HTML`, `SHA-256`), auditoria de segurança JWT (`alg:none`, ausência de `exp`, injeção `jku`/`x5u`) e Sequencer de entropia de tokens de sessão.
+3. **Aba `3. Web Scanner & Fuzzer`**: formulários visuais, sliders de concorrência/rate-limit e tags para disparar tanto o **Scanner Nativo `MIT`** e o **Inspetor de Headers/CORS** quanto **`nuclei`** e **`ffuf`** externos.
+4. **Aba `4. Network & TLS`**: perfis rápidos de portas (*Web*, *Infra*, *Database*), toggle `-sV`, campo TLS SNI e visualização estruturada de certificados `X.509` e banners TCP/Nmap.
+5. **Aba `5. Packets (.pcap)`**: seletor visual entre o dissecador nativo Pure-TS e o `tshark` (Wireshark CLI), slider de pacotes e visualização de fluxos, queries DNS, SNI TLS e requisições HTTP.
+6. **Aba `6. Reverse & Mobile`**: controles visuais para triagem estática de binários `ELF`/`PE`/`Mach-O` (NX, PIE/ASLR, Canary, entropia de packers, imports suspeitos) e pacotes mobile `.apk`/`.ipa`/backups (permissões críticas e caça a domínios IoC).
+7. **Aba `7. Scope & Custody`**: construtor visual de regras de escopo (`ip`, `cidr`, `domain`, `url_origin`, `workspace_path`), fila de aprovações humanas, *Kill-Switch* em tempo real de processos, radar de ferramentas externas, `.cyberlab/inbox/`, inspetor de evidências `SHA-256` e gerador de relatório Markdown.
+
+Você pode abrir o **Security Studio Visual** de duas formas:
+
+```bash
+# Opção A: Workbench Visual em Tela Cheia no navegador (porta 4180)
+bun run cyberlab:studio
+
+# Ou com laboratório local de demonstração integrado (alvo HTTP + TLS + .pcap + .elf + .apk prontos para testar em 1 clique):
+bun run cyberlab studio --demo-lab --port 4180
+```
+
+```bash
+# Opção B: Integrado dentro do OpenCode V2 Web/Desktop (atalho Ctrl+Alt+L / Ctrl+Cmd+L)
+bun run dev serve --hostname 127.0.0.1 --port 4096
+```
+
+### Modo CLI — Linha de Comando Direta (`cyberlab` CLI)
 
 Você pode executar auditorias, verificar integridade `SHA-256` e gerar relatórios Markdown sem sequer precisar de chave de IA:
 

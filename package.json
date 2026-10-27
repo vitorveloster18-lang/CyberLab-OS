@@ -29,6 +29,7 @@
     "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "postinstall": "bun run --cwd packages/core fix-node-pty",
     "cyberlab": "sh -c 'CYBERLAB_WORKSPACE_ROOT=\"$PWD\" exec bun run --cwd packages/cli src/index.ts cyberlab \"$@\"' --",
+    "cyberlab:studio": "bun run cyberlab/studio/server.ts",
     "cyberlab:typecheck": "bun --cwd cyberlab typecheck",
     "cyberlab:test": "bun --cwd cyberlab test",
     "cyberlab:check-licenses": "bun run script/check-cyberlab-licenses.ts",

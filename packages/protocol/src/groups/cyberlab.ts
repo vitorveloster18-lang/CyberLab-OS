@@ -277,6 +277,68 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
         }),
       ),
   )
+  .add(
+    HttpApiEndpoint.post("cyberlab.evidence.read", "/api/cyberlab/evidence/read", {
+      query: LocationQuery,
+      payload: CyberLab.ReadEvidenceInput,
+      success: Location.response(CyberLab.ReadEvidenceOutput),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.evidence.read",
+          summary: "Read redacted content of an EvidenceRecord for visual workbench rendering",
+          description: "Returns redacted payload text and SHA-256 metadata confined to the active project.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("cyberlab.proxy.overview", "/api/cyberlab/proxy", {
+      query: LocationQuery,
+      success: Location.response(CyberLab.ProxyOverview),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.proxy.overview",
+          summary: "Get local HTTP proxy status and captured traffic history",
+          description: "Retrieve proxy listener state and captured in-scope/blocked HTTP history.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.proxy.control", "/api/cyberlab/proxy/control", {
+      query: LocationQuery,
+      payload: CyberLab.ProxyControlInput,
+      success: Location.response(CyberLab.ProxyOverview),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.proxy.control",
+          summary: "Start, stop, clear, or toggle scope-only filter on CyberLab HTTP Proxy",
+          description: "Control the local 127.0.0.1 HTTP capture proxy from the visual workbench.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.proxy.persist", "/api/cyberlab/proxy/persist", {
+      query: LocationQuery,
+      payload: CyberLab.ProxyPersistInput,
+      success: Location.response(CyberLab.ProxyPersistOutput),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.proxy.persist",
+          summary: "Persist a captured proxy exchange into SHA-256 EvidenceStore",
+          description: "Store a selected Proxy History row permanently with SHA-256 chain of custody.",
+        }),
+      ),
+  )
   .annotateMerge(
     OpenApi.annotations({
       title: "cyberlab",

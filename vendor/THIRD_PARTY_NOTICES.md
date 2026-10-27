@@ -54,6 +54,8 @@ Os seguintes adaptadores e executores em `cyberlab/` e `integrations/` são impl
 - **`cyberlab-binary-triage`** (`integrations/reverse-forensics/binary-static-triage.ts`) — Triagem estática nativa de binários `ELF`, `PE/COFF` e `Mach-O`, flags NX/ASLR/PIE e entropia de packers (`MIT`).
 - **`cyberlab-mobile-triage`** (`integrations/reverse-forensics/mobile-artifact-triage.ts`) — Forense nativa em memória de pacotes mobile `.apk`/`.ipa`/backups e detecção de permissões críticas e IoCs (`MIT`).
 - **`cyberlab-external-control-plane`** (`cyberlab/external/control-plane.ts`) — Plano de controle unificado `MIT` para descoberta, supervisão (`shell=false` + kill-switch), ingestão de sessões manuais externas e sincronização `.cyberlab/inbox/` com custódia `SHA-256` (`MIT`).
+- **`cyberlab-http-proxy`** (`cyberlab/proxy/http-proxy.ts`) — Proxy HTTP local `MIT` (`127.0.0.1`) de captura de tráfego com validação `ScopeController`, proteção SSRF, redação automática de cabeçalhos sensíveis e integração direta com Repeater/Comparer e custódia `SHA-256` (`MIT`).
+- **`cyberlab-security-studio`** (`packages/gui-plugins/src/cyberlab/` e `cyberlab/studio/`) — Interface manual visual completa integrada ao OpenCode V2 e em janela cheia no navegador para todas as 7 disciplinas de segurança, sem dependência de UIs externas (`MIT`).
 
 ---
 
