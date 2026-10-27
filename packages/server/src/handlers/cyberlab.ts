@@ -294,5 +294,45 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
           return { markdown }
         }),
       ),
+    )
+    .handle("cyberlab.external.tools", () =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          const tools = yield* Effect.promise(() => ws.listExternalTools())
+          return {
+            pendingInboxCount: ws.externalControl.countPendingInboxFiles(),
+            inboxDirectory: ws.externalControl.inboxDir,
+            tools,
+          }
+        }),
+      ),
+    )
+    .handle("cyberlab.external.ingest", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() =>
+            ws.ingestExternalAction({
+              toolId: payload.toolId,
+              ...(payload.title !== undefined ? { title: payload.title } : {}),
+              ...(payload.origin !== undefined ? { origin: payload.origin } : {}),
+              ...(payload.target !== undefined ? { target: payload.target } : {}),
+              ...(payload.commandSummary !== undefined ? { commandSummary: payload.commandSummary } : {}),
+              rawOutput: payload.rawOutput,
+              ...(payload.mediaType !== undefined ? { mediaType: payload.mediaType } : {}),
+              actor: "http-control-plane",
+            }),
+          )
+        }),
+      ),
+    )
+    .handle("cyberlab.external.sync", () =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() => ws.syncExternalInbox("http-control-plane"))
+        }),
+      ),
     ),
 )

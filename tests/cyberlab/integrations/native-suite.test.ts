@@ -137,12 +137,12 @@ function buildMinimalZipArchive(files: Array<{ name: string; content: string }>)
 }
 
 describe("Embedded Native Security Suite (All-In-One MIT Capabilities)", () => {
-  test("registers all 10 built-in native capabilities out-of-the-box", async () => {
+  test("registers all 10 built-in native capabilities plus 4 governed external plugin bridges out-of-the-box", async () => {
     const tmpDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-suite-caps-"))
     try {
       const ws = new CyberLabWorkspace({ projectId: "proj-caps", workspaceRoot: tmpDir, inMemoryDb: true })
       const caps = await ws.listCapabilities()
-      expect(caps.length).toBe(10)
+      expect(caps.length).toBe(14)
       const ids = caps.map((c) => c.id)
       expect(ids).toContain(HttpRepeaterCapability.id)
       expect(ids).toContain(DecoderSequencerCapability.id)
@@ -151,6 +151,10 @@ describe("Embedded Native Security Suite (All-In-One MIT Capabilities)", () => {
       expect(ids).toContain(PcapAnalyzerCapability.id)
       expect(ids).toContain(BinaryStaticTriageCapability.id)
       expect(ids).toContain(MobileArtifactTriageCapability.id)
+      expect(ids).toContain("external.nmap-service-probe")
+      expect(ids).toContain("external.nuclei-template-scan")
+      expect(ids).toContain("external.ffuf-endpoint-probe")
+      expect(ids).toContain("external.tshark-pcap-summary")
       ws.close()
     } finally {
       rmSync(tmpDir, { recursive: true, force: true })

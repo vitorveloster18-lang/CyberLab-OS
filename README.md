@@ -156,8 +156,45 @@ Dentro da sessão interativa, o agente já dispõe automaticamente:
 bun run dev serve --hostname 127.0.0.1 --port 4096
 ```
 
-- Endpoints REST disponíveis em `http://127.0.0.1:4096/api/cyberlab/*` (`status`, `capabilities`, `scope`, `executions`, `approvals`, `evidence`, `evidence/verify`, `findings`, `findings/review`, `report`).
-- Na interface gráfica SolidJS (`packages/app` / `packages/gui-plugins/src/cyberlab`), abra o painel lateral **CyberLab** pelo menu da sessão ou pelo atalho **`Ctrl+Alt+L`** (`Ctrl+Cmd+L` no macOS) para disparar auditorias, verificar hashes `SHA-256` e confirmar/rejeitar findings.
+- Endpoints REST disponíveis em `http://127.0.0.1:4096/api/cyberlab/*` (`status`, `capabilities`, `scope`, `executions`, `executions/approve`, `executions/cancel`, `approvals`, `evidence`, `evidence/verify`, `findings`, `findings/review`, `report`, `external/tools`, `external/ingest`, `external/sync`).
+- Na interface gráfica SolidJS (`packages/app` / `packages/gui-plugins/src/cyberlab`), abra o **Cockpit Unificado CyberLab** pelo menu da sessão ou pelo atalho **`Ctrl+Alt+L`** (`Ctrl+Cmd+L` no macOS) para controlar de um único lugar: **escopo ativo, aprovações pendentes, disparador unificado (capacidades internas + plugins externos), botão Kill/Cancel em tempo real, radar de ferramentas externas, sincronização da `.cyberlab/inbox`, ingestão de sessões manuais externas, verificação `SHA-256` e revisão de findings**.
+
+---
+
+### Modo 4 — Plano de Controle Único para Ferramentas e Ações Externas (`cyberlab external`)
+
+Mesmo quando um motor roda **fora** do CyberLab OS (via binário externo como `nmap`, `nuclei`, `ffuf`, `tshark`, `mvt-android`, `ghidra`, desktop GUI como **OpenTRAP**/**Burp**/**Wireshark**, ou servidor **MCP**), **todos os controles de escopo, supervisão, kill-switch e custódia `SHA-256` ficam centralizados em um só lugar** (`cyberlab/external/control-plane.ts`):
+
+```bash
+# 1) Radar de Ferramentas Externas: verifica o que está instalado em .cyberlab/bin, PATH ou config/external-tools.json
+bun run cyberlab external
+
+# 2) Disparar ferramentas externas governadas direto pelo CyberLab OS (shell=false + ScopeController + Kill-Switch)
+bun run cyberlab run -c external.nmap-service-probe -i '{"host":"127.0.0.1","ports":"80,443,8080","serviceVersion":true}'
+bun run cyberlab run -c external.nuclei-template-scan -i '{"url":"http://127.0.0.1:8080","rateLimit":10}'
+bun run cyberlab run -c external.ffuf-endpoint-probe -i '{"baseUrl":"http://127.0.0.1:8080","wordlistPath":"wordlist.txt"}'
+bun run cyberlab run -c external.tshark-pcap-summary -i '{"pcapPath":"captura.pcap","maxPackets":250}'
+
+# 3) Wrapper Supervisionado (você roda manualmente no terminal, mas o CyberLab valida o escopo ANTES de abrir o processo e grava SHA-256 com redação de segredos)
+bun run cyberlab external \
+  --action wrap \
+  --tool nmap \
+  --target 127.0.0.1 \
+  --binary nmap \
+  --args '["-Pn","-sV","-p","8080","127.0.0.1"]'
+
+# 4) Drop-Folder Universal (.cyberlab/inbox/) e Ingestão Manual (OpenTRAP, Burp, Wireshark, Ghidra, MVT):
+# Basta salvar qualquer exportação externa em .cyberlab/inbox/ e sincronizar com 1 comando (ou botão no painel GUI):
+bun run cyberlab external --action sync
+
+# Ou ingerir um arquivo específico auditando automaticamente se o alvo estava dentro do ProjectScope:
+bun run cyberlab external \
+  --action ingest \
+  --tool opentrap \
+  --target http://127.0.0.1:8080/login \
+  --file sessao-opentrap.http
+```
+*(Na sessão interativa de IA, o assistente também enxerga esse mesmo plano de controle pela tool `cyberlab_external_control`, mantendo você e a IA sincronizados sobre o mesmo banco de evidências e o mesmo escopo).*
 
 ---
 

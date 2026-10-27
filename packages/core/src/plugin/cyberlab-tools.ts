@@ -77,6 +77,19 @@ const DelegatePartnerOutput = Schema.Struct({
   unreviewedFindingCount: Schema.Number,
 })
 
+const ExternalControlInput = Schema.Struct({
+  operation: Schema.Literals(["list_tools", "sync_inbox"]).annotate({
+    description:
+      "Inspect externally installed tools (nmap, nuclei, ffuf, tshark, opentrap, mvt, ghidra) or sync manual external tool outputs from .cyberlab/inbox/",
+  }),
+})
+
+const ExternalControlOutput = Schema.Struct({
+  availableTools: Schema.Array(Schema.String),
+  ingestedEvidenceIds: Schema.Array(Schema.String),
+  summary: Schema.String,
+})
+
 const failTool = (label: string, error?: unknown) =>
   new ToolFailure({
     message: `CyberLab tool ${label} failed: ${error instanceof Error ? error.message : String(error ?? "unknown")}`,
@@ -273,6 +286,48 @@ export const Plugin = {
                   unreviewedFindingCount: outcome.createdFindings.length,
                 },
                 content: `[partner:${targetPartner} ${status}] ${summary} (unreviewed findings: ${outcome.createdFindings.length})`,
+              }
+            }),
+        })
+
+        editor.add({
+          name: "cyberlab_external_control",
+          options: { codemode: false },
+          description:
+            "Unified Control Plane for external security tools and manual operator runs: inspect installed external tools or synchronize .cyberlab/inbox/ artifacts into SHA-256 evidence.",
+          input: ExternalControlInput,
+          output: ExternalControlOutput,
+          execute: (input) =>
+            Effect.gen(function* () {
+              const ws = yield* getWorkspace()
+              const tools = yield* Effect.tryPromise({
+                try: () => ws.listExternalTools(),
+                catch: (e) => failTool("cyberlab_external_control", e),
+              })
+              const availableTools = tools.filter((t) => t.available).map((t) => t.toolId)
+
+              if (input.operation === "sync_inbox") {
+                const synced = yield* Effect.tryPromise({
+                  try: () => ws.syncExternalInbox("assistant:external-control"),
+                  catch: (e) => failTool("cyberlab_external_control", e),
+                })
+                const ids = synced.ingested.map((i) => i.evidenceId)
+                const summary = `Synced .cyberlab/inbox: ${ids.length} artifact(s) ingested [${ids.join(", ") || "none"}]; available external tools: ${availableTools.join(", ") || "none"}.`
+                return {
+                  output: { availableTools, ingestedEvidenceIds: ids, summary },
+                  content: summary,
+                }
+              }
+
+              const summary = tools
+                .map(
+                  (t) =>
+                    `${t.toolId}: ${t.available ? `READY (${t.resolvedPath})` : "not installed"}${t.governedCapabilityId ? ` -> ${t.governedCapabilityId}` : ""}`,
+                )
+                .join("\n")
+              return {
+                output: { availableTools, ingestedEvidenceIds: [], summary },
+                content: summary,
               }
             }),
         })

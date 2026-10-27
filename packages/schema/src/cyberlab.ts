@@ -181,4 +181,56 @@ export namespace CyberLab {
   export const ReportOutput = Schema.Struct({
     markdown: Schema.String,
   })
+
+  export const ExternalToolInfo = Schema.Struct({
+    toolId: Schema.String,
+    displayName: Schema.String,
+    available: Schema.Boolean,
+    resolvedPath: Schema.NullOr(Schema.String),
+    sourceLocation: Schema.Literals(["workspace_local_bin", "system_path", "custom_config", "missing"]),
+    licenseSpdx: Schema.String,
+    integrationMode: Schema.Literals(["plugin_only", "approved_internal_process", "mcp"]),
+    governedCapabilityId: Schema.NullOr(Schema.String),
+    installHint: Schema.String,
+    description: Schema.String,
+  })
+
+  export const ExternalToolsOverview = Schema.Struct({
+    pendingInboxCount: Schema.Number,
+    inboxDirectory: Schema.String,
+    tools: Schema.Array(ExternalToolInfo),
+  })
+
+  export const IngestExternalActionInput = Schema.Struct({
+    toolId: Schema.String,
+    title: optional(Schema.String),
+    origin: optional(Schema.Literals(["manual_external", "external_plugin", "mcp_bridge", "inbox_drop"])),
+    target: optional(Schema.String),
+    commandSummary: optional(Schema.String),
+    rawOutput: Schema.String,
+    mediaType: optional(Schema.String),
+  })
+
+  export const IngestExternalActionOutput = Schema.Struct({
+    evidenceId: Schema.String,
+    sha256: Schema.String,
+    redactionStatus: Schema.Literals(["not_checked", "checked", "redacted"]),
+    scopeAuditStatus: Schema.Literals(["in_scope", "out_of_scope_flagged", "no_target_declared"]),
+    scopeReason: Schema.String,
+    origin: Schema.Literals(["manual_external", "external_plugin", "mcp_bridge", "inbox_drop"]),
+    toolId: Schema.String,
+  })
+
+  export const InboxSyncOutput = Schema.Struct({
+    scannedCount: Schema.Number,
+    ingested: Schema.Array(
+      Schema.Struct({
+        fileName: Schema.String,
+        archivedTo: Schema.String,
+        evidenceId: Schema.String,
+        sha256: Schema.String,
+      }),
+    ),
+    skippedReasons: Schema.Array(Schema.String),
+  })
 }

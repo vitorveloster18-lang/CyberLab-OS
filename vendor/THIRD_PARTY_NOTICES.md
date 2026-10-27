@@ -53,6 +53,7 @@ Os seguintes adaptadores e executores em `cyberlab/` e `integrations/` são impl
 - **`cyberlab-pcap-analyzer`** (`integrations/network-observation/pcap-packet-analyzer.ts`) — Analisador nativo TypeScript de capturas de pacotes `.pcap` sem dependências GPL (`MIT`).
 - **`cyberlab-binary-triage`** (`integrations/reverse-forensics/binary-static-triage.ts`) — Triagem estática nativa de binários `ELF`, `PE/COFF` e `Mach-O`, flags NX/ASLR/PIE e entropia de packers (`MIT`).
 - **`cyberlab-mobile-triage`** (`integrations/reverse-forensics/mobile-artifact-triage.ts`) — Forense nativa em memória de pacotes mobile `.apk`/`.ipa`/backups e detecção de permissões críticas e IoCs (`MIT`).
+- **`cyberlab-external-control-plane`** (`cyberlab/external/control-plane.ts`) — Plano de controle unificado `MIT` para descoberta, supervisão (`shell=false` + kill-switch), ingestão de sessões manuais externas e sincronização `.cyberlab/inbox/` com custódia `SHA-256` (`MIT`).
 
 ---
 

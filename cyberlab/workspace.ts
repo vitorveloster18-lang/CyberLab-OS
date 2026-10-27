@@ -11,6 +11,29 @@ import { CyberLabExecutionDispatcher } from "./execution/dispatcher.js"
 import { PartnerAuthenticator } from "./partners/authentication.js"
 import { PartnerBridge, type PartnerDispatchOutcome } from "./partners/bridge.js"
 import { HttpPartnerTransport } from "./partners/transport.js"
+import {
+  EXTERNAL_FFUF_INPUT_SCHEMA_ID,
+  EXTERNAL_NMAP_INPUT_SCHEMA_ID,
+  EXTERNAL_NUCLEI_INPUT_SCHEMA_ID,
+  EXTERNAL_TSHARK_INPUT_SCHEMA_ID,
+  ExternalControlPlane,
+  ExternalFfufCapability,
+  ExternalFfufExecutor,
+  ExternalFfufInputSchema,
+  ExternalNmapCapability,
+  ExternalNmapExecutor,
+  ExternalNmapInputSchema,
+  ExternalNucleiCapability,
+  ExternalNucleiExecutor,
+  ExternalNucleiInputSchema,
+  ExternalTsharkCapability,
+  ExternalTsharkExecutor,
+  ExternalTsharkInputSchema,
+  type ExternalToolRuntimeStatus,
+  type InboxSyncResult,
+  type IngestExternalActionInput,
+  type IngestExternalActionResult,
+} from "./external/control-plane.js"
 import { ApprovalManager } from "./policy/approval.js"
 import { PolicyEngine } from "./policy/authorize.js"
 import { ScopeController } from "./policy/scope.js"
@@ -116,6 +139,7 @@ export class CyberLabWorkspace {
   readonly skills: CyberLabSkillCatalog
   readonly partnerAuth: PartnerAuthenticator
   readonly partnerBridge: PartnerBridge
+  readonly externalControl: ExternalControlPlane
   private initialized = false
 
   constructor(options: { projectId: string; workspaceRoot: string; inMemoryDb?: boolean }) {
@@ -151,6 +175,12 @@ export class CyberLabWorkspace {
       evidenceStore: this.evidenceStore,
       dispatcher: this.dispatcher,
       maxEnvelopeBytes: cfg.maxPartnerEnvelopeBytes,
+    })
+    this.externalControl = new ExternalControlPlane({
+      projectId: this.projectId,
+      workspaceRoot: this.workspaceRoot,
+      scopes: this.scopes,
+      evidenceStore: this.evidenceStore,
     })
   }
 
@@ -217,6 +247,23 @@ export class CyberLabWorkspace {
     this.schemas.registerEffectSchema(MOBILE_TRIAGE_INPUT_SCHEMA_ID, MobileArtifactTriageInputSchema)
     this.executors.registerExecutor(new MobileArtifactTriageExecutor())
     await this.capabilities.register(MobileArtifactTriageCapability)
+
+    // Register governed External Tool Control Plane bridges (Nmap, Nuclei, ffuf, tshark)
+    this.schemas.registerEffectSchema(EXTERNAL_NMAP_INPUT_SCHEMA_ID, ExternalNmapInputSchema)
+    this.executors.registerExecutor(new ExternalNmapExecutor(() => this.workspaceRoot))
+    await this.capabilities.register(ExternalNmapCapability)
+
+    this.schemas.registerEffectSchema(EXTERNAL_NUCLEI_INPUT_SCHEMA_ID, ExternalNucleiInputSchema)
+    this.executors.registerExecutor(new ExternalNucleiExecutor(() => this.workspaceRoot))
+    await this.capabilities.register(ExternalNucleiCapability)
+
+    this.schemas.registerEffectSchema(EXTERNAL_FFUF_INPUT_SCHEMA_ID, ExternalFfufInputSchema)
+    this.executors.registerExecutor(new ExternalFfufExecutor(() => this.workspaceRoot))
+    await this.capabilities.register(ExternalFfufCapability)
+
+    this.schemas.registerEffectSchema(EXTERNAL_TSHARK_INPUT_SCHEMA_ID, ExternalTsharkInputSchema)
+    this.executors.registerExecutor(new ExternalTsharkExecutor(() => this.workspaceRoot))
+    await this.capabilities.register(ExternalTsharkCapability)
 
     // Load CyberLab skills
     this.skills.loadFromDirectory(repoSkillsDir)
@@ -403,6 +450,34 @@ export class CyberLabWorkspace {
       evidence: this.evidenceStore.listEvidence(this.projectId),
       findings: this.evidenceStore.listFindings(this.projectId),
     })
+  }
+
+  async listExternalTools(): Promise<ExternalToolRuntimeStatus[]> {
+    await this.ensureInitialized()
+    return this.externalControl.listTools()
+  }
+
+  async ingestExternalAction(input: IngestExternalActionInput): Promise<IngestExternalActionResult> {
+    await this.ensureInitialized()
+    return this.externalControl.ingestExternalAction(input)
+  }
+
+  async syncExternalInbox(actor?: string): Promise<InboxSyncResult> {
+    await this.ensureInitialized()
+    return this.externalControl.syncInbox(actor)
+  }
+
+  async runSupervisedExternalCommand(params: {
+    toolId: string
+    binary: string
+    args: readonly string[]
+    target: string
+    signal?: AbortSignal
+    onStdoutChunk?: (chunk: string) => void
+    onStderrChunk?: (chunk: string) => void
+  }) {
+    await this.ensureInitialized()
+    return this.externalControl.runSupervisedExternalCommand(params)
   }
 
   async delegateToPartner(params: {

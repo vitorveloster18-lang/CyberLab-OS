@@ -195,7 +195,7 @@ export class EvidenceStore {
         redactionStatus = red.redacted ? "redacted" : "checked"
       } else {
         const probe = redactSensitiveContent(inlineText)
-        redactionStatus = probe.redacted ? "not_checked" : "checked"
+        redactionStatus = probe.redacted ? "not_checked" : redactionApplied ? "redacted" : "checked"
       }
       rawBytes = new TextEncoder().encode(inlineText)
     } else if (validatedDraft.content.storageKey) {
