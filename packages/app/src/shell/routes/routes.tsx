@@ -10,6 +10,7 @@ import { SettingsSurfaceProvider } from "@/settings/surface"
 import Shell from "@/shell/shell"
 import { requireServerKey } from "./session"
 import { PluginAttachment } from "@/runtime/plugin/root"
+import { CyberLabWorkbenchProvider } from "@/cyberlab-workbench/state"
 
 export const File = lazy(() => import("@opencode/session-ui/file").then((module) => ({ default: module.File })))
 
@@ -109,7 +110,9 @@ function AppLayout(props: ParentProps) {
       <LayoutProvider>
         <SettingsSurfaceProvider>
           <PluginAttachment>
-            <Shell>{props.children}</Shell>
+            <CyberLabWorkbenchProvider>
+              <Shell>{props.children}</Shell>
+            </CyberLabWorkbenchProvider>
           </PluginAttachment>
         </SettingsSurfaceProvider>
       </LayoutProvider>

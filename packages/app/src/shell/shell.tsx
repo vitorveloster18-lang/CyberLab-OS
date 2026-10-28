@@ -26,6 +26,8 @@ import {
 import { createPanelMotion, guardClosingFocus, panelOpacity } from "@/shell/panel-motion"
 import { createSidebarPeek } from "@/shell/sidebar-peek"
 import { windowDragEnabled } from "@/session/header/drag-area"
+import { useCyberLabWorkbench } from "@/cyberlab-workbench/state"
+import { CyberLabWorkbenchSurface } from "@/cyberlab-workbench/workbench"
 
 // How far Home steps along a peek's header to clear the collapsed toggle: to the toggle's end, from the sidebar's 18px
 // start padding.
@@ -301,7 +303,9 @@ export default function Layout(props: ParentProps) {
           }}
         >
           <PluginServerCover>
-            <Suspense>{props.children}</Suspense>
+            <CyberLabMainSplit mobile={mobile} settingsActive={settings.active}>
+              <Suspense>{props.children}</Suspense>
+            </CyberLabMainSplit>
           </PluginServerCover>
         </main>
         <CollapsedSidebarToggle />
@@ -310,5 +314,44 @@ export default function Layout(props: ParentProps) {
       <ToastRegion />
       <UploadToastHost />
     </div>
+  )
+}
+
+function CyberLabMainSplit(
+  props: ParentProps<{ mobile: () => boolean; settingsActive: () => boolean }>,
+) {
+  const wb = useCyberLabWorkbench()
+  const active = () => Boolean(wb?.ui.open) && !props.settingsActive()
+  const fullscreen = () => active() && (wb?.ui.layoutMode === "fullscreen" || props.mobile())
+
+  return (
+    <Show when={active()} fallback={props.children}>
+      <Show
+        when={!fullscreen()}
+        fallback={
+          <>
+            <div class="hidden">{props.children}</div>
+            <div class="flex size-full min-h-0 min-w-0 flex-1 flex-col px-[var(--shell-inline-inset,8px)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
+              <CyberLabWorkbenchSurface />
+            </div>
+          </>
+        }
+      >
+        <div class="flex size-full min-h-0 min-w-0 flex-1 flex-row overflow-hidden">
+          <div
+            class="flex min-h-0 min-w-0 flex-col overflow-hidden"
+            style={{ width: `${100 - (wb?.ui.splitWidthPct ?? 54)}%` }}
+          >
+            {props.children}
+          </div>
+          <div
+            class="flex min-h-0 min-w-0 flex-col pb-[var(--shell-bottom-inset,8px)] pe-[var(--shell-inline-inset,8px)] pt-[var(--shell-top-inset,8px)]"
+            style={{ width: `${wb?.ui.splitWidthPct ?? 54}%` }}
+          >
+            <CyberLabWorkbenchSurface />
+          </div>
+        </div>
+      </Show>
+    </Show>
   )
 }
