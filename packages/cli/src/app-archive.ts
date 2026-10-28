@@ -29,7 +29,7 @@ export function decode(archive: Uint8Array): Readonly<Record<string, Uint8Array>
   const body = 4 + length
   return Object.fromEntries(
     Object.entries(decodeIndex(new TextDecoder().decode(archive.subarray(4, body)))).map(([key, [offset, size]]) => [
-      key,
+      key.replaceAll("\\", "/"),
       archive.subarray(body + offset, body + offset + size),
     ]),
   )

@@ -51,8 +51,30 @@ const clearAuthToken = () => {
 
 const web = createWebPlatform(pkg.version)
 
-if (import.meta.env.PROD && "serviceWorker" in navigator) {
-  window.addEventListener("load", () => void navigator.serviceWorker.register("/sw.js"), { once: true })
+const isLoopbackHost =
+  typeof location !== "undefined" &&
+  (location.hostname === "localhost" ||
+    location.hostname === "127.0.0.1" ||
+    location.hostname === "[::1]" ||
+    location.hostname === "::1")
+
+if ("serviceWorker" in navigator) {
+  if (isLoopbackHost) {
+    window.addEventListener(
+      "load",
+      () => {
+        void navigator.serviceWorker
+          .getRegistrations()
+          .then((regs) => Promise.all(regs.map((reg) => reg.unregister())))
+        if ("caches" in window) {
+          void caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+        }
+      },
+      { once: true },
+    )
+  } else if (import.meta.env.PROD) {
+    window.addEventListener("load", () => void navigator.serviceWorker.register("/sw.js"), { once: true })
+  }
 }
 
 if (import.meta.env.VITE_SENTRY_DSN) {

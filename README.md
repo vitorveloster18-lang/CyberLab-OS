@@ -96,13 +96,14 @@ Para conectar ferramentas externas via **MCP (Model Context Protocol)** nativo d
 Tudo vive em **uma única aplicação integrada** (construída diretamente sobre o OpenCode V2, na porta `4096`), sem separar o OpenCode de páginas externas de ferramentas:
 
 ```bash
-# Inicia a aplicação completa (OpenCode V2 + Chat + Configurações + CyberLab OS + Gateway CDI) em http://localhost:4096
+# Inicia a aplicação completa (OpenCode V2 + Chat + Configurações + CyberLab OS + Gateway CDI)
+# Compatível com Windows PowerShell, WSL2, Linux e macOS (reconstrói automaticamente o bundle web após git pull):
 bun run start
 ```
 
-Dentro dessa **única interface (`http://localhost:4096`)**, você tem acesso imediato a:
+Dentro dessa **única interface (`http://127.0.0.1:4096` ou `http://localhost:4096`)**, você tem acesso imediato a:
 1. **Todas as funções nativas do OpenCode V2**: Sessões de Chat com IA, Provedores e Modelos (`Settings → Providers / Models`), Servidores MCP, Plugins, Atalhos, Árvore de Arquivos, Visualizador de Diffs e Terminal integrado.
-2. **Configurações Nativas do CyberLab OS (`Settings → CyberLab OS` ou `/settings?tab=cyberlab`)**:
+2. **Configurações Nativas do CyberLab OS (`Settings → CyberLab OS` ou `http://127.0.0.1:4096/settings?tab=cyberlab`)**:
    - **Escopo & Proteção de Alvos**: toggle de alvos externos e cadastro visual de IPs, domínios, CIDRs e URLs autorizados.
    - **Agentes Externos CDI (`Salem`, `Kairós`, `Naia`, `CDI-04` — Portas `8788–8791`)**: botão de 1 clique **"Preset 4 CDIs"**, geração/edição do `CYBERLAB_PARTNER_SECRET`, botão **"Copiar Comandos PowerShell"**, teste de Ping e nível de autonomia de cada CDI.
    - **Motores Externos Opcionais**: status de `nmap`, `nuclei`, `ffuf`, `tshark` e botão de sincronização da pasta `.cyberlab/inbox`.
