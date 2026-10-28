@@ -253,12 +253,18 @@ export namespace CyberLab {
     listenHost: Schema.String,
     listenPort: Schema.NullOr(Schema.Number),
     scopeOnly: Schema.Boolean,
+    httpsMode: optional(Schema.Literals(["tls_intercept", "tunnel_passthrough"])),
+    allowSelfSignedUpstream: optional(Schema.Boolean),
+    caFingerprintSha256: optional(Schema.String),
+    caCertPath: optional(Schema.NullOr(Schema.String)),
+    caCertPem: optional(Schema.String),
     capturedCount: Schema.Number,
   })
 
   export const ProxyHistoryEntryInfo = Schema.Struct({
     entryId: Schema.String,
     timestamp: Schema.String,
+    protocol: optional(Schema.Literals(["http", "https", "ws", "wss", "connect_tunnel"])),
     method: Schema.String,
     url: Schema.String,
     host: Schema.String,
@@ -281,9 +287,11 @@ export namespace CyberLab {
   })
 
   export const ProxyControlInput = Schema.Struct({
-    action: Schema.Literals(["start", "stop", "clear", "set_scope_only"]),
+    action: Schema.Literals(["start", "stop", "clear", "set_scope_only", "set_https_mode"]),
     port: optional(Schema.Number),
     scopeOnly: optional(Schema.Boolean),
+    httpsMode: optional(Schema.Literals(["tls_intercept", "tunnel_passthrough"])),
+    allowSelfSignedUpstream: optional(Schema.Boolean),
   })
 
   export const ProxyPersistInput = Schema.Struct({

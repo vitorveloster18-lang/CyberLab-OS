@@ -209,6 +209,20 @@ export function ManualToolConfigForm(props: { wb: CyberLabWorkbenchService }) {
                       <button
                         type="button"
                         class={CHIP_CLS}
+                        onClick={() => wb.sendUrlAcrossWebSuite(d().url, "intruder")}
+                      >
+                        → Intruder (§slot§)
+                      </button>
+                      <button
+                        type="button"
+                        class={CHIP_CLS}
+                        onClick={() => wb.sendUrlAcrossWebSuite(d().url, "params")}
+                      >
+                        → Auditar Parâmetros
+                      </button>
+                      <button
+                        type="button"
+                        class={CHIP_CLS}
                         onClick={() => wb.sendUrlAcrossWebSuite(d().url, "scanner")}
                       >
                         → Enviar p/ Scanner
@@ -430,10 +444,47 @@ export function ManualToolConfigForm(props: { wb: CyberLabWorkbenchService }) {
                 </div>
               </div>
 
+              <div class="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] items-center gap-2 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/40 px-3 py-2">
+                <div class="flex flex-col gap-0.5 min-w-0">
+                  <span class="text-[11px] font-semibold text-v2-text-text-strong">
+                    Inspeção HTTPS (CONNECT) & WebSocket (ws/wss) — Root CA Local ECDSA P-256
+                  </span>
+                  <span class="font-mono text-[10px] text-v2-text-text-muted truncate">
+                    SHA-256: {proxy()?.status.caFingerprintSha256 || "Inicie o Proxy para inicializar .cyberlab/ca/cyberlab-root-ca.pem"}
+                  </span>
+                </div>
+                <select
+                  value={proxy()?.status.httpsMode ?? d().httpsMode}
+                  class={INPUT_CLS}
+                  onChange={(e) => {
+                    const mode = e.currentTarget.value as "tls_intercept" | "tunnel_passthrough"
+                    wb.updateDraft("http-proxy", (p) => ({ ...p, httpsMode: mode }))
+                    if (proxy()?.status.running) void wb.controlProxy("set_https_mode", mode)
+                  }}
+                >
+                  <option value="tls_intercept">HTTPS MITM (Descriptografar c/ Root CA)</option>
+                  <option value="tunnel_passthrough">Túnel CONNECT Passthrough (Sem MITM)</option>
+                </select>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.downloadProxyRootCaCert()}>
+                  Baixar Root CA (.crt)
+                </button>
+              </div>
+
+              <label class="flex items-center gap-2 text-[11px] text-v2-text-text-muted cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={d().allowSelfSignedUpstream}
+                  onChange={(e) =>
+                    wb.updateDraft("http-proxy", (p) => ({ ...p, allowSelfSignedUpstream: e.currentTarget.checked }))
+                  }
+                />
+                <span>Aceitar certificados autoassinados do servidor alvo em laboratório (reinicie o Proxy ao alterar)</span>
+              </label>
+
               <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/40 px-3 py-2 text-[11px] text-v2-text-text-muted flex flex-col gap-1">
-                <span>Configure seu navegador/cliente HTTP para usar o proxy local ou teste direto no terminal:</span>
+                <span>Configure seu navegador/cliente HTTP(S) para usar o proxy local ou teste com a Root CA:</span>
                 <code class="font-mono text-v2-text-text-strong select-text">
-                  curl -x http://127.0.0.1:{proxy()?.status.listenPort ?? d().port} http://127.0.0.1:4096/api/info
+                  curl --cacert .cyberlab/ca/cyberlab-root-ca.pem -x http://127.0.0.1:{proxy()?.status.listenPort ?? d().port} https://alvo-autorizado/
                 </code>
               </div>
 
@@ -476,8 +527,13 @@ export function ManualToolConfigForm(props: { wb: CyberLabWorkbenchService }) {
                               wb.updateDraft("http-proxy", (p) => ({ ...p, selectedEntryId: item.entryId }))
                             }
                           >
-                            <td class="px-2.5 py-1.5 font-mono font-medium">{item.method}</td>
-                            <td class="px-2.5 py-1.5 font-mono truncate max-w-[240px]">{item.url}</td>
+                            <td class="px-2.5 py-1.5 font-mono font-medium">
+                              <span class="mr-1 rounded bg-v2-background-bg-base px-1 py-0.5 text-[10px] uppercase text-emerald-500">
+                                {item.protocol || "http"}
+                              </span>
+                              {item.method}
+                            </td>
+                            <td class="px-2.5 py-1.5 font-mono truncate max-w-[220px]">{item.url}</td>
                             <td class="px-2.5 py-1.5 font-mono">
                               {item.blockedByScope ? "BLOQUEADO" : item.statusCode}
                             </td>
@@ -492,6 +548,16 @@ export function ManualToolConfigForm(props: { wb: CyberLabWorkbenchService }) {
                                 }}
                               >
                                 → Repeater
+                              </button>
+                              <button
+                                type="button"
+                                class={CHIP_CLS}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  wb.sendProxyCaptureToIntruder(item)
+                                }}
+                              >
+                                → Intruder
                               </button>
                               <button
                                 type="button"
@@ -1728,9 +1794,13 @@ export function ManualToolConfigForm(props: { wb: CyberLabWorkbenchService }) {
                   </div>
 
                   <Show when={wb.backend.revealedSecret}>
-                    <div class="rounded bg-v2-background-bg-base p-2.5 font-mono text-[11px] text-emerald-500 select-text break-all">
-                      $env:CYBERLAB_PARTNER_SECRET="{wb.backend.revealedSecret}"{"\n"}
-                      $env:CYBERLAB_CALLBACK_URL="{wb.backend.partners?.cyberlabCallbackUrl || "http://127.0.0.1:4096/api/cyberlab/partner-gateway"}"
+                    <div class="rounded bg-v2-background-bg-base p-2.5 font-mono text-[11px] text-emerald-500 select-text break-all whitespace-pre-wrap">
+                      {`$env:CYBERLAB_PARTNER_SECRET="${wb.backend.revealedSecret}"
+$env:CYBERLAB_CALLBACK_URL="${wb.backend.partners?.cyberlabCallbackUrl || "http://127.0.0.1:4096/api/cyberlab/partner-gateway"}"
+python integrations/partners/chat_py_bridge.py --port 8788 --partner-id kairos --chat-py "../kairos/chat.py"
+python integrations/partners/chat_py_bridge.py --port 8789 --partner-id naia   --chat-py "../naia/chat.py"
+python integrations/partners/chat_py_bridge.py --port 8790 --partner-id salem  --chat-py "../salem/chat.py"
+python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   --chat-py "../nova/chat.py"`}
                     </div>
                   </Show>
 
@@ -2307,6 +2377,862 @@ export function ManualToolConfigForm(props: { wb: CyberLabWorkbenchService }) {
                   </Show>
                 </div>
               </Show>
+            </div>
+          )
+        })()}
+      </Match>
+
+      {/* 19. HTTP INTRUDER / PAYLOAD MATRIX */}
+      <Match when={toolId() === "http-intruder"}>
+        {(() => {
+          const d = () => wb.drafts["http-intruder"]
+          return (
+            <div class="flex flex-col gap-3">
+              <div class="grid grid-cols-[110px_minmax(0,1fr)] gap-2">
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Método</label>
+                  <select
+                    value={d().method}
+                    class={MONO_INPUT_CLS}
+                    onChange={(e) =>
+                      wb.updateDraft("http-intruder", (p) => ({
+                        ...p,
+                        method: e.currentTarget.value as typeof p.method,
+                      }))
+                    }
+                  >
+                    <For each={["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]}>
+                      {(m) => <option value={m}>{m}</option>}
+                    </For>
+                  </select>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <div class="flex flex-wrap items-center justify-between gap-1">
+                    <label class={LABEL_CLS}>URL Alvo c/ Marcadores §slot§</label>
+                    <button
+                      type="button"
+                      class={CHIP_CLS}
+                      onClick={() =>
+                        wb.updateDraft("http-intruder", (p) => ({
+                          ...p,
+                          url: p.url.includes("§") ? p.url : `${p.url.replace(/\/$/, "")}/§slot§`,
+                        }))
+                      }
+                    >
+                      + Inserir §slot§ na URL
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={d().url}
+                    placeholder="http://127.0.0.1:4096/api/§endpoint§"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) => wb.updateDraft("http-intruder", (p) => ({ ...p, url: e.currentTarget.value }))}
+                  />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Modo de Ataque Paramétrico</label>
+                  <select
+                    value={d().attackMode}
+                    class={INPUT_CLS}
+                    onChange={(e) =>
+                      wb.updateDraft("http-intruder", (p) => ({
+                        ...p,
+                        attackMode: e.currentTarget.value as typeof p.attackMode,
+                      }))
+                    }
+                  >
+                    <option value="sniper">Sniper (1 slot por vez, baseline nos demais)</option>
+                    <option value="battering_ram">Battering Ram (mesmo payload em todos os §slots§)</option>
+                    <option value="pitchfork">Pitchfork (pareia Lista 1 no 1º slot e Lista 2 no 2º)</option>
+                  </select>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Regex / Grep na Resposta (opcional)</label>
+                  <input
+                    type="text"
+                    value={d().grepMatch}
+                    placeholder="ex.: admin|token|exception|root"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("http-intruder", (p) => ({ ...p, grepMatch: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Governança</label>
+                  <select
+                    value={d().executionMode}
+                    class={INPUT_CLS}
+                    onChange={(e) =>
+                      wb.updateDraft("http-intruder", (p) => ({
+                        ...p,
+                        executionMode: e.currentTarget.value as "manual" | "proposed",
+                      }))
+                    }
+                  >
+                    <option value="manual">Manual Direto</option>
+                    <option value="proposed">Exigir Aprovação</option>
+                  </select>
+                </div>
+              </div>
+
+              <HeaderEditorTable
+                title="Headers da Requisição (suporta §slot§ em valores)"
+                rows={d().headers}
+                onChange={(rows) => wb.updateDraft("http-intruder", (p) => ({ ...p, headers: rows }))}
+              />
+
+              <Show when={d().method !== "GET" && d().method !== "HEAD"}>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Template de Corpo (use §slot§ onde os payloads devem entrar)</label>
+                  <textarea
+                    rows={3}
+                    value={d().bodyTemplate}
+                    placeholder='{"id":"§id§","role":"user"}'
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("http-intruder", (p) => ({ ...p, bodyTemplate: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+              </Show>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div class="flex flex-col gap-1">
+                  <div class="flex flex-wrap items-center justify-between gap-1">
+                    <label class={LABEL_CLS}>Payload Set 1 (1 por linha)</label>
+                    <div class="flex items-center gap-1">
+                      <button
+                        type="button"
+                        class={CHIP_CLS}
+                        onClick={() =>
+                          wb.updateDraft("http-intruder", (p) => ({
+                            ...p,
+                            payloadSet1Text: "info\nhealth\nmetrics\nopenapi.json\nconfig\nadmin",
+                          }))
+                        }
+                      >
+                        Preset Rotas API
+                      </button>
+                      <button
+                        type="button"
+                        class={CHIP_CLS}
+                        onClick={() =>
+                          wb.updateDraft("http-intruder", (p) => ({
+                            ...p,
+                            payloadSet1Text: "0\n1\n-1\n999999\ntrue\nnull\n[]\n{}",
+                          }))
+                        }
+                      >
+                        Preset Limites QA
+                      </button>
+                    </div>
+                  </div>
+                  <textarea
+                    rows={4}
+                    value={d().payloadSet1Text}
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("http-intruder", (p) => ({ ...p, payloadSet1Text: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+                <Show when={d().attackMode === "pitchfork"}>
+                  <div class="flex flex-col gap-1">
+                    <label class={LABEL_CLS}>Payload Set 2 — Pitchfork (1 por linha)</label>
+                    <textarea
+                      rows={4}
+                      value={d().payloadSet2Text}
+                      class={MONO_INPUT_CLS}
+                      onInput={(e) =>
+                        wb.updateDraft("http-intruder", (p) => ({ ...p, payloadSet2Text: e.currentTarget.value }))
+                      }
+                    />
+                  </div>
+                </Show>
+              </div>
+
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Máx Requisições (1–200)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={200}
+                    value={d().maxRequests}
+                    class={INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("http-intruder", (p) => ({ ...p, maxRequests: Number(e.currentTarget.value) }))
+                    }
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Concorrência (1–5)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={d().concurrency}
+                    class={INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("http-intruder", (p) => ({ ...p, concurrency: Number(e.currentTarget.value) }))
+                    }
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Delay entre Req (ms)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={5000}
+                    value={d().delayMs}
+                    class={INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("http-intruder", (p) => ({ ...p, delayMs: Number(e.currentTarget.value) }))
+                    }
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Timeout (ms)</label>
+                  <input
+                    type="number"
+                    min={500}
+                    max={20000}
+                    value={d().timeoutMs}
+                    class={INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("http-intruder", (p) => ({ ...p, timeoutMs: Number(e.currentTarget.value) }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <label class="flex items-center gap-2 text-[12px] text-v2-text-text-strong cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={d().urlEncodePayloads}
+                  onChange={(e) =>
+                    wb.updateDraft("http-intruder", (p) => ({ ...p, urlEncodePayloads: e.currentTarget.checked }))
+                  }
+                />
+                <span>Codificar payloads inseridos na URL (encodeURIComponent)</span>
+              </label>
+
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("http-intruder", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("http-intruder", (p) => ({ ...p, rawJson: v }))}
+              />
+
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("http-intruder")}
+                >
+                  {isRunning() ? "Executando Matriz..." : "Iniciar HTTP Intruder"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("http-intruder")}>
+                  Restaurar Padrão
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Match>
+
+      {/* 20. AUDITOR DIFERENCIAL DE PARÂMETROS */}
+      <Match when={toolId() === "param-audit"}>
+        {(() => {
+          const d = () => wb.drafts["param-audit"]
+          return (
+            <div class="flex flex-col gap-3">
+              <div class="grid grid-cols-[100px_minmax(0,1fr)] gap-2">
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Método</label>
+                  <select
+                    value={d().method}
+                    class={MONO_INPUT_CLS}
+                    onChange={(e) =>
+                      wb.updateDraft("param-audit", (p) => ({
+                        ...p,
+                        method: e.currentTarget.value as "GET" | "POST",
+                      }))
+                    }
+                  >
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                  </select>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>URL Alvo (parâmetros da query são detectados automaticamente)</label>
+                  <input
+                    type="text"
+                    value={d().url}
+                    placeholder="http://127.0.0.1:4096/?q=test&redirect=/home"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) => wb.updateDraft("param-audit", (p) => ({ ...p, url: e.currentTarget.value }))}
+                  />
+                </div>
+              </div>
+
+              <div class="flex flex-col gap-1">
+                <label class={LABEL_CLS}>Parâmetros Adicionais p/ Auditar (opcional, separados por vírgula)</label>
+                <input
+                  type="text"
+                  value={d().parameterNamesText}
+                  placeholder="ex.: id, q, search, next, callback"
+                  class={MONO_INPUT_CLS}
+                  onInput={(e) =>
+                    wb.updateDraft("param-audit", (p) => ({ ...p, parameterNamesText: e.currentTarget.value }))
+                  }
+                />
+              </div>
+
+              <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/40 p-2.5 flex flex-col gap-2">
+                <label class="flex items-center gap-2 text-[12px] text-v2-text-text-strong cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={d().checkReflectionContext}
+                    onChange={(e) =>
+                      wb.updateDraft("param-audit", (p) => ({ ...p, checkReflectionContext: e.currentTarget.checked }))
+                    }
+                  />
+                  <span>Auditar Reflexão Contextual Não-Destrutiva (HTML text, atributo ou &lt;script&gt; c/ canário alfanumérico)</span>
+                </label>
+                <label class="flex items-center gap-2 text-[12px] text-v2-text-text-strong cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={d().checkErrorLeakage}
+                    onChange={(e) =>
+                      wb.updateDraft("param-audit", (p) => ({ ...p, checkErrorLeakage: e.currentTarget.checked }))
+                    }
+                  />
+                  <span>Detectar Vazamento de Erros / Stack Traces (SQL, ORM, Template Engine, HTTP 5xx diferencial)</span>
+                </label>
+                <label class="flex items-center gap-2 text-[12px] text-v2-text-text-strong cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={d().checkRedirectHygiene}
+                    onChange={(e) =>
+                      wb.updateDraft("param-audit", (p) => ({ ...p, checkRedirectHygiene: e.currentTarget.checked }))
+                    }
+                  />
+                  <span>Verificar Higiene contra Open-Redirect em parâmetros de URL/retorno</span>
+                </label>
+              </div>
+
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("param-audit", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("param-audit", (p) => ({ ...p, rawJson: v }))}
+              />
+
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("param-audit")}
+                >
+                  {isRunning() ? "Auditando Parâmetros..." : "Executar Auditoria Diferencial"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("param-audit")}>
+                  Restaurar Padrão
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Match>
+
+      {/* 21. DALFOX EXTERNAL SCANNER */}
+      <Match when={toolId() === "dalfox"}>
+        {(() => {
+          const d = () => wb.drafts.dalfox
+          return (
+            <div class="flex flex-col gap-3">
+              <div class="flex flex-col gap-1">
+                <label class={LABEL_CLS}>URL Alvo c/ Query String (Dalfox MIT)</label>
+                <input
+                  type="text"
+                  value={d().url}
+                  placeholder="http://127.0.0.1:8080/search?q=test"
+                  class={MONO_INPUT_CLS}
+                  onInput={(e) => wb.updateDraft("dalfox", (p) => ({ ...p, url: e.currentTarget.value }))}
+                />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class={LABEL_CLS}>Focar em Parâmetro Específico (-p, opcional)</label>
+                <input
+                  type="text"
+                  value={d().paramName}
+                  placeholder="q"
+                  class={MONO_INPUT_CLS}
+                  onInput={(e) => wb.updateDraft("dalfox", (p) => ({ ...p, paramName: e.currentTarget.value }))}
+                />
+              </div>
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("dalfox", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("dalfox", (p) => ({ ...p, rawJson: v }))}
+              />
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("dalfox")}
+                >
+                  {isRunning() ? "Executando Dalfox..." : "Executar Dalfox Parameter Scan"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("dalfox")}>
+                  Restaurar Padrão
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Match>
+
+      {/* 22. DNS, SUBDOMÍNIOS & EMAIL RECON */}
+      <Match when={toolId() === "dns-recon"}>
+        {(() => {
+          const d = () => wb.drafts["dns-recon"]
+          return (
+            <div class="flex flex-col gap-3">
+              <div class="grid grid-cols-1 md:grid-cols-[1fr_200px] gap-2">
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Domínio ou IP Alvo</label>
+                  <input
+                    type="text"
+                    value={d().host}
+                    placeholder="exemplo.com.br ou 127.0.0.1"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) => wb.updateDraft("dns-recon", (p) => ({ ...p, host: e.currentTarget.value }))}
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Resolver DNS Customizado (opcional)</label>
+                  <input
+                    type="text"
+                    value={d().nameserver}
+                    placeholder="ex.: 1.1.1.1 ou 8.8.8.8"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) => wb.updateDraft("dns-recon", (p) => ({ ...p, nameserver: e.currentTarget.value }))}
+                  />
+                </div>
+              </div>
+
+              <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/40 p-2.5 flex flex-col gap-2">
+                <label class="flex items-center gap-2 text-[12px] text-v2-text-text-strong cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={d().checkEmailPosture}
+                    onChange={(e) =>
+                      wb.updateDraft("dns-recon", (p) => ({ ...p, checkEmailPosture: e.currentTarget.checked }))
+                    }
+                  />
+                  <span>Auditar Postura de Email & Anti-Spoofing (SPF, _dmarc, políticas p=none/+all e CAA)</span>
+                </label>
+                <label class="flex items-center gap-2 text-[12px] text-v2-text-text-strong cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={d().enumerateSubdomains}
+                    onChange={(e) =>
+                      wb.updateDraft("dns-recon", (p) => ({ ...p, enumerateSubdomains: e.currentTarget.checked }))
+                    }
+                  />
+                  <span>Enumerar Subdomínios Comuns & Auditar CNAMEs Órfãos (Subdomain Takeover Hygiene)</span>
+                </label>
+                <label class="flex items-center gap-2 text-[12px] text-v2-text-text-strong cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={d().includeCrtSh}
+                    onChange={(e) =>
+                      wb.updateDraft("dns-recon", (p) => ({ ...p, includeCrtSh: e.currentTarget.checked }))
+                    }
+                  />
+                  <span>Consultar Certificate Transparency Passivo (crt.sh JSON)</span>
+                </label>
+              </div>
+
+              <Show when={d().enumerateSubdomains}>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Prefixos de Subdomínio (separados por vírgula, máx 40)</label>
+                  <input
+                    type="text"
+                    value={d().subdomainPrefixesText}
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("dns-recon", (p) => ({ ...p, subdomainPrefixesText: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+              </Show>
+
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("dns-recon", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("dns-recon", (p) => ({ ...p, rawJson: v }))}
+              />
+
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("dns-recon")}
+                >
+                  {isRunning() ? "Consultando DNS..." : "Executar Reconhecimento DNS & Email"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("dns-recon")}>
+                  Restaurar Padrão
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Match>
+
+      {/* 23. DISASSEMBLER NATIVO (x86_64 / ARM64) */}
+      <Match when={toolId() === "binary-disasm"}>
+        {(() => {
+          const d = () => wb.drafts["binary-disasm"]
+          return (
+            <div class="flex flex-col gap-3">
+              <div class="flex flex-col gap-1">
+                <label class={LABEL_CLS}>Caminho do Binário no Projeto (ELF64 / PE / Mach-O / Raw)</label>
+                <input
+                  type="text"
+                  value={d().binaryPath}
+                  placeholder="amostra.elf"
+                  class={MONO_INPUT_CLS}
+                  onInput={(e) =>
+                    wb.updateDraft("binary-disasm", (p) => ({ ...p, binaryPath: e.currentTarget.value }))
+                  }
+                />
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Arquitetura</label>
+                  <select
+                    value={d().architecture}
+                    class={INPUT_CLS}
+                    onChange={(e) =>
+                      wb.updateDraft("binary-disasm", (p) => ({
+                        ...p,
+                        architecture: e.currentTarget.value as "auto" | "x86_64" | "arm64",
+                      }))
+                    }
+                  >
+                    <option value="auto">Auto-detectar pelos Headers</option>
+                    <option value="x86_64">x86_64 / AMD64</option>
+                    <option value="arm64">ARM64 / AArch64</option>
+                  </select>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Offset Inicial no Arquivo (vazio = Entrypoint)</label>
+                  <input
+                    type="text"
+                    value={d().startOffsetHex}
+                    placeholder="ex.: 0x1000 ou 4096"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("binary-disasm", (p) => ({ ...p, startOffsetHex: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Máx Instruções (5–400)</label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={400}
+                    value={d().maxInstructions}
+                    class={INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("binary-disasm", (p) => ({
+                        ...p,
+                        maxInstructions: Number(e.currentTarget.value),
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("binary-disasm", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("binary-disasm", (p) => ({ ...p, rawJson: v }))}
+              />
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("binary-disasm")}
+                >
+                  {isRunning() ? "Desmontando Instruções..." : "Desmontar Instruções (ASM)"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("binary-disasm")}>
+                  Restaurar Padrão
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Match>
+
+      {/* 24. GHIDRA HEADLESS */}
+      <Match when={toolId() === "ghidra"}>
+        {(() => {
+          const d = () => wb.drafts.ghidra
+          return (
+            <div class="flex flex-col gap-3">
+              <div class="flex flex-col gap-1">
+                <label class={LABEL_CLS}>Binário no Projeto p/ Análise Ghidra Headless (Apache-2.0)</label>
+                <input
+                  type="text"
+                  value={d().binaryPath}
+                  placeholder="amostra.elf"
+                  class={MONO_INPUT_CLS}
+                  onInput={(e) => wb.updateDraft("ghidra", (p) => ({ ...p, binaryPath: e.currentTarget.value }))}
+                />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class={LABEL_CLS}>Processor ID Ghidra (-processor, opcional — vazio = auto)</label>
+                <input
+                  type="text"
+                  value={d().processor}
+                  placeholder="ex.: x86:LE:64:default ou AARCH64:LE:64:v8A"
+                  class={MONO_INPUT_CLS}
+                  onInput={(e) => wb.updateDraft("ghidra", (p) => ({ ...p, processor: e.currentTarget.value }))}
+                />
+              </div>
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("ghidra", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("ghidra", (p) => ({ ...p, rawJson: v }))}
+              />
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("ghidra")}
+                >
+                  {isRunning() ? "Executando Ghidra Headless..." : "Executar Ghidra Headless"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("ghidra")}>
+                  Restaurar Padrão
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Match>
+
+      {/* 25. JADX ANDROID DECOMPILER */}
+      <Match when={toolId() === "jadx"}>
+        {(() => {
+          const d = () => wb.drafts.jadx
+          return (
+            <div class="flex flex-col gap-3">
+              <div class="flex flex-col gap-1">
+                <label class={LABEL_CLS}>Pacote Android (.apk / .dex / .aar) no Projeto</label>
+                <input
+                  type="text"
+                  value={d().artifactPath}
+                  placeholder="aplicativo.apk"
+                  class={MONO_INPUT_CLS}
+                  onInput={(e) => wb.updateDraft("jadx", (p) => ({ ...p, artifactPath: e.currentTarget.value }))}
+                />
+              </div>
+              <label class="flex items-center gap-2 text-[12px] text-v2-text-text-strong cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={d().deobfuscate}
+                  onChange={(e) => wb.updateDraft("jadx", (p) => ({ ...p, deobfuscate: e.currentTarget.checked }))}
+                />
+                <span>Ativar Deobfuscação de Identificadores (--deobf) e salvar .java em .cyberlab/artifacts/jadx/</span>
+              </label>
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("jadx", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("jadx", (p) => ({ ...p, rawJson: v }))}
+              />
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("jadx")}
+                >
+                  {isRunning() ? "Descompilando APK/DEX..." : "Descompilar p/ Java c/ JADX"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("jadx")}>
+                  Restaurar Padrão
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Match>
+
+      {/* 26. MOTOR YARA NATIVO */}
+      <Match when={toolId() === "yara-scan"}>
+        {(() => {
+          const d = () => wb.drafts["yara-scan"]
+          return (
+            <div class="flex flex-col gap-3">
+              <div class="grid grid-cols-1 md:grid-cols-[1fr_160px] gap-2">
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Arquivo ou Pasta Alvo no Projeto</label>
+                  <input
+                    type="text"
+                    value={d().targetPath}
+                    placeholder="cyberlab ou amostra.elf"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("yara-scan", (p) => ({ ...p, targetPath: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Máx Arquivos (1–500)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={500}
+                    value={d().maxFiles}
+                    class={INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("yara-scan", (p) => ({ ...p, maxFiles: Number(e.currentTarget.value) }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div class="flex flex-col gap-1">
+                <div class="flex flex-wrap items-center justify-between gap-1">
+                  <label class={LABEL_CLS}>Regras YARA (suporta ascii, wide, nocase, hex {`{ 7F 45 ?? 46 }`} e condições)</label>
+                  <div class="flex items-center gap-1">
+                    <button
+                      type="button"
+                      class={CHIP_CLS}
+                      onClick={() =>
+                        wb.updateDraft("yara-scan", (p) => ({
+                          ...p,
+                          rulesText: `rule Executable_Magic_Headers {\n  meta:\n    description = "Detecta binários ELF, PE/MZ ou Dalvik DEX"\n    severity = "info"\n  strings:\n    $elf = { 7F 45 4C 46 }\n    $mz  = { 4D 5A 90 00 }\n    $dex = { 64 65 78 0A 30 ?? 35 00 }\n  condition:\n    any of them\n}`,
+                        }))
+                      }
+                    >
+                      Template ELF/PE/DEX
+                    </button>
+                    <button
+                      type="button"
+                      class={CHIP_CLS}
+                      onClick={() =>
+                        wb.updateDraft("yara-scan", (p) => ({
+                          ...p,
+                          rulesText: `rule Suspicious_Execution_Indicators {\n  meta:\n    description = "Comandos de reverse shell ou execução codificada"\n    severity = "high"\n  strings:\n    $s1 = "/bin/sh -i" ascii\n    $s2 = "FromBase64String" ascii wide nocase\n    $s3 = "Invoke-Expression" ascii wide nocase\n  condition:\n    any of ($s*)\n}`,
+                        }))
+                      }
+                    >
+                      Template Indicadores Suspeitos
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  rows={8}
+                  value={d().rulesText}
+                  class={MONO_INPUT_CLS}
+                  onInput={(e) => wb.updateDraft("yara-scan", (p) => ({ ...p, rulesText: e.currentTarget.value }))}
+                />
+              </div>
+
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("yara-scan", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("yara-scan", (p) => ({ ...p, rawJson: v }))}
+              />
+
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("yara-scan")}
+                >
+                  {isRunning() ? "Varrendo com YARA..." : "Executar Regras YARA"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("yara-scan")}>
+                  Restaurar Padrão
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Match>
+
+      {/* 27. YARA-X OFICIAL (YR) */}
+      <Match when={toolId() === "yarax"}>
+        {(() => {
+          const d = () => wb.drafts.yarax
+          return (
+            <div class="flex flex-col gap-3">
+              <div class="flex flex-col gap-1">
+                <label class={LABEL_CLS}>Arquivo de Regras (.yar / .yara) no Projeto</label>
+                <input
+                  type="text"
+                  value={d().rulesPath}
+                  placeholder="regras.yar"
+                  class={MONO_INPUT_CLS}
+                  onInput={(e) => wb.updateDraft("yarax", (p) => ({ ...p, rulesPath: e.currentTarget.value }))}
+                />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class={LABEL_CLS}>Arquivo ou Pasta Alvo no Projeto</label>
+                <input
+                  type="text"
+                  value={d().targetPath}
+                  placeholder="amostra.elf"
+                  class={MONO_INPUT_CLS}
+                  onInput={(e) => wb.updateDraft("yarax", (p) => ({ ...p, targetPath: e.currentTarget.value }))}
+                />
+              </div>
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("yarax", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("yarax", (p) => ({ ...p, rawJson: v }))}
+              />
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("yarax")}
+                >
+                  {isRunning() ? "Executando YARA-X..." : "Executar YARA-X (yr scan)"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("yarax")}>
+                  Restaurar Padrão
+                </button>
+              </div>
             </div>
           )
         })()}

@@ -79,6 +79,9 @@ function createEmptyHistories(): Record<ManualToolId, ToolHistoryEntry[]> {
   return {
     "http-repeater": [],
     "http-proxy": [],
+    "http-intruder": [],
+    "param-audit": [],
+    dalfox: [],
     "http-headers": [],
     "web-surface": [],
     nuclei: [],
@@ -87,11 +90,17 @@ function createEmptyHistories(): Record<ManualToolId, ToolHistoryEntry[]> {
     "tls-inspector": [],
     "tcp-probe": [],
     nmap: [],
+    "dns-recon": [],
     "pcap-analyzer": [],
     tshark: [],
     "workspace-audit": [],
     "binary-triage": [],
+    "binary-disasm": [],
+    ghidra: [],
     "mobile-triage": [],
+    jadx: [],
+    "yara-scan": [],
+    yarax: [],
     "cdi-hub": [],
     "external-ingest": [],
     "scope-governance": [],
@@ -113,6 +122,9 @@ function createWorkbenchService() {
   const mergedDrafts: ManualToolDraftMap = {
     "http-repeater": { ...defaultDrafts["http-repeater"], ...(savedDrafts["http-repeater"] ?? {}) },
     "http-proxy": { ...defaultDrafts["http-proxy"], ...(savedDrafts["http-proxy"] ?? {}) },
+    "http-intruder": { ...defaultDrafts["http-intruder"], ...(savedDrafts["http-intruder"] ?? {}) },
+    "param-audit": { ...defaultDrafts["param-audit"], ...(savedDrafts["param-audit"] ?? {}) },
+    dalfox: { ...defaultDrafts.dalfox, ...(savedDrafts.dalfox ?? {}) },
     "http-headers": { ...defaultDrafts["http-headers"], ...(savedDrafts["http-headers"] ?? {}) },
     "web-surface": { ...defaultDrafts["web-surface"], ...(savedDrafts["web-surface"] ?? {}) },
     nuclei: { ...defaultDrafts.nuclei, ...(savedDrafts.nuclei ?? {}) },
@@ -121,11 +133,17 @@ function createWorkbenchService() {
     "tls-inspector": { ...defaultDrafts["tls-inspector"], ...(savedDrafts["tls-inspector"] ?? {}) },
     "tcp-probe": { ...defaultDrafts["tcp-probe"], ...(savedDrafts["tcp-probe"] ?? {}) },
     nmap: { ...defaultDrafts.nmap, ...(savedDrafts.nmap ?? {}) },
+    "dns-recon": { ...defaultDrafts["dns-recon"], ...(savedDrafts["dns-recon"] ?? {}) },
     "pcap-analyzer": { ...defaultDrafts["pcap-analyzer"], ...(savedDrafts["pcap-analyzer"] ?? {}) },
     tshark: { ...defaultDrafts.tshark, ...(savedDrafts.tshark ?? {}) },
     "workspace-audit": { ...defaultDrafts["workspace-audit"], ...(savedDrafts["workspace-audit"] ?? {}) },
     "binary-triage": { ...defaultDrafts["binary-triage"], ...(savedDrafts["binary-triage"] ?? {}) },
+    "binary-disasm": { ...defaultDrafts["binary-disasm"], ...(savedDrafts["binary-disasm"] ?? {}) },
+    ghidra: { ...defaultDrafts.ghidra, ...(savedDrafts.ghidra ?? {}) },
     "mobile-triage": { ...defaultDrafts["mobile-triage"], ...(savedDrafts["mobile-triage"] ?? {}) },
+    jadx: { ...defaultDrafts.jadx, ...(savedDrafts.jadx ?? {}) },
+    "yara-scan": { ...defaultDrafts["yara-scan"], ...(savedDrafts["yara-scan"] ?? {}) },
+    yarax: { ...defaultDrafts.yarax, ...(savedDrafts.yarax ?? {}) },
     "cdi-hub": { ...defaultDrafts["cdi-hub"], ...(savedDrafts["cdi-hub"] ?? {}) },
     "external-ingest": { ...defaultDrafts["external-ingest"], ...(savedDrafts["external-ingest"] ?? {}) },
     "scope-governance": { ...defaultDrafts["scope-governance"], ...(savedDrafts["scope-governance"] ?? {}) },
@@ -367,13 +385,27 @@ function createWorkbenchService() {
     persistUi()
   }
 
-  const sendUrlAcrossWebSuite = (url: string, targetFunction: "headers" | "scanner") => {
+  const sendUrlAcrossWebSuite = (url: string, targetFunction: "headers" | "scanner" | "intruder" | "params") => {
     const clean = url.trim()
     if (!clean) return
     if (targetFunction === "headers") {
       updateDraft("http-headers", (p) => ({ ...p, url: clean }))
       applySuiteAndFunction("web-suite", "headers", "http-headers")
       setNotice(`URL enviada para Headers & Cookies (${clean}).`)
+      return
+    }
+    if (targetFunction === "intruder") {
+      const templated = clean.includes("§") ? clean : clean.includes("=") ? clean.replace(/=([^&]*)/, "=§$1§") : `${clean.replace(/\/$/, "")}/§payload§`
+      updateDraft("http-intruder", (p) => ({ ...p, url: templated, useRawJson: false }))
+      applySuiteAndFunction("web-suite", "intruder", "http-intruder")
+      setNotice(`URL enviada para HTTP Intruder (${templated}).`)
+      return
+    }
+    if (targetFunction === "params") {
+      updateDraft("param-audit", (p) => ({ ...p, url: clean, useRawJson: false }))
+      updateDraft("dalfox", (p) => ({ ...p, url: clean, useRawJson: false }))
+      applySuiteAndFunction("web-suite", "params")
+      setNotice(`URL enviada para Auditor de Parâmetros (${clean}).`)
       return
     }
     try {
@@ -789,8 +821,12 @@ function createWorkbenchService() {
     }
   }
 
-  async function controlProxy(action: "start" | "stop" | "clear" | "set_scope_only"): Promise<void> {
+  async function controlProxy(
+    action: "start" | "stop" | "clear" | "set_scope_only" | "set_https_mode",
+    overrideHttpsMode?: "tls_intercept" | "tunnel_passthrough",
+  ): Promise<void> {
     const d = drafts["http-proxy"]
+    const nextHttpsMode = overrideHttpsMode ?? d.httpsMode
     try {
       const res = await cyberlabFetch<ProxyOverviewDto>(serverTarget(), "/api/cyberlab/proxy/control", {
         method: "POST",
@@ -798,9 +834,14 @@ function createWorkbenchService() {
           action,
           port: Math.min(65535, Math.max(1024, Math.trunc(Number(d.port) || 8899))),
           scopeOnly: action === "set_scope_only" ? !backend.proxy?.status.scopeOnly : d.scopeOnly,
+          httpsMode: nextHttpsMode,
+          allowSelfSignedUpstream: d.allowSelfSignedUpstream,
         }),
       })
       setBackend("proxy", reconcile(res))
+      if (res.status.httpsMode) {
+        updateDraft("http-proxy", (prev) => ({ ...prev, httpsMode: res.status.httpsMode! }))
+      }
       recordHistoryEntry("http-proxy", {
         id: `proxy-${Date.now()}`,
         toolId: "http-proxy",
@@ -809,19 +850,35 @@ function createWorkbenchService() {
         status: "succeeded",
         evidenceIds: [],
         summaryText: res.status.running
-          ? `Ativo em http://${res.status.listenHost}:${res.status.listenPort} (${res.history.length} capturas)`
+          ? `Ativo em http://${res.status.listenHost}:${res.status.listenPort} [${res.status.httpsMode ?? "tls_intercept"}] (${res.history.length} capturas)`
           : "Proxy parado",
         outputText: JSON.stringify(res.status, null, 2),
         draftSnapshot: JSON.parse(JSON.stringify(d)) as Record<string, unknown>,
       })
       setNotice(
         res.status.running
-          ? `Proxy HTTP ouvindo em http://${res.status.listenHost}:${res.status.listenPort}`
-          : "Proxy HTTP atualizado.",
+          ? `Proxy HTTP/HTTPS/WS ativo em http://${res.status.listenHost}:${res.status.listenPort} (${res.status.httpsMode === "tunnel_passthrough" ? "Túnel CONNECT" : "TLS MITM c/ Root CA"})`
+          : "Proxy HTTP/HTTPS atualizado.",
       )
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
+  }
+
+  function downloadProxyRootCaCert(): void {
+    const pem = backend.proxy?.status.caCertPem
+    if (!pem) {
+      setError("Inicie o Proxy ao menos uma vez ou atualize o painel para gerar a Root CA local.")
+      return
+    }
+    const blob = new Blob([pem], { type: "application/x-x509-ca-cert" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "cyberlab-root-ca.crt"
+    a.click()
+    URL.revokeObjectURL(url)
+    setNotice("Certificado cyberlab-root-ca.crt exportado! Importe no navegador/sistema para inspecionar HTTPS.")
   }
 
   async function persistProxyCapture(entry: ProxyHistoryEntryDto): Promise<void> {
@@ -875,10 +932,35 @@ function createWorkbenchService() {
     setNotice(`Requisição ${method} ${entry.url} enviada para o HTTP Repeater!`)
   }
 
+  function sendProxyCaptureToIntruder(entry: ProxyHistoryEntryDto): void {
+    const headerRows: KeyValueHeaderRow[] = Object.entries(entry.requestHeaders ?? {}).map(([name, value], idx) => ({
+      id: `px-i-${idx}-${Date.now()}`,
+      enabled: name.toLowerCase() !== "host" && name.toLowerCase() !== "content-length",
+      name,
+      value,
+    }))
+    const allowedMethods = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] as const
+    const upper = entry.method.toUpperCase()
+    const method = allowedMethods.find((m) => m === upper) ?? "GET"
+    const templatedUrl = entry.url.includes("=")
+      ? entry.url.replace(/=([^&]*)/, "=§$1§")
+      : `${entry.url.replace(/\/$/, "")}/§payload§`
+    updateDraft("http-intruder", (prev) => ({
+      ...prev,
+      method,
+      url: templatedUrl,
+      headers: headerRows.length > 0 ? headerRows : prev.headers,
+      bodyTemplate: entry.requestBody || "",
+      useRawJson: false,
+    }))
+    selectTool("http-intruder")
+    setNotice(`Captura enviada para o HTTP Intruder (${templatedUrl})!`)
+  }
+
   async function dispatchCdiMission(): Promise<void> {
     const d = drafts["cdi-hub"]
     if (d.selectedPartnerIds.length === 0) {
-      setError("Selecione ao menos um Agente CDI (ex.: Salem, Kairós, Naia ou CDI-04).")
+      setError("Selecione ao menos um Agente CDI (ex.: Kairós, Naia, Salem ou Nova).")
       return
     }
     if (!d.objective.trim()) {
@@ -1155,7 +1237,7 @@ function createWorkbenchService() {
         body: JSON.stringify({ operation: "preset_4" }),
       })
       setBackend("partners", reconcile(res))
-      setNotice("Preset dos 4 CDIs (Salem 8788, Kairós 8789, Naia 8790, CDI-04 8791) ativado!")
+      setNotice("Preset dos 4 CDIs (Kairós 8788, Naia 8789, Salem 8790, Nova 8791) ativado!")
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -1248,8 +1330,10 @@ function createWorkbenchService() {
     approvePendingExecution,
     cancelExecution,
     controlProxy,
+    downloadProxyRootCaCert,
     persistProxyCapture,
     sendProxyCaptureToRepeater,
+    sendProxyCaptureToIntruder,
     dispatchCdiMission,
     ingestManualExternal,
     syncExternalInbox,

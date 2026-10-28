@@ -40,7 +40,7 @@ describe("CyberLab Manual Workbench Suites, Catalog & Schema Parity", () => {
       "governance-suite",
     ])
 
-    // Verify all 18 underlying tool modes are reachable through the 7 distinct suites
+    // Verify all 27 underlying tool modes are reachable through the 7 distinct suites
     const coveredToolIds = new Set<string>()
     for (const suite of catalog.TOOL_SUITES) {
       expect(suite.functions.length).toBeGreaterThanOrEqual(1)
@@ -48,7 +48,7 @@ describe("CyberLab Manual Workbench Suites, Catalog & Schema Parity", () => {
         coveredToolIds.add(tid)
       }
     }
-    expect(coveredToolIds.size).toBe(18)
+    expect(coveredToolIds.size).toBe(27)
     for (const tool of catalog.MANUAL_TOOLS) {
       expect(coveredToolIds.has(tool.id)).toBe(true)
       const loc = catalog.findSuiteAndFunctionForTool(tool.id)
@@ -66,7 +66,7 @@ describe("CyberLab Manual Workbench Suites, Catalog & Schema Parity", () => {
 
       const drafts = catalog.createDefaultToolDrafts()
       const capabilityTools = catalog.MANUAL_TOOLS.filter((t) => Boolean(t.capabilityId))
-      expect(capabilityTools.length).toBe(14)
+      expect(capabilityTools.length).toBe(23)
 
       for (const tool of capabilityTools) {
         const built = catalog.buildCapabilityInput(tool.id, drafts)

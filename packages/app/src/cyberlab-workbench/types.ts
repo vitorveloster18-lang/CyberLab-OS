@@ -42,6 +42,9 @@ export interface ToolSuiteMeta {
 export type ManualToolId =
   | "http-repeater"
   | "http-proxy"
+  | "http-intruder"
+  | "param-audit"
+  | "dalfox"
   | "http-headers"
   | "web-surface"
   | "nuclei"
@@ -50,11 +53,17 @@ export type ManualToolId =
   | "tls-inspector"
   | "tcp-probe"
   | "nmap"
+  | "dns-recon"
   | "pcap-analyzer"
   | "tshark"
   | "workspace-audit"
   | "binary-triage"
+  | "binary-disasm"
+  | "ghidra"
   | "mobile-triage"
+  | "jadx"
+  | "yara-scan"
+  | "yarax"
   | "cdi-hub"
   | "external-ingest"
   | "scope-governance"
@@ -97,8 +106,106 @@ export interface HttpRepeaterDraft {
 export interface HttpProxyDraft {
   port: number
   scopeOnly: boolean
+  httpsMode: "tls_intercept" | "tunnel_passthrough"
+  allowSelfSignedUpstream: boolean
   filterText: string
   selectedEntryId: string
+}
+
+export interface HttpIntruderDraft {
+  method: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS"
+  url: string
+  headers: KeyValueHeaderRow[]
+  bodyTemplate: string
+  attackMode: "sniper" | "battering_ram" | "pitchfork"
+  payloadSet1Text: string
+  payloadSet2Text: string
+  maxRequests: number
+  concurrency: number
+  delayMs: number
+  timeoutMs: number
+  grepMatch: string
+  urlEncodePayloads: boolean
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
+}
+
+export interface ParamAuditDraft {
+  url: string
+  method: "GET" | "POST"
+  parameterNamesText: string
+  checkReflectionContext: boolean
+  checkErrorLeakage: boolean
+  checkRedirectHygiene: boolean
+  timeoutMs: number
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
+}
+
+export interface DalfoxDraft {
+  url: string
+  paramName: string
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
+}
+
+export interface DnsReconDraft {
+  host: string
+  nameserver: string
+  checkEmailPosture: boolean
+  enumerateSubdomains: boolean
+  subdomainPrefixesText: string
+  includeCrtSh: boolean
+  timeoutMs: number
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
+}
+
+export interface BinaryDisasmDraft {
+  binaryPath: string
+  architecture: "auto" | "x86_64" | "arm64"
+  startOffsetHex: string
+  maxInstructions: number
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
+}
+
+export interface GhidraDraft {
+  binaryPath: string
+  processor: string
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
+}
+
+export interface JadxDraft {
+  artifactPath: string
+  deobfuscate: boolean
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
+}
+
+export interface YaraScanDraft {
+  targetPath: string
+  rulesText: string
+  maxFiles: number
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
+}
+
+export interface YaraXDraft {
+  rulesPath: string
+  targetPath: string
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
 }
 
 export interface HttpHeadersDraft {
@@ -254,6 +361,9 @@ export interface ScopeGovernanceDraft {
 export interface ManualToolDraftMap {
   "http-repeater": HttpRepeaterDraft
   "http-proxy": HttpProxyDraft
+  "http-intruder": HttpIntruderDraft
+  "param-audit": ParamAuditDraft
+  dalfox: DalfoxDraft
   "http-headers": HttpHeadersDraft
   "web-surface": WebSurfaceDraft
   nuclei: NucleiDraft
@@ -262,11 +372,17 @@ export interface ManualToolDraftMap {
   "tls-inspector": TlsInspectorDraft
   "tcp-probe": TcpProbeDraft
   nmap: NmapDraft
+  "dns-recon": DnsReconDraft
   "pcap-analyzer": PcapAnalyzerDraft
   tshark: TsharkDraft
   "workspace-audit": WorkspaceAuditDraft
   "binary-triage": BinaryTriageDraft
+  "binary-disasm": BinaryDisasmDraft
+  ghidra: GhidraDraft
   "mobile-triage": MobileTriageDraft
+  jadx: JadxDraft
+  "yara-scan": YaraScanDraft
+  yarax: YaraXDraft
   "cdi-hub": CdiHubDraft
   "external-ingest": ExternalIngestDraft
   "scope-governance": ScopeGovernanceDraft
@@ -401,6 +517,7 @@ export interface ExternalToolsOverviewDto {
 export interface ProxyHistoryEntryDto {
   entryId: string
   timestamp: string
+  protocol?: "http" | "https" | "ws" | "wss" | "connect_tunnel"
   method: string
   url: string
   host: string
@@ -422,6 +539,11 @@ export interface ProxyOverviewDto {
     listenHost: string
     listenPort: number | null
     scopeOnly: boolean
+    httpsMode?: "tls_intercept" | "tunnel_passthrough"
+    allowSelfSignedUpstream?: boolean
+    caFingerprintSha256?: string
+    caCertPath?: string | null
+    caCertPem?: string
     capturedCount: number
   }
   history: ProxyHistoryEntryDto[]

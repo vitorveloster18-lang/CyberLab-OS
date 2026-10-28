@@ -62,7 +62,8 @@ export function isCloudMetadataIp(ip: string): boolean {
 function normalizeHostFromTarget(raw: string): { host: string; origin?: string } {
   const trimmed = raw.trim()
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)) {
-    const parsed = new URL(trimmed)
+    const safeUrlStr = trimmed.replace(/§[^§]*§/g, "marker")
+    const parsed = new URL(safeUrlStr)
     const hostname = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase()
     return { host: hostname, origin: parsed.origin.toLowerCase() }
   }
@@ -127,12 +128,15 @@ export function extractTargetsFromInput(input: unknown): ExtractedTargets {
     "path",
     "subpath",
     "file",
+    "filePath",
     "directory",
     "targetPath",
     "pcapPath",
     "binaryPath",
     "artifactPath",
     "wordlistPath",
+    "rulesPath",
+    "outputSubdir",
   ]
   const pathArrayKeys = ["paths", "files"]
 

@@ -13,14 +13,27 @@ import { PartnerBridge, type PartnerDispatchOutcome } from "./partners/bridge.js
 import { CdiPartnerHub, type MultiCdiDispatchReport } from "./partners/cdi-hub.js"
 import { HttpPartnerTransport } from "./partners/transport.js"
 import {
+  EXTERNAL_DALFOX_INPUT_SCHEMA_ID,
   EXTERNAL_FFUF_INPUT_SCHEMA_ID,
+  EXTERNAL_GHIDRA_INPUT_SCHEMA_ID,
+  EXTERNAL_JADX_INPUT_SCHEMA_ID,
   EXTERNAL_NMAP_INPUT_SCHEMA_ID,
   EXTERNAL_NUCLEI_INPUT_SCHEMA_ID,
   EXTERNAL_TSHARK_INPUT_SCHEMA_ID,
+  EXTERNAL_YARAX_INPUT_SCHEMA_ID,
   ExternalControlPlane,
+  ExternalDalfoxCapability,
+  ExternalDalfoxExecutor,
+  ExternalDalfoxInputSchema,
   ExternalFfufCapability,
   ExternalFfufExecutor,
   ExternalFfufInputSchema,
+  ExternalGhidraCapability,
+  ExternalGhidraExecutor,
+  ExternalGhidraInputSchema,
+  ExternalJadxCapability,
+  ExternalJadxExecutor,
+  ExternalJadxInputSchema,
   ExternalNmapCapability,
   ExternalNmapExecutor,
   ExternalNmapInputSchema,
@@ -30,12 +43,15 @@ import {
   ExternalTsharkCapability,
   ExternalTsharkExecutor,
   ExternalTsharkInputSchema,
+  ExternalYaraXCapability,
+  ExternalYaraXExecutor,
+  ExternalYaraXInputSchema,
   type ExternalToolRuntimeStatus,
   type InboxSyncResult,
   type IngestExternalActionInput,
   type IngestExternalActionResult,
 } from "./external/control-plane.js"
-import { CyberLabHttpProxy, type ProxyHistoryEntry, type ProxyStatus } from "./proxy/http-proxy.js"
+import { CyberLabHttpProxy, type ProxyHistoryEntry, type ProxyHttpsMode, type ProxyStatus } from "./proxy/http-proxy.js"
 import { ApprovalManager } from "./policy/approval.js"
 import { PolicyEngine } from "./policy/authorize.js"
 import { ScopeController } from "./policy/scope.js"
@@ -103,6 +119,36 @@ import {
   MobileArtifactTriageExecutor,
   MobileArtifactTriageInputSchema,
 } from "../integrations/reverse-forensics/mobile-artifact-triage.js"
+import {
+  HTTP_INTRUDER_INPUT_SCHEMA_ID,
+  HttpIntruderCapability,
+  HttpIntruderInputSchema,
+  HttpIntruderMatrixExecutor,
+} from "../integrations/web-security/http-intruder-matrix.js"
+import {
+  WEB_PARAM_AUDIT_INPUT_SCHEMA_ID,
+  DifferentialParamAuditorExecutor,
+  WebParamAuditCapability,
+  WebParamAuditInputSchema,
+} from "../integrations/web-security/differential-param-auditor.js"
+import {
+  DNS_RECON_INPUT_SCHEMA_ID,
+  DnsReconCapability,
+  DnsReconInputSchema,
+  DnsSurfaceReconExecutor,
+} from "../integrations/network-observation/dns-surface-recon.js"
+import {
+  BINARY_DISASM_INPUT_SCHEMA_ID,
+  BinaryDisasmCapability,
+  BinaryDisasmInputSchema,
+  BinaryDisassemblerExecutor,
+} from "../integrations/reverse-forensics/binary-disassembler.js"
+import {
+  YARA_SCAN_INPUT_SCHEMA_ID,
+  YaraRuleScannerExecutor,
+  YaraScanCapability,
+  YaraScanInputSchema,
+} from "../integrations/reverse-forensics/yara-rule-scanner.js"
 
 const repoSkillsDir = fileURLToPath(new URL("../skills", import.meta.url))
 
@@ -190,6 +236,7 @@ export class CyberLabWorkspace {
       projectId: this.projectId,
       scopes: this.scopes,
       evidenceStore: this.evidenceStore,
+      ...(options.inMemoryDb ? {} : { workspaceRoot: this.workspaceRoot }),
     })
     this.cdiHub = new CdiPartnerHub({
       projectId: this.projectId,
@@ -271,7 +318,27 @@ export class CyberLabWorkspace {
     this.executors.registerExecutor(new MobileArtifactTriageExecutor())
     await this.capabilities.register(MobileArtifactTriageCapability)
 
-    // Register governed External Tool Control Plane bridges (Nmap, Nuclei, ffuf, tshark)
+    this.schemas.registerEffectSchema(HTTP_INTRUDER_INPUT_SCHEMA_ID, HttpIntruderInputSchema)
+    this.executors.registerExecutor(new HttpIntruderMatrixExecutor())
+    await this.capabilities.register(HttpIntruderCapability)
+
+    this.schemas.registerEffectSchema(WEB_PARAM_AUDIT_INPUT_SCHEMA_ID, WebParamAuditInputSchema)
+    this.executors.registerExecutor(new DifferentialParamAuditorExecutor())
+    await this.capabilities.register(WebParamAuditCapability)
+
+    this.schemas.registerEffectSchema(DNS_RECON_INPUT_SCHEMA_ID, DnsReconInputSchema)
+    this.executors.registerExecutor(new DnsSurfaceReconExecutor())
+    await this.capabilities.register(DnsReconCapability)
+
+    this.schemas.registerEffectSchema(BINARY_DISASM_INPUT_SCHEMA_ID, BinaryDisasmInputSchema)
+    this.executors.registerExecutor(new BinaryDisassemblerExecutor())
+    await this.capabilities.register(BinaryDisasmCapability)
+
+    this.schemas.registerEffectSchema(YARA_SCAN_INPUT_SCHEMA_ID, YaraScanInputSchema)
+    this.executors.registerExecutor(new YaraRuleScannerExecutor())
+    await this.capabilities.register(YaraScanCapability)
+
+    // Register governed External Tool Control Plane bridges (Nmap, Nuclei, ffuf, tshark, dalfox, ghidra, jadx, yarax)
     this.schemas.registerEffectSchema(EXTERNAL_NMAP_INPUT_SCHEMA_ID, ExternalNmapInputSchema)
     this.executors.registerExecutor(new ExternalNmapExecutor(() => this.workspaceRoot))
     await this.capabilities.register(ExternalNmapCapability)
@@ -287,6 +354,22 @@ export class CyberLabWorkspace {
     this.schemas.registerEffectSchema(EXTERNAL_TSHARK_INPUT_SCHEMA_ID, ExternalTsharkInputSchema)
     this.executors.registerExecutor(new ExternalTsharkExecutor(() => this.workspaceRoot))
     await this.capabilities.register(ExternalTsharkCapability)
+
+    this.schemas.registerEffectSchema(EXTERNAL_DALFOX_INPUT_SCHEMA_ID, ExternalDalfoxInputSchema)
+    this.executors.registerExecutor(new ExternalDalfoxExecutor(() => this.workspaceRoot))
+    await this.capabilities.register(ExternalDalfoxCapability)
+
+    this.schemas.registerEffectSchema(EXTERNAL_GHIDRA_INPUT_SCHEMA_ID, ExternalGhidraInputSchema)
+    this.executors.registerExecutor(new ExternalGhidraExecutor(() => this.workspaceRoot))
+    await this.capabilities.register(ExternalGhidraCapability)
+
+    this.schemas.registerEffectSchema(EXTERNAL_JADX_INPUT_SCHEMA_ID, ExternalJadxInputSchema)
+    this.executors.registerExecutor(new ExternalJadxExecutor(() => this.workspaceRoot))
+    await this.capabilities.register(ExternalJadxCapability)
+
+    this.schemas.registerEffectSchema(EXTERNAL_YARAX_INPUT_SCHEMA_ID, ExternalYaraXInputSchema)
+    this.executors.registerExecutor(new ExternalYaraXExecutor(() => this.workspaceRoot))
+    await this.capabilities.register(ExternalYaraXCapability)
 
     // Load CyberLab skills
     this.skills.loadFromDirectory(repoSkillsDir)
@@ -470,15 +553,21 @@ export class CyberLabWorkspace {
   }
 
   async controlProxy(params: {
-    action: "start" | "stop" | "clear" | "set_scope_only"
+    action: "start" | "stop" | "clear" | "set_scope_only" | "set_https_mode"
     port?: number
     scopeOnly?: boolean
+    httpsMode?: ProxyHttpsMode
+    allowSelfSignedUpstream?: boolean
   }): Promise<{ status: ProxyStatus; history: ProxyHistoryEntry[] }> {
     await this.ensureInitialized()
     if (params.action === "start") {
       await this.httpProxy.start({
         ...(params.port !== undefined ? { port: params.port } : {}),
         ...(params.scopeOnly !== undefined ? { scopeOnly: params.scopeOnly } : {}),
+        ...(params.httpsMode !== undefined ? { httpsMode: params.httpsMode } : {}),
+        ...(params.allowSelfSignedUpstream !== undefined
+          ? { allowSelfSignedUpstream: params.allowSelfSignedUpstream }
+          : {}),
       })
     } else if (params.action === "stop") {
       await this.httpProxy.stop()
@@ -486,6 +575,8 @@ export class CyberLabWorkspace {
       this.httpProxy.clearHistory()
     } else if (params.action === "set_scope_only") {
       this.httpProxy.setScopeOnly(params.scopeOnly ?? true)
+    } else if (params.action === "set_https_mode") {
+      this.httpProxy.setHttpsMode(params.httpsMode ?? "tls_intercept", params.allowSelfSignedUpstream)
     }
     return this.getProxyOverview()
   }

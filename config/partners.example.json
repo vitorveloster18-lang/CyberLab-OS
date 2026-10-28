@@ -4,23 +4,10 @@
   "cyberlabCallbackUrl": "http://127.0.0.1:4096/api/cyberlab/partner-gateway",
   "partners": [
     {
-      "partnerId": "salem",
-      "displayName": "Salem",
-      "specialty": "Analise de Logs, Triagem de CVEs, Resposta a Incidentes e Correlacao de Alertas",
-      "endpointUrl": "http://127.0.0.1:8788/cyberlab/partner",
-      "enabled": true,
-      "permissions": {
-        "readProjectState": true,
-        "readEvidenceAndFiles": true,
-        "createArtifactsAndFindings": true,
-        "initiateActions": "allow_readonly_propose_others"
-      }
-    },
-    {
       "partnerId": "kairos",
-      "displayName": "Kairos",
+      "displayName": "Kairós",
       "specialty": "Arquitetura de Seguranca, Modelagem de Ameacas e Estrategia de Mitigacao",
-      "endpointUrl": "http://127.0.0.1:8789/cyberlab/partner",
+      "endpointUrl": "http://127.0.0.1:8788/cyberlab/partner",
       "enabled": true,
       "permissions": {
         "readProjectState": true,
@@ -33,6 +20,19 @@
       "partnerId": "naia",
       "displayName": "Naia",
       "specialty": "Pesquisa Profunda, Forense Digital, Evidencias e Inteligencia de Ameacas",
+      "endpointUrl": "http://127.0.0.1:8789/cyberlab/partner",
+      "enabled": true,
+      "permissions": {
+        "readProjectState": true,
+        "readEvidenceAndFiles": true,
+        "createArtifactsAndFindings": true,
+        "initiateActions": "allow_readonly_propose_others"
+      }
+    },
+    {
+      "partnerId": "salem",
+      "displayName": "Salem",
+      "specialty": "Analise de Logs, Triagem de CVEs, Resposta a Incidentes e Correlacao de Alertas",
       "endpointUrl": "http://127.0.0.1:8790/cyberlab/partner",
       "enabled": true,
       "permissions": {
@@ -43,8 +43,8 @@
       }
     },
     {
-      "partnerId": "cdi-4",
-      "displayName": "CDI-04",
+      "partnerId": "nova",
+      "displayName": "Nova",
       "specialty": "Auditoria de Codigo, Revisao de Superficie de Ataque e Validacao Tecnica",
       "endpointUrl": "http://127.0.0.1:8791/cyberlab/partner",
       "enabled": true,

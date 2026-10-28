@@ -6,7 +6,8 @@ Conecta os seus CDIs externos (`chat.py` / `process_message()`, portas 8788-8791
 de forma **bidirecional** e autenticada via HMAC-SHA256 (`canonicalJson` + `compare_digest`):
 
 1. Direção CyberLab OS -> CDI (`/cyberlab/partner`):
-   - Recebe `task.submit` de forma individual (ex.: só Salem) ou em paralelo (ex.: Kairós + Naia).
+   - Recebe `task.submit` de forma individual (ex.: só Kairós) ou em paralelo (ex.: Kairós + Naia + Salem + Nova).
+   - Portas padrão alinhadas: Kairós (`8788`), Naia (`8789`), Salem (`8790`) e Nova (`8791`).
    - Repassa contexto redigido + `CYBERLAB_CALLBACK_URL` para o CDI.
 
 2. Direção CDI -> CyberLab OS (`CyberLabOSClient` + `build_cyberlab_cdi_tools()`):
@@ -610,7 +611,12 @@ def main() -> None:
         help="URL do gateway bidirecional do CyberLab OS para chamadas autónomas do CDI",
     )
     parser.add_argument("--mode", choices=["arg", "stdin", "import"], default="arg")
-    parser.add_argument("--script", help="Caminho para o seu chat.py (usado em --mode arg ou --mode stdin)")
+    parser.add_argument(
+        "--script",
+        "--chat-py",
+        dest="script",
+        help="Caminho para o seu chat.py (usado em --mode arg ou --mode stdin)",
+    )
     parser.add_argument("--callable", help="Ex.: /caminho/chat.py:process_message (usado em --mode import)")
     parser.add_argument("--python-bin", default=sys.executable, help="Interpretador Python para rodar chat.py")
     parser.add_argument("--timeout", type=int, default=90, help="Timeout em segundos por chamada ao chat.py")

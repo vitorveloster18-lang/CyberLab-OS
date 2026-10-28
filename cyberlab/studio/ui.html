@@ -570,7 +570,7 @@
           <div class="card">
             <div class="row" style="justify-content:space-between">
               <strong>Registo de Agentes Parceiros CDI (Portas 8788–8791)</strong>
-              <button class="btn primary" onclick="loadFourCdiPreset()">Carregar Preset 4 CDIs (Salem, Kairós, Naia, CDI-04)</button>
+              <button class="btn primary" onclick="loadFourCdiPreset()">Carregar Preset 4 CDIs (Kairós, Naia, Salem, Nova)</button>
             </div>
             <div id="cdiPartnersTable"></div>
             <div class="row" style="padding-top:6px">
@@ -1219,7 +1219,7 @@
 
     async function loadFourCdiPreset() {
       await api("/api/studio/partners/manage", { method: "POST", body: JSON.stringify({ operation: "preset_4" }) });
-      showNotice("4 CDIs registados nas portas 8788–8791 (Salem, Kairós, Naia, CDI-04)");
+      showNotice("4 CDIs registados nas portas 8788–8791 (Kairós, Naia, Salem, Nova)");
       await refreshAll();
     }
 

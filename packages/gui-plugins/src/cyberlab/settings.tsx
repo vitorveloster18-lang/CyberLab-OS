@@ -177,7 +177,7 @@ export default function CyberLabSettingsPage() {
   }
 
   const applyFourCdiPreset = () =>
-    runAction("Preset dos 4 CDIs (Salem :8788, Kairós :8789, Naia :8790, CDI-04 :8791) configurado!", async () => {
+    runAction("Preset dos 4 CDIs (Kairós :8788, Naia :8789, Salem :8790, Nova :8791) configurado!", async () => {
       await cyberlabRequest(activeServer(), effectiveDir(), "/api/cyberlab/partners/manage", {
         method: "POST",
         body: JSON.stringify({ operation: "preset_4" }),
@@ -246,10 +246,10 @@ export default function CyberLabSettingsPage() {
       `$env:CYBERLAB_PARTNER_SECRET="${secRes.sharedSecret}"`,
       `$env:CYBERLAB_CALLBACK_URL="${gateway}"`,
       `# Subir os 4 CDIs em terminais PowerShell separados:`,
-      `python integrations/partners/chat_py_bridge.py --partner-id salem  --port 8788 --mode arg --script C:\\caminho\\salem\\chat.py`,
-      `python integrations/partners/chat_py_bridge.py --partner-id kairos --port 8789 --mode arg --script C:\\caminho\\kairos\\chat.py`,
-      `python integrations/partners/chat_py_bridge.py --partner-id naia   --port 8790 --mode arg --script C:\\caminho\\naia\\chat.py`,
-      `python integrations/partners/chat_py_bridge.py --partner-id cdi-4  --port 8791 --mode arg --script C:\\caminho\\cdi4\\chat.py`,
+      `python integrations/partners/chat_py_bridge.py --partner-id kairos --port 8788 --mode arg --script C:\\caminho\\kairos\\chat.py`,
+      `python integrations/partners/chat_py_bridge.py --partner-id naia   --port 8789 --mode arg --script C:\\caminho\\naia\\chat.py`,
+      `python integrations/partners/chat_py_bridge.py --partner-id salem  --port 8790 --mode arg --script C:\\caminho\\salem\\chat.py`,
+      `python integrations/partners/chat_py_bridge.py --partner-id nova   --port 8791 --mode arg --script C:\\caminho\\nova\\chat.py`,
     ].join("\n")
     await ctx.system.copy(snippet)
     setNotice("Comandos PowerShell copiados para a área de transferência!")
@@ -585,7 +585,7 @@ export default function CyberLabSettingsPage() {
               when={(partnersData()?.partners?.length ?? 0) > 0}
               fallback={
                 <div class="p-4 text-12-regular text-v2-text-text-muted">
-                  Nenhum CDI cadastrado neste projeto ainda. Clique em <strong>Preset 4 CDIs (8788–8791)</strong> acima para configurar Salem, Kairós, Naia e CDI-04 com 1 clique.
+                  Nenhum CDI cadastrado neste projeto ainda. Clique em <strong>Preset 4 CDIs (8788–8791)</strong> acima para configurar Kairós, Naia, Salem e Nova com 1 clique.
                 </div>
               }
             >

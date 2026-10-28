@@ -77,7 +77,7 @@ export default function CyberLabPanel(props: { session: MountedSession }) {
   const [artifactPath, setArtifactPath] = createSignal("artifact.bin")
 
   // === 3. Agentes CDI Controls ===
-  const [selectedCdis, setSelectedCdis] = createSignal<string[]>(["salem", "kairos", "naia", "cdi-4"])
+  const [selectedCdis, setSelectedCdis] = createSignal<string[]>(["kairos", "naia", "salem", "nova"])
   const [cdiPrompt, setCdiPrompt] = createSignal("")
   const [cdiResults, setCdiResults] = createSignal<MultiCdiDispatchItemDto[]>([])
 
@@ -390,7 +390,7 @@ export default function CyberLabPanel(props: { session: MountedSession }) {
         method: "POST",
         body: JSON.stringify({ operation: "preset_4" }),
       })
-      setNotice("4 CDIs (Salem :8788, Kairós :8789, Naia :8790, CDI-04 :8791) configurados!")
+      setNotice("4 CDIs (Kairós :8788, Naia :8789, Salem :8790, Nova :8791) configurados!")
       void refetchPartners()
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err))

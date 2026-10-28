@@ -1,0 +1,20 @@
+{
+  "id": "dalfox-external-connector",
+  "version": "2.9.2",
+  "source": "https://github.com/hahwul/dalfox",
+  "commit": "external-user-installed",
+  "license": {
+    "spdx": "MIT",
+    "reviewStatus": "plugin_only",
+    "reviewNotes": [
+      "MIT parameter reflection scanner invoked externally under ScopeController and ApprovalTicket."
+    ]
+  },
+  "integration": {
+    "mode": "plugin_only",
+    "linuxRequired": false
+  },
+  "dependenciesReviewed": true,
+  "noticesRecorded": true,
+  "lastReviewedAt": "2026-10-28T00:00:00.000Z"
+}

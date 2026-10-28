@@ -1,0 +1,22 @@
+{
+  "id": "cyberlab-http-intruder",
+  "version": "1.0.0",
+  "source": "https://github.com/vitorveloster18-lang/CyberLab-OS",
+  "commit": "first-party",
+  "license": {
+    "spdx": "MIT",
+    "reviewStatus": "approved_embed",
+    "reviewNotes": [
+      "First-party MIT parametric HTTP request matrix runner (Sniper, Battering Ram, Pitchfork).",
+      "Enforces PolicyEngine URL origin confinement, prevents cross-origin marker substitution, and redacts secrets."
+    ]
+  },
+  "integration": {
+    "mode": "embedded",
+    "executorId": "http-intruder-matrix-executor",
+    "linuxRequired": false
+  },
+  "dependenciesReviewed": true,
+  "noticesRecorded": true,
+  "lastReviewedAt": "2026-10-28T00:00:00.000Z"
+}

@@ -360,6 +360,10 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
               action: payload.action,
               ...(payload.port !== undefined ? { port: payload.port } : {}),
               ...(payload.scopeOnly !== undefined ? { scopeOnly: payload.scopeOnly } : {}),
+              ...(payload.httpsMode !== undefined ? { httpsMode: payload.httpsMode } : {}),
+              ...(payload.allowSelfSignedUpstream !== undefined
+                ? { allowSelfSignedUpstream: payload.allowSelfSignedUpstream }
+                : {}),
             }),
           )
         }),

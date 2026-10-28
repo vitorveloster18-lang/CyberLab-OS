@@ -1,0 +1,21 @@
+{
+  "id": "cyberlab-dns-recon",
+  "version": "1.0.0",
+  "source": "https://github.com/vitorveloster18-lang/CyberLab-OS",
+  "commit": "first-party",
+  "license": {
+    "spdx": "MIT",
+    "reviewStatus": "approved_embed",
+    "reviewNotes": [
+      "First-party MIT DNS record, SPF/DMARC/CAA email security posture, dangling CNAME, and passive crt.sh auditor."
+    ]
+  },
+  "integration": {
+    "mode": "embedded",
+    "executorId": "dns-surface-recon-executor",
+    "linuxRequired": false
+  },
+  "dependenciesReviewed": true,
+  "noticesRecorded": true,
+  "lastReviewedAt": "2026-10-28T00:00:00.000Z"
+}

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { readFileSync, statSync } from "node:fs"
 import path from "node:path"
+import { inflateRawSync } from "node:zlib"
 import { Schema } from "effect"
 import {
   isPathInsideRoot,
@@ -59,7 +60,13 @@ const HIGH_RISK_ANDROID_PERMISSIONS = [
   "android.permission.RECEIVE_BOOT_COMPLETED",
 ]
 
-function parseZipCentralDirectoryEntries(buf: Uint8Array): Array<{ name: string; compressedSize: number; uncompressedSize: number }> {
+function parseZipCentralDirectoryEntries(buf: Uint8Array): Array<{
+  name: string
+  compressionMethod: number
+  compressedSize: number
+  uncompressedSize: number
+  localHeaderOffset: number
+}> {
   // Locate End of Central Directory (EOCD) signature 0x06054b50 within last 65 KiB
   const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
   const minOffset = Math.max(0, buf.byteLength - 65_557)
@@ -74,22 +81,145 @@ function parseZipCentralDirectoryEntries(buf: Uint8Array): Array<{ name: string;
 
   const totalEntries = view.getUint16(eocdOffset + 10, true)
   const cdOffset = view.getUint32(eocdOffset + 16, true)
-  const entries: Array<{ name: string; compressedSize: number; uncompressedSize: number }> = []
+  const entries: Array<{
+    name: string
+    compressionMethod: number
+    compressedSize: number
+    uncompressedSize: number
+    localHeaderOffset: number
+  }> = []
 
   let pos = cdOffset
   for (let idx = 0; idx < Math.min(totalEntries, 5_000) && pos + 46 <= buf.byteLength; idx++) {
     if (view.getUint32(pos, true) !== 0x02014b50) break
+    const compMethod = view.getUint16(pos + 10, true)
     const compSize = view.getUint32(pos + 20, true)
     const uncompSize = view.getUint32(pos + 24, true)
     const nameLen = view.getUint16(pos + 28, true)
     const extraLen = view.getUint16(pos + 30, true)
     const commentLen = view.getUint16(pos + 32, true)
+    const localHeaderOffset = view.getUint32(pos + 42, true)
     if (pos + 46 + nameLen > buf.byteLength) break
     const name = new TextDecoder("utf-8", { fatal: false }).decode(buf.subarray(pos + 46, pos + 46 + nameLen))
-    entries.push({ name, compressedSize: compSize, uncompressedSize: uncompSize })
+    entries.push({
+      name,
+      compressionMethod: compMethod,
+      compressedSize: compSize,
+      uncompressedSize: uncompSize,
+      localHeaderOffset,
+    })
     pos += 46 + nameLen + extraLen + commentLen
   }
   return entries
+}
+
+function readZipEntryBytesSafe(
+  archive: Uint8Array,
+  entry: { compressionMethod: number; compressedSize: number; uncompressedSize: number; localHeaderOffset: number },
+  maxBytes = 16 * 1024 * 1024,
+): Uint8Array | null {
+  if (entry.uncompressedSize > maxBytes || entry.compressedSize > maxBytes) return null
+  const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength)
+  const lh = entry.localHeaderOffset
+  if (lh + 30 > archive.byteLength || view.getUint32(lh, true) !== 0x04034b50) return null
+  const nameLen = view.getUint16(lh + 26, true)
+  const extraLen = view.getUint16(lh + 28, true)
+  const dataStart = lh + 30 + nameLen + extraLen
+  if (dataStart + entry.compressedSize > archive.byteLength) return null
+  const rawSlice = archive.subarray(dataStart, dataStart + entry.compressedSize)
+  if (entry.compressionMethod === 0) return rawSlice
+  if (entry.compressionMethod === 8) {
+    try {
+      return new Uint8Array(inflateRawSync(rawSlice, { maxOutputLength: maxBytes }))
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+function readUleb128(buf: Uint8Array, start: number): { value: number; next: number } {
+  let result = 0
+  let shift = 0
+  let pos = start
+  while (pos < buf.byteLength && shift < 35) {
+    const byte = buf[pos++]!
+    result |= (byte & 0x7f) << shift
+    if ((byte & 0x80) === 0) break
+    shift += 7
+  }
+  return { value: result >>> 0, next: pos }
+}
+
+function inspectDalvikDexBytes(dex: Uint8Array): {
+  dexVersion: string
+  stringCount: number
+  typeCount: number
+  methodCount: number
+  classCount: number
+  discoveredClasses: string[]
+  discoveredMethods: string[]
+} | null {
+  // Magic: "dex\n035\0" .. "dex\n039\0"
+  if (dex.byteLength < 112 || dex[0] !== 0x64 || dex[1] !== 0x65 || dex[2] !== 0x78 || dex[3] !== 0x0a) {
+    return null
+  }
+  const view = new DataView(dex.buffer, dex.byteOffset, dex.byteLength)
+  const dexVersion = new TextDecoder("ascii").decode(dex.subarray(4, 7))
+  const stringIdsSize = view.getUint32(56, true)
+  const stringIdsOff = view.getUint32(60, true)
+  const typeIdsSize = view.getUint32(64, true)
+  const typeIdsOff = view.getUint32(68, true)
+  const methodIdsSize = view.getUint32(88, true)
+  const methodIdsOff = view.getUint32(92, true)
+  const classDefsSize = view.getUint32(96, true)
+
+  const readDexString = (strIdx: number): string => {
+    if (strIdx >= stringIdsSize || stringIdsOff + (strIdx + 1) * 4 > dex.byteLength) return ""
+    const dataOff = view.getUint32(stringIdsOff + strIdx * 4, true)
+    if (dataOff >= dex.byteLength) return ""
+    const { next } = readUleb128(dex, dataOff)
+    let end = next
+    while (end < dex.byteLength && dex[end] !== 0 && end - next < 256) end++
+    return new TextDecoder("utf-8", { fatal: false }).decode(dex.subarray(next, end))
+  }
+
+  const readTypeDesc = (typeIdx: number): string => {
+    if (typeIdx >= typeIdsSize || typeIdsOff + (typeIdx + 1) * 4 > dex.byteLength) return ""
+    const descStrIdx = view.getUint32(typeIdsOff + typeIdx * 4, true)
+    return readDexString(descStrIdx)
+  }
+
+  const classes: string[] = []
+  for (let t = 0; t < Math.min(typeIdsSize, 400) && classes.length < 60; t++) {
+    const desc = readTypeDesc(t)
+    if (desc.startsWith("L") && desc.endsWith(";") && !desc.startsWith("Ljava/") && !desc.startsWith("Landroid/")) {
+      classes.push(desc.slice(1, -1).replace(/\//g, "."))
+    }
+  }
+
+  const methods: string[] = []
+  for (let m = 0; m < Math.min(methodIdsSize, 300) && methods.length < 50; m++) {
+    if (methodIdsOff + (m + 1) * 8 > dex.byteLength) break
+    const classIdx = view.getUint16(methodIdsOff + m * 8, true)
+    const nameIdx = view.getUint32(methodIdsOff + m * 8 + 4, true)
+    const cls = readTypeDesc(classIdx)
+    const mName = readDexString(nameIdx)
+    if (cls && mName && !cls.startsWith("Ljava/")) {
+      const prettyCls = cls.startsWith("L") && cls.endsWith(";") ? cls.slice(1, -1).replace(/\//g, ".") : cls
+      methods.push(`${prettyCls}#${mName}()`)
+    }
+  }
+
+  return {
+    dexVersion,
+    stringCount: stringIdsSize,
+    typeCount: typeIdsSize,
+    methodCount: methodIdsSize,
+    classCount: classDefsSize,
+    discoveredClasses: classes,
+    discoveredMethods: methods,
+  }
 }
 
 export class MobileArtifactTriageExecutor implements CyberLabExecutor {
@@ -172,7 +302,22 @@ export class MobileArtifactTriageExecutor implements CyberLabExecutor {
         ? "ios_ipa"
         : isZip
           ? "zip_backup"
-          : "raw_mobile_artifact"
+          : buf.byteLength >= 8 && buf[0] === 0x64 && buf[1] === 0x65 && buf[2] === 0x78
+            ? "android_dex"
+            : "raw_mobile_artifact"
+
+    let dalvikDexAnalysis: ReturnType<typeof inspectDalvikDexBytes> = null
+    if (platformKind === "android_dex") {
+      dalvikDexAnalysis = inspectDalvikDexBytes(buf)
+    } else {
+      const primaryDexEntry = zipEntries.find((e) => e.name === "classes.dex") ?? zipEntries.find((e) => /^classes\d*\.dex$/.test(e.name))
+      if (primaryDexEntry) {
+        const dexBytes = readZipEntryBytesSafe(buf, primaryDexEntry)
+        if (dexBytes) {
+          dalvikDexAnalysis = inspectDalvikDexBytes(dexBytes)
+        }
+      }
+    }
 
     const report = {
       artifactPath: params.artifactPath,
@@ -181,6 +326,7 @@ export class MobileArtifactTriageExecutor implements CyberLabExecutor {
       sha256,
       archiveEntryCount: zipEntries.length,
       dexFiles,
+      dalvikDexAnalysis,
       nativeLibraries,
       signingFiles,
       zipSlipPaths,

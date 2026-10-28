@@ -209,7 +209,7 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
 
       const salemRes = parallelReport.results.find((r) => r.partnerId === "salem")!
       expect(salemRes.ok).toBe(true)
-      expect(salemRes.outcome?.result?.summary).toContain("caps=14")
+      expect(salemRes.outcome?.result?.summary).toContain("caps=23")
       expect(salemRes.outcome?.result?.summary).toContain("dotenv_blocked=True")
       expect(salemRes.outcome?.result?.summary).toContain("ro=succeeded")
       expect(salemRes.outcome?.result?.summary).toContain("act=awaiting_approval")
@@ -229,6 +229,28 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
       salemProc.kill("SIGTERM")
       kairosProc.kill("SIGTERM")
       gatewayServer.stop(true)
+      ws.close()
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  test("loadFourCdiPreset aligns exact partner IDs and ports (kairos:8788, naia:8789, salem:8790, nova:8791)", async () => {
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-cdi-preset-"))
+    const ws = new CyberLabWorkspace({
+      projectId: "proj-cdi-preset",
+      workspaceRoot: tmpDir,
+      inMemoryDb: true,
+    })
+    await ws.ensureInitialized()
+    try {
+      const partners = ws.cdiHub.loadFourCdiPreset()
+      const byId = new Map(partners.map((p) => [p.partnerId, p]))
+      expect(byId.get("kairos")?.endpointUrl).toBe("http://127.0.0.1:8788/cyberlab/partner")
+      expect(byId.get("naia")?.endpointUrl).toBe("http://127.0.0.1:8789/cyberlab/partner")
+      expect(byId.get("salem")?.endpointUrl).toBe("http://127.0.0.1:8790/cyberlab/partner")
+      expect(byId.get("nova")?.endpointUrl).toBe("http://127.0.0.1:8791/cyberlab/partner")
+      expect(byId.has("cdi-4")).toBe(false)
+    } finally {
       ws.close()
       rmSync(tmpDir, { recursive: true, force: true })
     }

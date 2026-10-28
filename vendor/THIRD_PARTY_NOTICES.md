@@ -56,7 +56,14 @@ Os seguintes adaptadores e executores em `cyberlab/` e `integrations/` são impl
 - **`cyberlab-external-control-plane`** (`cyberlab/external/control-plane.ts`) — Plano de controle unificado `MIT` para descoberta, supervisão (`shell=false` + kill-switch), ingestão de sessões manuais externas e sincronização `.cyberlab/inbox/` com custódia `SHA-256` (`MIT`).
 - **`cyberlab-http-proxy`** (`cyberlab/proxy/http-proxy.ts`) — Proxy HTTP local `MIT` (`127.0.0.1`) de captura de tráfego com validação `ScopeController`, proteção SSRF, redação automática de cabeçalhos sensíveis e integração direta com Repeater/Comparer e custódia `SHA-256` (`MIT`).
 - **`cyberlab-security-studio`** (`packages/gui-plugins/src/cyberlab/` e `cyberlab/studio/`) — Interface manual visual completa integrada ao OpenCode V2 e em janela cheia no navegador para todas as 7 disciplinas de segurança, sem dependência de UIs externas (`MIT`).
-- **`cyberlab-cdi-hub`** (`cyberlab/partners/cdi-hub.ts` e `integrations/partners/chat_py_bridge.py`) — Hub Multi-CDI e Gateway Bidirecional `HMAC-SHA256` para colaboração individual ou em paralelo de múltiplos agentes CDI externos com acesso governado a estado, evidências, ficheiros, artifacts `SHA-256` e iniciação de capabilities (`MIT`).
+- **`cyberlab-cdi-hub`** (`cyberlab/partners/cdi-hub.ts` e `integrations/partners/chat_py_bridge.py`) — Hub Multi-CDI e Gateway Bidirecional `HMAC-SHA256` (`Kairós`, `Naia`, `Salem`, `Nova`) para colaboração individual ou em paralelo de múltiplos agentes CDI externos com acesso governado a estado, evidências, ficheiros, artifacts `SHA-256` e iniciação de capabilities (`MIT`).
+- **`cyberlab-http-intruder`** (`integrations/web-security/http-intruder-matrix.ts`) — Executor paramétrico nativo `§slot§` (*Sniper*, *Battering Ram*, *Pitchfork*) com rate-limit, bloqueio de escape de origem e custódia `SHA-256` (`MIT`).
+- **`cyberlab-param-auditor`** (`integrations/web-security/differential-param-auditor.ts`) — Auditor diferencial não-destrutivo de parâmetros, reflexão de canário alfanumérico, vazamento de stack traces e redirecionamentos (`MIT`).
+- **`cyberlab-dns-recon`** (`integrations/network-observation/dns-surface-recon.ts`) — Reconhecimento DNS (`A/AAAA/CNAME/MX/NS/TXT/SOA/CAA`), postura `SPF`/`DMARC`, higiene contra *Subdomain Takeover* e transparência de certificados (`MIT`).
+- **`cyberlab-binary-disassembler`** (`integrations/reverse-forensics/binary-disassembler.ts`) — Disassembler estático multi-arquitetura (`x86_64` e `ARM64`) e resolvedor de símbolos offline para `ELF64`, `PE/COFF` e `Mach-O` (`MIT`).
+- **`cyberlab-yara-scanner`** (`integrations/reverse-forensics/yara-rule-scanner.ts`) — Motor nativo de regras YARA (padrões ASCII, UTF-16LE `wide`, `nocase`, hex curinga `??` e condições booleanas) para arquivos e pastas do projeto (`MIT`).
+
+ Conectores externos opcionais sob licenças permissivas registrados em `vendor/manifests/` (invocados via `shell=false` sem incorporação binária): `dalfox-external-connector` (`MIT`), `ghidra-headless-connector` (`Apache-2.0`), `jadx-external-connector` (`Apache-2.0`) e `yarax-external-connector` (`BSD-3-Clause`).
 
 ---
 

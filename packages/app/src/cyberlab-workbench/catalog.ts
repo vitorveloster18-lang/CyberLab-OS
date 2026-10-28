@@ -195,22 +195,121 @@ export const MANUAL_TOOLS: ManualToolMeta[] = [
     riskLabel: "Somente Leitura",
   },
   {
+    id: "http-intruder",
+    category: "web",
+    title: "HTTP Intruder & Matriz de Payloads (§slot§)",
+    shortTitle: "HTTP Intruder",
+    subtitle: "Testes paramétricos controlados Sniper / Battering Ram / Pitchfork com rate-limit e filtro regex",
+    icon: "globe",
+    badge: "MIT Nativo",
+    capabilityId: "web-assessment.http-intruder",
+    riskLabel: "Moderado (Escopo)",
+  },
+  {
+    id: "param-audit",
+    category: "web",
+    title: "Auditor Diferencial de Parâmetros",
+    shortTitle: "Param Auditor",
+    subtitle: "Auditoria não-destrutiva de reflexão contextual, vazamento de stack traces e open-redirect",
+    icon: "globe",
+    badge: "MIT Nativo",
+    capabilityId: "web-assessment.param-audit",
+    riskLabel: "Baixo (Não-Destrutivo)",
+  },
+  {
+    id: "dalfox",
+    category: "web",
+    title: "Dalfox Parameter & XSS Scanner",
+    shortTitle: "Dalfox",
+    subtitle: "Auditoria focada de parâmetros via binário externo dalfox (MIT) supervisionado pelo escopo",
+    icon: "globe",
+    badge: "Plugin Externo",
+    capabilityId: "external.dalfox-param-scan",
+    riskLabel: "Moderado (Escopo)",
+  },
+  {
+    id: "dns-recon",
+    category: "network",
+    title: "Reconhecimento DNS, Subdomínios & Email (SPF/DMARC)",
+    shortTitle: "DNS & Email",
+    subtitle: "Registros DNS, postura SPF/DMARC/CAA, higiene contra Subdomain Takeover e crt.sh passivo",
+    icon: "server",
+    badge: "MIT Nativo",
+    capabilityId: "network-assessment.dns-recon",
+    riskLabel: "Baixo (Escopo)",
+  },
+  {
+    id: "binary-disasm",
+    category: "forensics",
+    title: "Disassembler Nativo (x86_64 / ARM64)",
+    shortTitle: "Disassembler",
+    subtitle: "Desmontagem estática offline de instruções x86_64 e ARM64 para ELF64, PE/COFF e Mach-O",
+    icon: "cube",
+    badge: "MIT Nativo",
+    capabilityId: "reverse-engineering.binary-disasm",
+    riskLabel: "Somente Leitura",
+  },
+  {
+    id: "ghidra",
+    category: "forensics",
+    title: "Ghidra Headless Decompiler",
+    shortTitle: "Ghidra Headless",
+    subtitle: "Análise estática profunda via analyzeHeadless (Apache-2.0) com custódia SHA-256",
+    icon: "cube",
+    badge: "Plugin Externo",
+    capabilityId: "external.ghidra-decompile",
+    riskLabel: "Somente Leitura",
+  },
+  {
     id: "mobile-triage",
     category: "forensics",
-    title: "Forense Mobile (.apk / .ipa / Backups)",
-    shortTitle: "Mobile APK/IPA",
-    subtitle: "Inspeciona pacotes mobile em memória sem extração em disco: permissões perigosas, DEX, JNI e IoCs",
+    title: "Forense Mobile (.apk / .dex / .ipa / Backups)",
+    shortTitle: "Mobile APK/DEX",
+    subtitle: "Inspeciona pacotes mobile e decodifica tabelas Dalvik classes.dex (classes/métodos), permissões e IoCs",
     icon: "shield",
     badge: "MIT Nativo",
     capabilityId: "mobile-forensics.artifact-triage",
     riskLabel: "Somente Leitura",
   },
   {
+    id: "jadx",
+    category: "forensics",
+    title: "JADX Android Decompiler (.apk/.dex → .java)",
+    shortTitle: "JADX Java",
+    subtitle: "Descompila pacotes Android para código Java navegável em .cyberlab/artifacts/jadx/ (Apache-2.0)",
+    icon: "shield",
+    badge: "Plugin Externo",
+    capabilityId: "external.jadx-decompile",
+    riskLabel: "Somente Leitura",
+  },
+  {
+    id: "yara-scan",
+    category: "forensics",
+    title: "Caça de Indicadores YARA Nativo",
+    shortTitle: "YARA Nativo",
+    subtitle: "Motor integrado de regras YARA (strings ASCII/wide, hex curinga ?? e condições booleanas)",
+    icon: "code-lines",
+    badge: "MIT Nativo",
+    capabilityId: "forensics.yara-scan",
+    riskLabel: "Somente Leitura",
+  },
+  {
+    id: "yarax",
+    category: "forensics",
+    title: "YARA-X Oficial (VirusTotal yr)",
+    shortTitle: "YARA-X (yr)",
+    subtitle: "Execução governada de arquivos .yar/.yara via motor YARA-X em Rust (BSD-3-Clause)",
+    icon: "code-lines",
+    badge: "Plugin Externo",
+    capabilityId: "external.yarax-scan",
+    riskLabel: "Somente Leitura",
+  },
+  {
     id: "cdi-hub",
     category: "cdi_external",
-    title: "Hub Multi-CDI (Salem, Kairós, Naia, CDI-04)",
+    title: "Hub Multi-CDI (Kairós, Naia, Salem, Nova)",
     shortTitle: "Agentes CDI",
-    subtitle: "Despacho manual individual ou paralelo para os 4 CDIs (8788–8791), Secret HMAC e log bidirecional",
+    subtitle: "Despacho manual individual ou paralelo para Kairós (8788), Naia (8789), Salem (8790) e Nova (8791)",
     icon: "brain",
     badge: "Agentes CDI",
     riskLabel: "HMAC-SHA256 Bidirecional",
@@ -259,9 +358,29 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
     id: "web-suite",
     title: "Web Security Suite",
     shortTitle: "Web Suite",
-    subtitle: "Proxy Local · Repeater & Comparer · Scanner & Fuzzer (Nativo, Nuclei, ffuf) · Headers · Decoder & JWT",
+    subtitle: "Proxy HTTPS CA & WS · Repeater · Intruder (§slot§) · Auditor de Parâmetros & Dalfox · Scanner · JWT",
     icon: "globe",
-    keywords: ["burp", "opentrap", "proxy", "repeater", "comparer", "nuclei", "ffuf", "jwt", "decoder", "base64", "headers", "cookies", "cors", "web", "http"],
+    keywords: [
+      "burp",
+      "opentrap",
+      "proxy",
+      "https",
+      "ca",
+      "websocket",
+      "repeater",
+      "intruder",
+      "sniper",
+      "dalfox",
+      "xss",
+      "sqli",
+      "parametros",
+      "nuclei",
+      "ffuf",
+      "jwt",
+      "decoder",
+      "headers",
+      "web",
+    ],
     functions: [
       {
         id: "repeater",
@@ -271,21 +390,53 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
           {
             toolId: "http-repeater",
             label: "HTTP Repeater & Diff",
-            badge: "Nativo",
+            badge: "MIT Nativo",
             description: "Requisição estruturada + comparação de resposta",
           },
         ],
       },
       {
         id: "proxy",
-        label: "Proxy Intercept",
-        description: "Capture tráfego HTTP local em 127.0.0.1:8899 e envie requisições com 1 clique para o Repeater ou Decoder",
+        label: "Proxy Intercept (HTTPS / WS)",
+        description: "Capture HTTP, HTTPS (MITM com Root CA local .crt ou túnel CONNECT) e WebSockets (ws/wss) em 127.0.0.1:8899",
         engines: [
           {
             toolId: "http-proxy",
-            label: "Proxy Local (8899)",
-            badge: "Nativo",
-            description: "Listener HTTP com filtro de escopo",
+            label: "Proxy Local HTTP / HTTPS CA / WS",
+            badge: "MIT Nativo",
+            description: "Root CA ECDSA P-256 local + inspeção TLS & WebSocket",
+          },
+        ],
+      },
+      {
+        id: "intruder",
+        label: "Intruder / Payload Lab",
+        description: "Marque slots §payload§ na URL, cabeçalhos ou corpo e execute matrizes Sniper, Battering Ram ou Pitchfork",
+        engines: [
+          {
+            toolId: "http-intruder",
+            label: "HTTP Intruder (§slot§ Matrix)",
+            badge: "MIT Nativo",
+            description: "Sniper / Battering Ram / Pitchfork com rate-limit e grep",
+          },
+        ],
+      },
+      {
+        id: "params",
+        label: "Auditor de Parâmetros",
+        description: "Audite reflexão contextual não-destrutiva, vazamento de erros de banco/framework, open-redirect ou Dalfox",
+        engines: [
+          {
+            toolId: "param-audit",
+            label: "Auditor Diferencial (Não-Destrutivo)",
+            badge: "MIT Nativo",
+            description: "Baseline vs canário seguro sem payloads destrutivos",
+          },
+          {
+            toolId: "dalfox",
+            label: "Dalfox Parameter Scanner",
+            badge: "MIT Externo",
+            description: "Scanner especializado de parâmetros e reflexão XSS",
           },
         ],
       },
@@ -345,10 +496,10 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
   {
     id: "network-suite",
     title: "Network & TLS Recon",
-    shortTitle: "Rede & TLS",
-    subtitle: "Port Scanner TCP & Banners · Nmap (-sV) · Inspetor de Certificados TLS / X.509 & SANs",
+    shortTitle: "Rede, DNS & TLS",
+    subtitle: "Port Scanner TCP & Nmap (-sV) · Certificados TLS / X.509 · DNS, Subdomínios, SPF/DMARC & crt.sh",
     icon: "server",
-    keywords: ["nmap", "tcp", "portas", "banner", "tls", "ssl", "x509", "certificado", "sni", "rede"],
+    keywords: ["nmap", "tcp", "portas", "banner", "tls", "ssl", "x509", "certificado", "sni", "rede", "dns", "subdominio", "spf", "dmarc", "takeover", "crt"],
     functions: [
       {
         id: "ports",
@@ -377,8 +528,21 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
           {
             toolId: "tls-inspector",
             label: "Inspetor TLS & X.509",
-            badge: "Nativo",
+            badge: "MIT Nativo",
             description: "Handshake passivo com suporte a SNI customizado",
+          },
+        ],
+      },
+      {
+        id: "dns",
+        label: "DNS, Subdomínios & Email",
+        description: "Consulte registros A/AAAA/CNAME/MX/NS/TXT/CAA, audite SPF/DMARC, detecte CNAMEs órfãos e busque crt.sh",
+        engines: [
+          {
+            toolId: "dns-recon",
+            label: "DNS Surface, SPF/DMARC & Takeover Hygiene",
+            badge: "MIT Nativo",
+            description: "Reconhecimento DNS completo + transparência de certificados",
           },
         ],
       },
@@ -416,34 +580,99 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
   {
     id: "reversing-suite",
     title: "Reverse Engineering & Mobile Lab",
-    shortTitle: "Reversa & Mobile",
-    subtitle: "Triagem estática de executáveis (ELF / PE / Mach-O + entropia) e forense de pacotes Mobile (.apk / .ipa)",
+    shortTitle: "Reversa, Mobile & YARA",
+    subtitle: "ELF/PE/Mach-O · Disassembler x86_64/ARM64 & Ghidra · Android DEX & JADX (.java) · Regras YARA / YARA-X",
     icon: "cube",
-    keywords: ["ghidra", "radare2", "elf", "pe", "exe", "dll", "mach-o", "apk", "ipa", "android", "ios", "mvt", "mobsf", "binario", "entropia"],
+    keywords: [
+      "ghidra",
+      "disassembler",
+      "x86_64",
+      "arm64",
+      "asm",
+      "elf",
+      "pe",
+      "exe",
+      "dll",
+      "mach-o",
+      "apk",
+      "dex",
+      "jadx",
+      "ipa",
+      "android",
+      "ios",
+      "yara",
+      "yarax",
+      "malware",
+      "binario",
+    ],
     functions: [
       {
         id: "binary",
-        label: "Binários Desktop/Servidor (ELF / PE / Mach-O)",
+        label: "Binários ELF / PE / Mach-O",
         description: "Arquitetura, seções compactadas (alta entropia), flags NX/PIE/ASLR e strings suspeitas sem executar a amostra",
         engines: [
           {
             toolId: "binary-triage",
             label: "Triagem Estática de Binários",
-            badge: "Nativo",
+            badge: "MIT Nativo",
             description: "Parser seguro offline ELF / PE / Mach-O",
           },
         ],
       },
       {
+        id: "disasm",
+        label: "Disassembly & Decompilação",
+        description: "Desmonte instruções nativas x86_64 / ARM64 do entrypoint ou invoque o Ghidra Headless (Apache-2.0)",
+        engines: [
+          {
+            toolId: "binary-disasm",
+            label: "Disassembler x86_64 / ARM64",
+            badge: "MIT Nativo",
+            description: "Desmontagem imediata com resolução de símbolos",
+          },
+          {
+            toolId: "ghidra",
+            label: "Ghidra Headless (analyzeHeadless)",
+            badge: "Apache-2.0 Externo",
+            description: "Análise profunda via suíte oficial Ghidra",
+          },
+        ],
+      },
+      {
         id: "mobile",
-        label: "Forense Mobile (.apk / .ipa / Backups)",
-        description: "Inspeção em memória (anti-ZipSlip) de manifestos, permissões perigosas, DEX/JNI e cruzamento de domínios IoC",
+        label: "Forense Mobile & JADX",
+        description: "Inspecione classes/métodos Dalvik (.dex), manifestos e IoCs em memória ou descompile para .java com JADX",
         engines: [
           {
             toolId: "mobile-triage",
-            label: "Analisador de Artefatos Mobile",
-            badge: "Nativo",
-            description: "Alternativa integrada estilo MVT / MobSF",
+            label: "Inspetor .apk / .dex / .ipa (Dalvik)",
+            badge: "MIT Nativo",
+            description: "Tabelas classes.dex + permissões + IoCs sem extrair ZIP",
+          },
+          {
+            toolId: "jadx",
+            label: "JADX Decompiler (.apk → .java)",
+            badge: "Apache-2.0 Externo",
+            description: "Gera código Java navegável em .cyberlab/artifacts/jadx/",
+          },
+        ],
+      },
+      {
+        id: "yara",
+        label: "Caça com YARA / YARA-X",
+        description: "Execute regras YARA customizadas (strings ASCII/wide, hex curinga ?? e condições) em binários ou pastas",
+        engines: [
+          {
+            toolId: "yara-scan",
+            label: "Motor YARA Integrado",
+            badge: "MIT Nativo",
+            description: "Editor de regras YARA ao vivo, zero dependências externas",
+          },
+          {
+            toolId: "yarax",
+            label: "YARA-X Oficial (yr)",
+            badge: "BSD-3-Clause Externo",
+            description: "Scanner oficial VirusTotal YARA-X sobre arquivo .yar",
           },
         ],
       },
@@ -465,7 +694,7 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
           {
             toolId: "workspace-audit",
             label: "Workspace Code & Secret Audit",
-            badge: "Nativo",
+            badge: "MIT Nativo",
             description: "Regras estáticas para segredos, TLS e execução insegura",
           },
         ],
@@ -476,9 +705,9 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
     id: "cdi-suite",
     title: "Hub de Agentes Externos CDI",
     shortTitle: "Agentes CDI",
-    subtitle: "Salem, Kairós, Naia e CDI-04 (portas 8788–8791) — despacho individual ou paralelo e ponte HMAC-SHA256",
+    subtitle: "Kairós (8788), Naia (8789), Salem (8790) e Nova (8791) — despacho individual/paralelo e ponte HMAC-SHA256",
     icon: "brain",
-    keywords: ["cdi", "salem", "kairos", "naia", "chat.py", "parceiro", "hmac", "paralelo"],
+    keywords: ["cdi", "kairos", "naia", "salem", "nova", "chat.py", "parceiro", "hmac", "paralelo"],
     functions: [
       {
         id: "dispatch",
@@ -615,8 +844,48 @@ export function createDefaultToolDrafts(): ManualToolDraftMap {
     "http-proxy": {
       port: 8899,
       scopeOnly: true,
+      httpsMode: "tls_intercept",
+      allowSelfSignedUpstream: false,
       filterText: "",
       selectedEntryId: "",
+    },
+    "http-intruder": {
+      method: "GET",
+      url: "http://127.0.0.1:4096/api/§endpoint§",
+      headers: [{ id: "ih-1", enabled: true, name: "Accept", value: "application/json" }],
+      bodyTemplate: "",
+      attackMode: "sniper",
+      payloadSet1Text: "info\nhealth\nstatus\nversion",
+      payloadSet2Text: "1\n2\n3\n4",
+      maxRequests: 50,
+      concurrency: 2,
+      delayMs: 25,
+      timeoutMs: 5000,
+      grepMatch: "",
+      urlEncodePayloads: true,
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson:
+        '{\n  "url": "http://127.0.0.1:4096/api/§endpoint§",\n  "attackMode": "sniper",\n  "payloadSet1": ["info", "health"]\n}',
+    },
+    "param-audit": {
+      url: "http://127.0.0.1:4096/?q=test&redirect=/home",
+      method: "GET",
+      parameterNamesText: "",
+      checkReflectionContext: true,
+      checkErrorLeakage: true,
+      checkRedirectHygiene: true,
+      timeoutMs: 5000,
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson: '{\n  "url": "http://127.0.0.1:4096/?q=test"\n}',
+    },
+    dalfox: {
+      url: "http://127.0.0.1:8080/search?q=test",
+      paramName: "q",
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson: '{\n  "url": "http://127.0.0.1:8080/search?q=test",\n  "paramName": "q"\n}',
     },
     "http-headers": {
       url: "http://127.0.0.1:4096",
@@ -688,6 +957,18 @@ export function createDefaultToolDrafts(): ManualToolDraftMap {
       useRawJson: false,
       rawJson: "{\n  \"host\": \"127.0.0.1\",\n  \"ports\": \"80,443,8080\",\n  \"serviceVersion\": true\n}",
     },
+    "dns-recon": {
+      host: "localhost",
+      nameserver: "",
+      checkEmailPosture: true,
+      enumerateSubdomains: true,
+      subdomainPrefixesText: "www,api,dev,staging,mail,admin,auth,cdn",
+      includeCrtSh: false,
+      timeoutMs: 4000,
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson: '{\n  "host": "localhost",\n  "checkEmailPosture": true\n}',
+    },
     "pcap-analyzer": {
       pcapPath: "captura.pcap",
       maxPackets: 5000,
@@ -714,15 +995,53 @@ export function createDefaultToolDrafts(): ManualToolDraftMap {
       useRawJson: false,
       rawJson: "{\n  \"binaryPath\": \"amostra.elf\",\n  \"minStringLength\": 6,\n  \"maxStrings\": 120\n}",
     },
+    "binary-disasm": {
+      binaryPath: "amostra.elf",
+      architecture: "auto",
+      startOffsetHex: "",
+      maxInstructions: 80,
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson: '{\n  "binaryPath": "amostra.elf",\n  "maxInstructions": 80\n}',
+    },
+    ghidra: {
+      binaryPath: "amostra.elf",
+      processor: "",
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson: '{\n  "binaryPath": "amostra.elf"\n}',
+    },
     "mobile-triage": {
       artifactPath: "aplicativo.apk",
       iocDomainsText: "",
       useRawJson: false,
       rawJson: "{\n  \"artifactPath\": \"aplicativo.apk\"\n}",
     },
+    jadx: {
+      artifactPath: "aplicativo.apk",
+      deobfuscate: true,
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson: '{\n  "artifactPath": "aplicativo.apk",\n  "deobfuscate": true\n}',
+    },
+    "yara-scan": {
+      targetPath: "cyberlab",
+      rulesText: `rule Suspicious_Hardcoded_Token {\n  meta:\n    description = "Detecta cabeçalhos de chave privada ou tokens sensíveis"\n    severity = "medium"\n  strings:\n    $pem = "BEGIN PRIVATE KEY" ascii nocase\n    $jwt = "eyJhbGciOi" ascii\n    $elf = { 7F 45 4C 46 }\n  condition:\n    $pem or $jwt or $elf\n}`,
+      maxFiles: 120,
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson: '{\n  "targetPath": "cyberlab",\n  "rulesText": "rule Demo { strings: $a = \\"CyberLab\\" condition: $a }"\n}',
+    },
+    yarax: {
+      rulesPath: "regras.yar",
+      targetPath: "amostra.elf",
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson: '{\n  "rulesPath": "regras.yar",\n  "targetPath": "amostra.elf"\n}',
+    },
     "cdi-hub": {
       cdiSubTab: "dispatch",
-      selectedPartnerIds: ["salem"],
+      selectedPartnerIds: ["kairos"],
       objective: "Revisar evidências e sugerir próximas verificações de segurança dentro do escopo",
       contextText: "",
       selectedEvidenceIds: [],
@@ -1113,6 +1432,240 @@ export function buildCapabilityInput<K extends ManualToolId>(
         mode: "manual",
         targetSummary: `Mobile ${d.artifactPath.trim()}${iocDomains.length ? ` (${iocDomains.length} IoCs)` : ""}`,
         input,
+      }
+    }
+    case "http-intruder": {
+      const d = drafts["http-intruder"]
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "web-assessment.http-intruder",
+          mode: d.executionMode,
+          targetSummary: String(parsed.url ?? d.url),
+          input: parsed,
+        }
+      }
+      const payloadSet1 = d.payloadSet1Text
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+      const payloadSet2 = d.payloadSet2Text
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+      const headers = rowsToRecord(d.headers)
+      const input: Record<string, unknown> = {
+        url: d.url.trim(),
+        method: d.method,
+        attackMode: d.attackMode,
+        payloadSet1,
+        maxRequests: Math.min(200, Math.max(1, Math.trunc(Number(d.maxRequests) || 50))),
+        concurrency: Math.min(5, Math.max(1, Math.trunc(Number(d.concurrency) || 2))),
+        delayMs: Math.min(5000, Math.max(0, Math.trunc(Number(d.delayMs) || 0))),
+        timeoutMs: Math.min(20000, Math.max(500, Math.trunc(Number(d.timeoutMs) || 5000))),
+        urlEncodePayloads: d.urlEncodePayloads,
+      }
+      if (headers) input.headers = headers
+      if (d.bodyTemplate.length > 0) input.bodyTemplate = d.bodyTemplate
+      if (d.attackMode === "pitchfork" && payloadSet2.length > 0) input.payloadSet2 = payloadSet2
+      if (d.grepMatch.trim()) input.grepMatch = d.grepMatch.trim()
+      return {
+        capabilityId: "web-assessment.http-intruder",
+        mode: d.executionMode,
+        targetSummary: `Intruder ${d.attackMode} ${d.method} ${d.url.trim()} (${payloadSet1.length} payloads)`,
+        input,
+      }
+    }
+    case "param-audit": {
+      const d = drafts["param-audit"]
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "web-assessment.param-audit",
+          mode: d.executionMode,
+          targetSummary: String(parsed.url ?? d.url),
+          input: parsed,
+        }
+      }
+      const parameterNames = d.parameterNamesText
+        .split(/[\r\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+      const input: Record<string, unknown> = {
+        url: d.url.trim(),
+        method: d.method,
+        checkReflectionContext: d.checkReflectionContext,
+        checkErrorLeakage: d.checkErrorLeakage,
+        checkRedirectHygiene: d.checkRedirectHygiene,
+        timeoutMs: Math.min(15000, Math.max(500, Math.trunc(Number(d.timeoutMs) || 5000))),
+      }
+      if (parameterNames.length > 0) input.parameterNames = parameterNames
+      return {
+        capabilityId: "web-assessment.param-audit",
+        mode: d.executionMode,
+        targetSummary: `Param Audit ${d.method} ${d.url.trim()}`,
+        input,
+      }
+    }
+    case "dalfox": {
+      const d = drafts.dalfox
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "external.dalfox-param-scan",
+          mode: d.executionMode,
+          targetSummary: String(parsed.url ?? d.url),
+          input: parsed,
+        }
+      }
+      const input: Record<string, unknown> = { url: d.url.trim() }
+      if (d.paramName.trim()) input.paramName = d.paramName.trim()
+      return {
+        capabilityId: "external.dalfox-param-scan",
+        mode: d.executionMode,
+        targetSummary: `Dalfox ${d.url.trim()}`,
+        input,
+      }
+    }
+    case "dns-recon": {
+      const d = drafts["dns-recon"]
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "network-assessment.dns-recon",
+          mode: d.executionMode,
+          targetSummary: String(parsed.host ?? d.host),
+          input: parsed,
+        }
+      }
+      const subdomainPrefixes = d.subdomainPrefixesText
+        .split(/[\r\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+      const input: Record<string, unknown> = {
+        host: d.host.trim(),
+        checkEmailPosture: d.checkEmailPosture,
+        enumerateSubdomains: d.enumerateSubdomains,
+        includeCrtSh: d.includeCrtSh,
+        timeoutMs: Math.min(15000, Math.max(800, Math.trunc(Number(d.timeoutMs) || 4000))),
+      }
+      if (d.nameserver.trim()) input.nameserver = d.nameserver.trim()
+      if (subdomainPrefixes.length > 0) input.subdomainPrefixes = subdomainPrefixes
+      return {
+        capabilityId: "network-assessment.dns-recon",
+        mode: d.executionMode,
+        targetSummary: `DNS Recon ${d.host.trim()}${d.includeCrtSh ? " + crt.sh" : ""}`,
+        input,
+      }
+    }
+    case "binary-disasm": {
+      const d = drafts["binary-disasm"]
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "reverse-engineering.binary-disasm",
+          mode: d.executionMode,
+          targetSummary: String(parsed.binaryPath ?? d.binaryPath),
+          input: parsed,
+        }
+      }
+      const input: Record<string, unknown> = {
+        binaryPath: d.binaryPath.trim(),
+        architecture: d.architecture,
+        maxInstructions: Math.min(256, Math.max(8, Math.trunc(Number(d.maxInstructions) || 80))),
+      }
+      if (d.startOffsetHex.trim()) {
+        input.startOffsetHex = d.startOffsetHex.trim()
+      }
+      return {
+        capabilityId: "reverse-engineering.binary-disasm",
+        mode: d.executionMode,
+        targetSummary: `Disasm (${d.architecture}) ${d.binaryPath.trim()}`,
+        input,
+      }
+    }
+    case "ghidra": {
+      const d = drafts.ghidra
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "external.ghidra-decompile",
+          mode: d.executionMode,
+          targetSummary: String(parsed.binaryPath ?? d.binaryPath),
+          input: parsed,
+        }
+      }
+      const input: Record<string, unknown> = { binaryPath: d.binaryPath.trim() }
+      if (d.processor.trim()) input.processor = d.processor.trim()
+      return {
+        capabilityId: "external.ghidra-decompile",
+        mode: d.executionMode,
+        targetSummary: `Ghidra Headless ${d.binaryPath.trim()}`,
+        input,
+      }
+    }
+    case "jadx": {
+      const d = drafts.jadx
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "external.jadx-decompile",
+          mode: d.executionMode,
+          targetSummary: String(parsed.artifactPath ?? d.artifactPath),
+          input: parsed,
+        }
+      }
+      return {
+        capabilityId: "external.jadx-decompile",
+        mode: d.executionMode,
+        targetSummary: `JADX ${d.artifactPath.trim()}`,
+        input: {
+          artifactPath: d.artifactPath.trim(),
+          deobfuscate: d.deobfuscate,
+        },
+      }
+    }
+    case "yara-scan": {
+      const d = drafts["yara-scan"]
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "forensics.yara-scan",
+          mode: d.executionMode,
+          targetSummary: String(parsed.targetPath ?? d.targetPath),
+          input: parsed,
+        }
+      }
+      return {
+        capabilityId: "forensics.yara-scan",
+        mode: d.executionMode,
+        targetSummary: `YARA Scan ${d.targetPath.trim()}`,
+        input: {
+          targetPath: d.targetPath.trim(),
+          rulesText: d.rulesText,
+          maxFiles: Math.min(500, Math.max(1, Math.trunc(Number(d.maxFiles) || 120))),
+        },
+      }
+    }
+    case "yarax": {
+      const d = drafts.yarax
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "external.yarax-scan",
+          mode: d.executionMode,
+          targetSummary: String(parsed.targetPath ?? d.targetPath),
+          input: parsed,
+        }
+      }
+      return {
+        capabilityId: "external.yarax-scan",
+        mode: d.executionMode,
+        targetSummary: `YARA-X ${d.rulesPath.trim()} → ${d.targetPath.trim()}`,
+        input: {
+          rulesPath: d.rulesPath.trim(),
+          targetPath: d.targetPath.trim(),
+        },
       }
     }
     default:

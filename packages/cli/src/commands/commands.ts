@@ -630,7 +630,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         }),
         Spec.make("partner", {
           description:
-            "Configure CDI partner agents (Salem, Kairos, Naia, etc.), manage CYBERLAB_PARTNER_SECRET, or dispatch tasks (single or parallel)",
+            "Configure CDI partner agents (Kairos, Naia, Salem, Nova, etc.), manage CYBERLAB_PARTNER_SECRET, or dispatch tasks (single or parallel)",
           params: {
             objective: Flag.String("objective").pipe(
               Flag.withAlias("o"),
@@ -659,7 +659,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
               Flag.withDefault(false),
             ),
             preset4: Flag.Boolean("preset-4").pipe(
-              Flag.withDescription("Register the 4 default CDI agents on ports 8788-8791 (salem, kairos, naia, cdi-4)"),
+              Flag.withDescription("Register the 4 default CDI agents on ports 8788-8791 (kairos, naia, salem, nova)"),
               Flag.withDefault(false),
             ),
             generateSecret: Flag.Boolean("generate-secret").pipe(

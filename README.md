@@ -105,13 +105,16 @@ Dentro dessa **única interface (`http://127.0.0.1:4096` ou `http://localhost:40
 1. **Todas as funções nativas do OpenCode V2**: Sessões de Chat com IA, Provedores e Modelos (`Settings → Providers / Models`), Servidores MCP, Plugins, Atalhos, Árvore de Arquivos, Visualizador de Diffs e Terminal integrado.
 2. **Configurações Nativas do CyberLab OS (`Settings → CyberLab OS` ou `http://127.0.0.1:4096/settings?tab=cyberlab`)**:
    - **Escopo & Proteção de Alvos**: toggle de alvos externos e cadastro visual de IPs, domínios, CIDRs e URLs autorizados.
-   - **Agentes Externos CDI (`Salem`, `Kairós`, `Naia`, `CDI-04` — Portas `8788–8791`)**: botão de 1 clique **"Preset 4 CDIs"**, geração/edição do `CYBERLAB_PARTNER_SECRET`, botão **"Copiar Comandos PowerShell"**, teste de Ping e nível de autonomia de cada CDI.
-   - **Motores Externos Opcionais**: status de `nmap`, `nuclei`, `ffuf`, `tshark` e botão de sincronização da pasta `.cyberlab/inbox`.
-3. **Painel Lateral Limpo do CyberLab dentro de qualquer Sessão** (clique no botão **`CyberLab`** no topo da sessão, digite **`/cyberlab`** no chat, ou use `Ctrl+Alt+L`):
-   - **Aba `Web & API`**: HTTP Repeater & Comparer, Proxy Local de Captura (`127.0.0.1:8899`), Scanner Web (Nativo, Nuclei ou ffuf) e Decoder/JWT/Entropia.
-   - **Aba `Rede & Arquivos`**: Inspetor de Certificado TLS/X.509, Teste de Portas TCP / Nmap, Dissecador `.pcap` e Triagem Estática de Binários (`ELF`/`PE`) ou `.apk`.
-   - **Aba `Agentes CDI`**: Despacho individual ou paralelo para Salem, Kairós, Naia e CDI-04, visualização das respostas e anexo em 1 clique direto no Chat da IA (**"Anexar ao Chat"**).
-   - **Aba `Evidências`**: Aprovações humanas pendentes em 1 clique, cadeia de custódia `SHA-256`, registo de Findings e exportação de Relatório Markdown (`.md`).
+   - **Agentes Externos CDI (`Kairós` `8788`, `Naia` `8789`, `Salem` `8790`, `Nova` `8791`)**: botão de 1 clique **"Preset 4 CDIs"**, geração/edição do `CYBERLAB_PARTNER_SECRET`, botão **"Copiar Comandos PowerShell"**, teste de Ping e nível de autonomia de cada CDI.
+   - **Motores Externos Opcionais**: status de `nmap`, `nuclei`, `ffuf`, `tshark`, `dalfox`, `ghidra-headless`, `jadx`, `yarax` e botão de sincronização da pasta `.cyberlab/inbox`.
+3. **Botão Único "Ferramentas" Abaixo da Caixa de Diálogo (7 Suítes Estilo Burp Suite)**:
+   - **`Web Security Suite`**: HTTP Repeater & Comparer, Proxy Local HTTP/HTTPS MITM (com Root CA `.crt` ECDSA P-256 local) & WebSocket (`ws`/`wss`), HTTP Intruder (`§slot§` Sniper/Battering Ram/Pitchfork), Auditor Diferencial de Parâmetros & Dalfox (`MIT`), Scanner Web (`Nativo`, `Nuclei`, `ffuf`), Headers & Cookies, e Decoder/JWT/Sequencer.
+   - **`Network & TLS Recon`**: Sonda TCP & Banners / Nmap (`-sV`), Inspetor TLS/X.509 e Reconhecimento DNS, Subdomínios, SPF/DMARC/CAA, Subdomain Takeover Hygiene & `crt.sh`.
+   - **`Packet Capture Analyzer`**: Dissecador nativo `.pcap` e Wireshark `tshark`.
+   - **`Reverse Engineering & Mobile Lab`**: Triagem de Binários (`ELF`/`PE`/`Mach-O`), Disassembler `x86_64`/`ARM64` & Ghidra Headless (`Apache-2.0`), Forense Mobile (`.apk`/`.dex` Dalvik & `.ipa`) & JADX Decompiler (`.java`), e Caça com Regras YARA Nativo & YARA-X (`yr`, `BSD-3-Clause`).
+   - **`Auditor de Código & Segredos (SAST)`**: Varredura estática somente-leitura do repositório.
+   - **`Hub de Agentes Externos CDI`**: Despacho individual ou paralelo para **Kairós (`8788`)**, **Naia (`8789`)**, **Salem (`8790`)** e **Nova (`8791`)**, com anexo em 1 clique na caixa de diálogo.
+   - **`Escopo, Cofre SHA-256 & Relatório`**: Escopo de alvos, aprovações, cofre forense `SHA-256`, importação externa/inbox, findings e exportação de relatório `.md`.
 
 ### Modo CLI — Linha de Comando Direta (`cyberlab` CLI)
 
@@ -271,23 +274,23 @@ execucao = cyberlab.initiate_action("code-analysis.workspace-audit", {"maxFiles"
 tools_cyberlab = build_cyberlab_cdi_tools(cyberlab)
 ```
 
-### Subindo as pontes dos 4 CDIs (Portas `8788–8791`) e despachando em paralelo
+### Subindo as pontes dos 4 CDIs (`Kairós 8788`, `Naia 8789`, `Salem 8790`, `Nova 8791`) e despachando em paralelo
 
-```bash
-# Gerar segredo + registar os 4 CDIs (Salem 8788, Kairós 8789, Naia 8790, CDI-04 8791):
+```powershell
+# Gerar segredo + registar os 4 CDIs (Kairós 8788, Naia 8789, Salem 8790, Nova 8791):
 bun run cyberlab partner --generate-secret --preset-4
 
-# Em cada CDI (ex.: --mode import apontando para process_message do seu chat.py):
-python3 integrations/partners/chat_py_bridge.py --partner-id salem  --port 8788 --mode import --callable /caminho/salem/chat.py:process_message
-python3 integrations/partners/chat_py_bridge.py --partner-id kairos --port 8789 --mode import --callable /caminho/kairos/chat.py:process_message
-python3 integrations/partners/chat_py_bridge.py --partner-id naia   --port 8790 --mode import --callable /caminho/naia/chat.py:process_message
-python3 integrations/partners/chat_py_bridge.py --partner-id cdi-4  --port 8791 --mode import --callable /caminho/cdi4/chat.py:process_message
+# No Windows PowerShell (ou bash), suba cada CDI na sua porta correspondente:
+python integrations/partners/chat_py_bridge.py --port 8788 --partner-id kairos --chat-py "../kairos/chat.py"
+python integrations/partners/chat_py_bridge.py --port 8789 --partner-id naia   --chat-py "../naia/chat.py"
+python integrations/partners/chat_py_bridge.py --port 8790 --partner-id salem  --chat-py "../salem/chat.py"
+python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   --chat-py "../nova/chat.py"
 
-# Chamar apenas 1 especialista (ex.: Salem):
-bun run cyberlab partner --partner-id salem -o "Analisar este log de segurança"
+# Chamar apenas 1 especialista (ex.: Kairós):
+bun run cyberlab partner --partner-id kairos -o "Revisar modelo de ameaças deste serviço"
 
-# Ou chamar Kairós + Naia + Salem EM PARALELO na mesma tarefa:
-bun run cyberlab partner --partners salem,kairos,naia -o "Analisar arquitetura, logs e inteligência de ameaças em paralelo"
+# Ou chamar Kairós + Naia + Salem + Nova EM PARALELO na mesma tarefa:
+bun run cyberlab partner --partners kairos,naia,salem,nova -o "Analisar arquitetura, forense, logs e código em paralelo"
 ```
 
 ---
@@ -297,20 +300,25 @@ bun run cyberlab partner --partners salem,kairos,naia -o "Analisar arquitetura, 
 Conforme auditado em [`docs/TOOL_INVENTORY.md`](docs/TOOL_INVENTORY.md) e [`docs/LICENSE_POLICY.md`](docs/LICENSE_POLICY.md):
 
 ### A. Suíte Nativa Embutida Diretamente no Projeto (`approved_embed` — 100% `MIT`, zero dependências externas)
-Para máxima produtividade e integração unificada com `PolicyEngine`, `ScopeController` e `EvidenceStore` (`SHA-256`), o CyberLab OS traz **10 capacidades nativas prontas para uso imediato dentro de `integrations/`**:
+Para máxima produtividade e integração unificada com `PolicyEngine`, `ScopeController` e `EvidenceStore` (`SHA-256`), o CyberLab OS traz **15 capacidades nativas prontas para uso imediato dentro de `integrations/`** (além do Proxy Local HTTP/HTTPS MITM + WebSocket em `cyberlab/proxy/`):
 
 | Capacidade (`capabilityId`) | Substituto / Inspiração Open-Source | Arquivo no Repositório (`MIT`) |
 |---|---|---|
 | **`code-analysis.workspace-audit`** | Auditoria estática de segredos e configs | `integrations/code-analysis/workspace-audit-executor.ts` |
 | **`web-assessment.http-security-headers`** | Inspetor passivo HSTS/CSP/CORS/Cookies | `integrations/web-security/http-security-inspector.ts` |
 | **`web-assessment.http-repeater`** | **OpenTRAP / Burp Repeater + Comparer** | `integrations/web-security/http-repeater-comparer.ts` |
+| **`web-assessment.http-intruder`** | **Burp / OpenTRAP Intruder (`§slot§`)** | `integrations/web-security/http-intruder-matrix.ts` |
+| **`web-assessment.param-audit`** | **Auditor Diferencial Não-Destrutivo** | `integrations/web-security/differential-param-auditor.ts` |
 | **`web-assessment.decoder-sequencer`** | **OpenTRAP / Burp Decoder + JWT + Sequencer** | `integrations/web-security/decoder-sequencer.ts` |
 | **`web-assessment.surface-discovery`** | **Nuclei / ffuf** (templates anti-soft-404) | `integrations/web-security/surface-discovery.ts` |
 | **`network-assessment.tcp-surface-probe`** | **Nmap** (sonda TCP controlada + banners) | `integrations/network-observation/tcp-banner-inspector.ts` |
 | **`network-assessment.tls-inspector`** | **testssl / sslscan** (TLS + cadeia X.509/SAN) | `integrations/network-observation/tls-certificate-inspector.ts` |
+| **`network-assessment.dns-recon`** | **dig / subfinder / dmarc** (DNS + SPF/DMARC + `crt.sh`) | `integrations/network-observation/dns-surface-recon.ts` |
 | **`network-assessment.pcap-analyzer`** | **Wireshark / `tshark`** (parser binário `.pcap`) | `integrations/network-observation/pcap-packet-analyzer.ts` |
 | **`reverse-engineering.binary-triage`** | **REA / radare2** (`ELF`/`PE`/`Mach-O` + entropia) | `integrations/reverse-forensics/binary-static-triage.ts` |
-| **`mobile-forensics.artifact-triage`** | **MVT / MobSF** (`.apk`/`.ipa`/backups + IoCs) | `integrations/reverse-forensics/mobile-artifact-triage.ts` |
+| **`reverse-engineering.binary-disasm`** | **Capstone / objdump** (`x86_64` & `ARM64` ASM) | `integrations/reverse-forensics/binary-disassembler.ts` |
+| **`mobile-forensics.artifact-triage`** | **MVT / MobSF / dextra** (`.apk`/`.dex`/`.ipa` + Dalvik) | `integrations/reverse-forensics/mobile-artifact-triage.ts` |
+| **`forensics.yara-scan`** | **YARA** (regras ASCII/wide/hex `??` em memória) | `integrations/reverse-forensics/yara-rule-scanner.ts` |
 
 Além dos 10 executores nativos, também já estão embutidos:
 - **OpenCode V2 (`2.1.4`, `MIT`)**: TUI, CLI, Server Hono, MCP Client e GUI SolidJS (`Ctrl+Alt+L`).

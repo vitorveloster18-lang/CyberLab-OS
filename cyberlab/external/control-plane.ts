@@ -108,12 +108,43 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
   },
   {
     toolId: "ghidra-headless",
-    displayName: "Ghidra AnalyzeHeadless",
-    binaryCandidates: ["analyzeHeadless", "ghidra-analyzeHeadless"],
+    displayName: "Ghidra AnalyzeHeadless (NSA)",
+    binaryCandidates: ["analyzeHeadless", "analyzeHeadless.bat", "ghidra-analyzeHeadless"],
     licenseSpdx: "Apache-2.0",
-    integrationMode: "plugin_only",
-    installHint: "Install Ghidra in Linux/WSL2 and expose analyzeHeadless on PATH",
-    description: "External decompiler headless runner for deep binary analysis synchronized into CyberLab EvidenceStore.",
+    integrationMode: "approved_internal_process",
+    governedCapabilityId: "external.ghidra-decompile",
+    installHint: "Install Ghidra (Apache-2.0) and expose analyzeHeadless / analyzeHeadless.bat on PATH",
+    description: "External headless decompiler & analyzer synchronized into CyberLab EvidenceStore.",
+  },
+  {
+    toolId: "jadx",
+    displayName: "JADX Dex-to-Java Decompiler",
+    binaryCandidates: ["jadx", "jadx.bat"],
+    licenseSpdx: "Apache-2.0",
+    integrationMode: "approved_internal_process",
+    governedCapabilityId: "external.jadx-decompile",
+    installHint: "winget install skylot.jadx (Windows) or apt/brew install jadx",
+    description: "Apache-2.0 Android .apk / .dex to Java source decompiler outputting into workspace artifacts.",
+  },
+  {
+    toolId: "yarax",
+    displayName: "YARA-X / YARA CLI (yr / yara)",
+    binaryCandidates: ["yr", "yara64", "yara"],
+    licenseSpdx: "BSD-3-Clause",
+    integrationMode: "approved_internal_process",
+    governedCapabilityId: "external.yarax-scan",
+    installHint: "Install VirusTotal YARA-X ('yr', BSD-3-Clause) in .cyberlab/bin or PATH",
+    description: "High-speed Rust YARA-X indicator & signature scanner governed on workspace files.",
+  },
+  {
+    toolId: "dalfox",
+    displayName: "Dalfox Parameter & Reflection Scanner",
+    binaryCandidates: ["dalfox"],
+    licenseSpdx: "MIT",
+    integrationMode: "approved_internal_process",
+    governedCapabilityId: "external.dalfox-param-scan",
+    installHint: "go install github.com/hahwul/dalfox/v2@latest (or place in .cyberlab/bin)",
+    description: "MIT parameter reflection analyzer governed by ScopeController and ApprovalTicket.",
   },
 ]
 
@@ -741,6 +772,440 @@ export class ExternalTsharkExecutor implements CyberLabExecutor {
       status: out.exitCode === 0 ? "succeeded" : "failed",
       evidenceIds: [evId],
       summary: `External tshark dissected ${params.pcapPath} (exit=${out.exitCode}).`,
+      exitCode: out.exitCode,
+    }
+  }
+}
+
+export const EXTERNAL_DALFOX_INPUT_SCHEMA_ID = "cyberlab.external.dalfox.input.v1"
+export const ExternalDalfoxInputSchema = Schema.Struct({
+  url: Schema.String.check(
+    Schema.isMinLength(8),
+    Schema.isMaxLength(2048),
+    Schema.isPattern(/^https?:\/\/[^\s/$.?#].[^\s]*$/i),
+  ),
+  paramName: Schema.optionalKey(
+    Schema.String.check(Schema.isMaxLength(64), Schema.isPattern(/^[a-zA-Z0-9_-]*$/)),
+  ),
+})
+
+export const ExternalDalfoxCapability: CapabilityDefinition = {
+  id: "external.dalfox-param-scan",
+  version: "1.0.0",
+  title: "External Dalfox Parameter Reflection Scanner (MIT Bridge)",
+  description:
+    "Controls an externally installed dalfox binary (MIT) against an authorized in-scope URL with shell=false, ScopeController verification, and SHA-256 evidence capture.",
+  inputSchemaId: EXTERNAL_DALFOX_INPUT_SCHEMA_ID,
+  outputSchemaId: "cyberlab.external.output.v1",
+  risk: "moderate",
+  supportedModes: ["manual", "proposed", "approved", "lab_automation"],
+  requiredPermissions: ["cyberlab:read", "cyberlab:network-probe"],
+  requiredScope: ["url_origin"],
+  executorId: "external-dalfox-executor",
+  skillIds: ["web-assessment", "evidence-review"],
+  licenseRefs: ["MIT"],
+  enabled: true,
+}
+
+export class ExternalDalfoxExecutor implements CyberLabExecutor {
+  readonly id = "external-dalfox-executor"
+  readonly version = "1.0.0"
+
+  constructor(private readonly getWorkspaceRoot: () => string) {}
+
+  async checkAvailability(): Promise<{ available: boolean; version?: string; reason?: string }> {
+    const root = this.getWorkspaceRoot()
+    const resolved = resolveExternalBinary(root, ["dalfox"], loadCustomBinaryOverrides(root))
+    if (!resolved.resolvedPath) {
+      return { available: false, reason: "External binary 'dalfox' not found in .cyberlab/bin or PATH" }
+    }
+    return { available: true, version: resolved.resolvedPath }
+  }
+
+  async validate(input: unknown): Promise<{ valid: boolean; errors: string[] }> {
+    try {
+      Schema.decodeUnknownSync(ExternalDalfoxInputSchema)(input)
+      return { valid: true, errors: [] }
+    } catch (err) {
+      return { valid: false, errors: [err instanceof Error ? err.message : String(err)] }
+    }
+  }
+
+  async execute(execInput: ExecutorInput, ctx: ExecutorContext): Promise<ExecutorResult> {
+    const params = Schema.decodeUnknownSync(ExternalDalfoxInputSchema)(execInput.input)
+    const resolved = resolveExternalBinary(
+      ctx.workspaceRoot,
+      ["dalfox"],
+      loadCustomBinaryOverrides(ctx.workspaceRoot),
+    )
+    if (!resolved.resolvedPath) {
+      return { status: "failed", evidenceIds: [], summary: "dalfox binary not installed", exitCode: 127 }
+    }
+
+    const args = ["url", params.url, "--silence", "--no-color", "--format", "json"]
+    if (params.paramName && params.paramName.trim()) {
+      args.push("-p", params.paramName.trim())
+    }
+
+    const out = await runSafeChildProcess({
+      binaryPath: resolved.resolvedPath,
+      args,
+      cwd: ctx.workspaceRoot,
+      signal: ctx.signal,
+    })
+
+    const redacted = redactSensitiveContent(out.stdout || out.stderr || "(no dalfox findings)")
+    const evId = await ctx.emitEvidence({
+      ...normalizeRawOutputDraft({
+        kind: "http_exchange",
+        title: `External Dalfox Scan ${new URL(params.url).host}`,
+        rawText: redacted.text,
+        mediaType: "text/plain; charset=utf-8",
+        toolId: "external:dalfox",
+        toolVersion: "external",
+        executorId: this.id,
+        executionId: ctx.executionId,
+        maxOutputBytes: 512 * 1024,
+        labels: ["external-plugin", "dalfox"],
+      }),
+      redactionApplied: redacted.redacted,
+    })
+
+    return {
+      status: out.exitCode === 0 ? "succeeded" : "failed",
+      evidenceIds: [evId],
+      summary: `External dalfox scan completed on ${params.url} (exit=${out.exitCode}).`,
+      exitCode: out.exitCode,
+    }
+  }
+}
+
+export const EXTERNAL_GHIDRA_INPUT_SCHEMA_ID = "cyberlab.external.ghidra.input.v1"
+export const ExternalGhidraInputSchema = Schema.Struct({
+  binaryPath: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
+  processor: Schema.optionalKey(
+    Schema.String.check(Schema.isMaxLength(64), Schema.isPattern(/^[a-zA-Z0-9:._-]*$/)),
+  ),
+})
+
+export const ExternalGhidraCapability: CapabilityDefinition = {
+  id: "external.ghidra-decompile",
+  version: "1.0.0",
+  title: "External Ghidra AnalyzeHeadless Decompiler Bridge (Apache-2.0)",
+  description:
+    "Runs NSA Ghidra analyzeHeadless (Apache-2.0) in read-only temporary project mode on an in-workspace binary and records SHA-256 analysis evidence.",
+  inputSchemaId: EXTERNAL_GHIDRA_INPUT_SCHEMA_ID,
+  outputSchemaId: "cyberlab.external.output.v1",
+  risk: "read_only",
+  supportedModes: ["manual", "proposed", "approved", "lab_automation"],
+  requiredPermissions: ["cyberlab:read"],
+  requiredScope: ["workspace_path"],
+  executorId: "external-ghidra-executor",
+  skillIds: ["reverse-engineering", "evidence-review"],
+  licenseRefs: ["Apache-2.0"],
+  enabled: true,
+}
+
+export class ExternalGhidraExecutor implements CyberLabExecutor {
+  readonly id = "external-ghidra-executor"
+  readonly version = "1.0.0"
+
+  constructor(private readonly getWorkspaceRoot: () => string) {}
+
+  async checkAvailability(): Promise<{ available: boolean; version?: string; reason?: string }> {
+    const root = this.getWorkspaceRoot()
+    const resolved = resolveExternalBinary(
+      root,
+      ["analyzeHeadless", "analyzeHeadless.bat", "ghidra-analyzeHeadless"],
+      loadCustomBinaryOverrides(root),
+    )
+    if (!resolved.resolvedPath) {
+      return { available: false, reason: "Ghidra 'analyzeHeadless' not found in .cyberlab/bin or PATH" }
+    }
+    return { available: true, version: resolved.resolvedPath }
+  }
+
+  async validate(input: unknown): Promise<{ valid: boolean; errors: string[] }> {
+    try {
+      const d = Schema.decodeUnknownSync(ExternalGhidraInputSchema)(input)
+      if (d.binaryPath.includes("\0") || d.binaryPath.startsWith("-")) {
+        return { valid: false, errors: ["Invalid binaryPath"] }
+      }
+      return { valid: true, errors: [] }
+    } catch (err) {
+      return { valid: false, errors: [err instanceof Error ? err.message : String(err)] }
+    }
+  }
+
+  async execute(execInput: ExecutorInput, ctx: ExecutorContext): Promise<ExecutorResult> {
+    const params = Schema.decodeUnknownSync(ExternalGhidraInputSchema)(execInput.input)
+    if (!isPathInsideRoot(params.binaryPath, ctx.workspaceRoot)) {
+      return { status: "failed", evidenceIds: [], summary: "binaryPath escapes workspaceRoot", exitCode: 2 }
+    }
+    const resolved = resolveExternalBinary(
+      ctx.workspaceRoot,
+      ["analyzeHeadless", "analyzeHeadless.bat", "ghidra-analyzeHeadless"],
+      loadCustomBinaryOverrides(ctx.workspaceRoot),
+    )
+    if (!resolved.resolvedPath) {
+      return { status: "failed", evidenceIds: [], summary: "analyzeHeadless binary not installed", exitCode: 127 }
+    }
+
+    const workDir = path.join(ctx.workspaceRoot, ".cyberlab", "artifacts", "ghidra-tmp")
+    mkdirSync(workDir, { recursive: true })
+    const fullBin = path.resolve(ctx.workspaceRoot, params.binaryPath)
+    const args = [workDir, `CyberLab_${ctx.executionId.slice(0, 8)}`, "-import", fullBin, "-deleteProject"]
+    if (params.processor && params.processor.trim()) {
+      args.push("-processor", params.processor.trim())
+    }
+
+    const out = await runSafeChildProcess({
+      binaryPath: resolved.resolvedPath,
+      args,
+      cwd: ctx.workspaceRoot,
+      signal: ctx.signal,
+    })
+
+    const evId = await ctx.emitEvidence(
+      normalizeRawOutputDraft({
+        kind: "stdout",
+        title: `Ghidra Headless Analysis ${path.basename(params.binaryPath)}`,
+        rawText: [out.stdout, out.stderr].filter(Boolean).join("\n") || "(completed with empty stdout)",
+        mediaType: "text/plain; charset=utf-8",
+        toolId: "external:ghidra-headless",
+        toolVersion: "external",
+        executorId: this.id,
+        executionId: ctx.executionId,
+        maxOutputBytes: 512 * 1024,
+        labels: ["external-plugin", "ghidra"],
+      }),
+    )
+
+    return {
+      status: out.exitCode === 0 ? "succeeded" : "failed",
+      evidenceIds: [evId],
+      summary: `Ghidra analyzeHeadless finished on ${params.binaryPath} (exit=${out.exitCode}).`,
+      exitCode: out.exitCode,
+    }
+  }
+}
+
+export const EXTERNAL_JADX_INPUT_SCHEMA_ID = "cyberlab.external.jadx.input.v1"
+export const ExternalJadxInputSchema = Schema.Struct({
+  artifactPath: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
+  deobfuscate: Schema.optionalKey(Schema.Boolean),
+})
+
+export const ExternalJadxCapability: CapabilityDefinition = {
+  id: "external.jadx-decompile",
+  version: "1.0.0",
+  title: "External JADX Android Dex-to-Java Decompiler (Apache-2.0 Bridge)",
+  description:
+    "Decompiles an in-workspace Android .apk or .dex file into Java source inside .cyberlab/artifacts/jadx/ using JADX (Apache-2.0) and stores SHA-256 custody.",
+  inputSchemaId: EXTERNAL_JADX_INPUT_SCHEMA_ID,
+  outputSchemaId: "cyberlab.external.output.v1",
+  risk: "read_only",
+  supportedModes: ["manual", "proposed", "approved", "lab_automation"],
+  requiredPermissions: ["cyberlab:read"],
+  requiredScope: ["workspace_path"],
+  executorId: "external-jadx-executor",
+  skillIds: ["mobile-forensics", "reverse-engineering", "evidence-review"],
+  licenseRefs: ["Apache-2.0"],
+  enabled: true,
+}
+
+export class ExternalJadxExecutor implements CyberLabExecutor {
+  readonly id = "external-jadx-executor"
+  readonly version = "1.0.0"
+
+  constructor(private readonly getWorkspaceRoot: () => string) {}
+
+  async checkAvailability(): Promise<{ available: boolean; version?: string; reason?: string }> {
+    const root = this.getWorkspaceRoot()
+    const resolved = resolveExternalBinary(root, ["jadx", "jadx.bat"], loadCustomBinaryOverrides(root))
+    if (!resolved.resolvedPath) {
+      return { available: false, reason: "JADX ('jadx') not found in .cyberlab/bin or PATH" }
+    }
+    return { available: true, version: resolved.resolvedPath }
+  }
+
+  async validate(input: unknown): Promise<{ valid: boolean; errors: string[] }> {
+    try {
+      const d = Schema.decodeUnknownSync(ExternalJadxInputSchema)(input)
+      if (d.artifactPath.includes("\0") || d.artifactPath.startsWith("-")) {
+        return { valid: false, errors: ["Invalid artifactPath"] }
+      }
+      return { valid: true, errors: [] }
+    } catch (err) {
+      return { valid: false, errors: [err instanceof Error ? err.message : String(err)] }
+    }
+  }
+
+  async execute(execInput: ExecutorInput, ctx: ExecutorContext): Promise<ExecutorResult> {
+    const params = Schema.decodeUnknownSync(ExternalJadxInputSchema)(execInput.input)
+    if (!isPathInsideRoot(params.artifactPath, ctx.workspaceRoot)) {
+      return { status: "failed", evidenceIds: [], summary: "artifactPath escapes workspaceRoot", exitCode: 2 }
+    }
+    const resolved = resolveExternalBinary(
+      ctx.workspaceRoot,
+      ["jadx", "jadx.bat"],
+      loadCustomBinaryOverrides(ctx.workspaceRoot),
+    )
+    if (!resolved.resolvedPath) {
+      return { status: "failed", evidenceIds: [], summary: "jadx binary not installed", exitCode: 127 }
+    }
+
+    const baseSafe = path.basename(params.artifactPath).replace(/[^a-zA-Z0-9._-]/g, "_")
+    const outDirRel = path.join(".cyberlab", "artifacts", "jadx", baseSafe)
+    const outDirFull = path.resolve(ctx.workspaceRoot, outDirRel)
+    mkdirSync(outDirFull, { recursive: true })
+
+    const fullArtifact = path.resolve(ctx.workspaceRoot, params.artifactPath)
+    const args = ["-d", outDirFull, ...(params.deobfuscate ? ["--deobf"] : []), fullArtifact]
+
+    const out = await runSafeChildProcess({
+      binaryPath: resolved.resolvedPath,
+      args,
+      cwd: ctx.workspaceRoot,
+      signal: ctx.signal,
+    })
+
+    const summaryPayload = {
+      artifactPath: params.artifactPath,
+      decompiledOutputDirectory: outDirRel.replace(/\\/g, "/"),
+      exitCode: out.exitCode,
+      stdout: out.stdout,
+      stderr: out.stderr,
+    }
+
+    const evId = await ctx.emitEvidence(
+      normalizeRawOutputDraft({
+        kind: "json",
+        title: `JADX Decompilation ${path.basename(params.artifactPath)}`,
+        rawText: JSON.stringify(summaryPayload, null, 2),
+        mediaType: "application/json",
+        toolId: "external:jadx",
+        toolVersion: "external",
+        executorId: this.id,
+        executionId: ctx.executionId,
+        maxOutputBytes: 512 * 1024,
+        labels: ["external-plugin", "jadx", "android-decompile"],
+      }),
+    )
+
+    return {
+      status: out.exitCode === 0 ? "succeeded" : "failed",
+      evidenceIds: [evId],
+      summary: `JADX decompiled ${params.artifactPath} -> ${outDirRel.replace(/\\/g, "/")} (exit=${out.exitCode}).`,
+      exitCode: out.exitCode,
+    }
+  }
+}
+
+export const EXTERNAL_YARAX_INPUT_SCHEMA_ID = "cyberlab.external.yarax.input.v1"
+export const ExternalYaraXInputSchema = Schema.Struct({
+  rulesPath: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
+  targetPath: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
+})
+
+export const ExternalYaraXCapability: CapabilityDefinition = {
+  id: "external.yarax-scan",
+  version: "1.0.0",
+  title: "External YARA-X / YARA Indicator Scanner (BSD-3-Clause Bridge)",
+  description:
+    "Executes VirusTotal YARA-X ('yr') or classic 'yara' CLI (BSD-3-Clause) offline against in-workspace rule and target paths with SHA-256 custody.",
+  inputSchemaId: EXTERNAL_YARAX_INPUT_SCHEMA_ID,
+  outputSchemaId: "cyberlab.external.output.v1",
+  risk: "read_only",
+  supportedModes: ["manual", "proposed", "approved", "lab_automation"],
+  requiredPermissions: ["cyberlab:read"],
+  requiredScope: ["workspace_path"],
+  executorId: "external-yarax-executor",
+  skillIds: ["reverse-engineering", "mobile-forensics", "evidence-review"],
+  licenseRefs: ["BSD-3-Clause"],
+  enabled: true,
+}
+
+export class ExternalYaraXExecutor implements CyberLabExecutor {
+  readonly id = "external-yarax-executor"
+  readonly version = "1.0.0"
+
+  constructor(private readonly getWorkspaceRoot: () => string) {}
+
+  async checkAvailability(): Promise<{ available: boolean; version?: string; reason?: string }> {
+    const root = this.getWorkspaceRoot()
+    const resolved = resolveExternalBinary(root, ["yr", "yara64", "yara"], loadCustomBinaryOverrides(root))
+    if (!resolved.resolvedPath) {
+      return { available: false, reason: "YARA-X ('yr') or 'yara' not found in .cyberlab/bin or PATH" }
+    }
+    return { available: true, version: resolved.resolvedPath }
+  }
+
+  async validate(input: unknown): Promise<{ valid: boolean; errors: string[] }> {
+    try {
+      const d = Schema.decodeUnknownSync(ExternalYaraXInputSchema)(input)
+      if (
+        d.rulesPath.includes("\0") ||
+        d.rulesPath.startsWith("-") ||
+        d.targetPath.includes("\0") ||
+        d.targetPath.startsWith("-")
+      ) {
+        return { valid: false, errors: ["Invalid rulesPath or targetPath"] }
+      }
+      return { valid: true, errors: [] }
+    } catch (err) {
+      return { valid: false, errors: [err instanceof Error ? err.message : String(err)] }
+    }
+  }
+
+  async execute(execInput: ExecutorInput, ctx: ExecutorContext): Promise<ExecutorResult> {
+    const params = Schema.decodeUnknownSync(ExternalYaraXInputSchema)(execInput.input)
+    if (
+      !isPathInsideRoot(params.rulesPath, ctx.workspaceRoot) ||
+      !isPathInsideRoot(params.targetPath, ctx.workspaceRoot)
+    ) {
+      return { status: "failed", evidenceIds: [], summary: "rulesPath or targetPath escapes workspaceRoot", exitCode: 2 }
+    }
+    const resolved = resolveExternalBinary(
+      ctx.workspaceRoot,
+      ["yr", "yara64", "yara"],
+      loadCustomBinaryOverrides(ctx.workspaceRoot),
+    )
+    if (!resolved.resolvedPath) {
+      return { status: "failed", evidenceIds: [], summary: "yr / yara binary not installed", exitCode: 127 }
+    }
+
+    const fullRules = path.resolve(ctx.workspaceRoot, params.rulesPath)
+    const fullTarget = path.resolve(ctx.workspaceRoot, params.targetPath)
+    const isYr = /^yr(\.exe)?$/i.test(path.basename(resolved.resolvedPath))
+    const args = isYr ? ["scan", fullRules, fullTarget] : ["-r", fullRules, fullTarget]
+
+    const out = await runSafeChildProcess({
+      binaryPath: resolved.resolvedPath,
+      args,
+      cwd: ctx.workspaceRoot,
+      signal: ctx.signal,
+    })
+
+    const evId = await ctx.emitEvidence(
+      normalizeRawOutputDraft({
+        kind: "stdout",
+        title: `External YARA-X Scan ${path.basename(params.targetPath)}`,
+        rawText: [out.stdout, out.stderr].filter(Boolean).join("\n") || "(0 rule matches)",
+        mediaType: "text/plain; charset=utf-8",
+        toolId: "external:yarax",
+        toolVersion: "external",
+        executorId: this.id,
+        executionId: ctx.executionId,
+        maxOutputBytes: 512 * 1024,
+        labels: ["external-plugin", "yarax"],
+      }),
+    )
+
+    return {
+      status: out.exitCode === 0 ? "succeeded" : "failed",
+      evidenceIds: [evId],
+      summary: `External YARA-X scan finished on ${params.targetPath} (exit=${out.exitCode}).`,
       exitCode: out.exitCode,
     }
   }

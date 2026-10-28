@@ -116,18 +116,10 @@ const DEFAULT_PERMISSIONS: CdiPartnerPermissions = {
 
 export const FOUR_CDI_PRESET_ENTRIES: readonly CdiPartnerEntry[] = [
   {
-    partnerId: "salem",
-    displayName: "Salem",
-    specialty: "Análise de Logs, Triagem de CVEs, Resposta a Incidentes e Correlação de Alertas",
-    endpointUrl: "http://127.0.0.1:8788/cyberlab/partner",
-    enabled: true,
-    permissions: { ...DEFAULT_PERMISSIONS },
-  },
-  {
     partnerId: "kairos",
     displayName: "Kairós",
     specialty: "Arquitetura de Segurança, Modelagem de Ameaças e Estratégia de Mitigação",
-    endpointUrl: "http://127.0.0.1:8789/cyberlab/partner",
+    endpointUrl: "http://127.0.0.1:8788/cyberlab/partner",
     enabled: true,
     permissions: { ...DEFAULT_PERMISSIONS },
   },
@@ -135,13 +127,21 @@ export const FOUR_CDI_PRESET_ENTRIES: readonly CdiPartnerEntry[] = [
     partnerId: "naia",
     displayName: "Naia",
     specialty: "Pesquisa Profunda, Forense Digital, Evidências e Inteligência de Ameaças",
+    endpointUrl: "http://127.0.0.1:8789/cyberlab/partner",
+    enabled: true,
+    permissions: { ...DEFAULT_PERMISSIONS },
+  },
+  {
+    partnerId: "salem",
+    displayName: "Salem",
+    specialty: "Análise de Logs, Triagem de CVEs, Resposta a Incidentes e Correlação de Alertas",
     endpointUrl: "http://127.0.0.1:8790/cyberlab/partner",
     enabled: true,
     permissions: { ...DEFAULT_PERMISSIONS },
   },
   {
-    partnerId: "cdi-4",
-    displayName: "CDI-04",
+    partnerId: "nova",
+    displayName: "Nova",
     specialty: "Auditoria de Código, Revisão de Superfície de Ataque e Validação Técnica",
     endpointUrl: "http://127.0.0.1:8791/cyberlab/partner",
     enabled: true,
@@ -421,6 +421,8 @@ export class CdiPartnerHub {
   }
 
   loadFourCdiPreset(baseHost = "http://127.0.0.1"): CdiPublicPartnerEntry[] {
+    // Remove legacy "cdi-4" placeholder when migrating to kairos/naia/salem/nova
+    this.partners.delete("cdi-4")
     const ports = [8788, 8789, 8790, 8791]
     FOUR_CDI_PRESET_ENTRIES.forEach((preset, idx) => {
       const cleanHost = baseHost.replace(/\/+$/, "")
