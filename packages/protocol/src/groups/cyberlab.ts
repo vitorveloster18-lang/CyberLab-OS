@@ -423,3 +423,14 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
       description: "Unified CyberLab OS operations, scope enforcement, and SHA-256 evidence management routes.",
     }),
   )
+
+export const CYBERLAB_PARTNER_GATEWAY_PATH = "/api/cyberlab/partner-gateway"
+
+export function hasCyberLabPartnerGatewaySignature(
+  headers: Readonly<Record<string, string | undefined>>,
+  url: URL,
+): boolean {
+  if (url.pathname !== CYBERLAB_PARTNER_GATEWAY_PATH) return false
+  return Boolean(headers["x-cyberlab-signature"] && headers["x-cyberlab-partner-id"])
+}
+

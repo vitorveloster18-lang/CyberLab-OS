@@ -80,7 +80,7 @@ class CyberLabOSClient:
         self,
         partner_id: str,
         shared_secret: str,
-        gateway_url: str = "http://127.0.0.1:4180/api/studio/partner-gateway",
+        gateway_url: str = "http://127.0.0.1:4096/api/cyberlab/partner-gateway",
         timeout_sec: int = 20,
     ) -> None:
         if len(shared_secret) < 16:
@@ -96,7 +96,7 @@ class CyberLabOSClient:
         secret = os.environ.get("CYBERLAB_PARTNER_SECRET", "")
         gateway_url = os.environ.get(
             "CYBERLAB_CALLBACK_URL",
-            "http://127.0.0.1:4180/api/studio/partner-gateway",
+            "http://127.0.0.1:4096/api/cyberlab/partner-gateway",
         )
         return cls(partner_id=partner_id, shared_secret=secret, gateway_url=gateway_url)
 
@@ -116,7 +116,11 @@ class CyberLabOSClient:
         req = urllib.request.Request(
             self.gateway_url,
             data=raw_req,
-            headers={"Content-Type": "application/json; charset=utf-8"},
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "X-CyberLab-Partner-Id": self.partner_id,
+                "X-CyberLab-Signature": str(envelope["signature"]),
+            },
             method="POST",
         )
         try:
@@ -127,6 +131,13 @@ class CyberLabOSClient:
             raise RuntimeError(f"CyberLab Gateway HTTP {exc.code}: {err_body}") from exc
 
         parsed = json.loads(body_bytes.decode("utf-8"))
+        if (
+            isinstance(parsed, dict)
+            and "location" in parsed
+            and isinstance(parsed.get("data"), dict)
+            and parsed["data"].get("protocol") == "cyberlab-cdi-gateway"
+        ):
+            parsed = parsed["data"]
         if isinstance(parsed, dict) and "signature" in parsed:
             expected_sig = compute_envelope_hmac(parsed, self.shared_secret)
             if not hmac.compare_digest(str(parsed.get("signature") or ""), expected_sig):
@@ -595,7 +606,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=int(os.environ.get("CYBERLAB_BRIDGE_PORT", "8788")))
     parser.add_argument(
         "--cyberlab-url",
-        default=os.environ.get("CYBERLAB_CALLBACK_URL", "http://127.0.0.1:4180/api/studio/partner-gateway"),
+        default=os.environ.get("CYBERLAB_CALLBACK_URL", "http://127.0.0.1:4096/api/cyberlab/partner-gateway"),
         help="URL do gateway bidirecional do CyberLab OS para chamadas autónomas do CDI",
     )
     parser.add_argument("--mode", choices=["arg", "stdin", "import"], default="arg")

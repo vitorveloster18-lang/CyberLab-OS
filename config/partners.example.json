@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "sharedSecret": "DEFINA_OU_GERE_UM_SECRET_HMAC_DE_32_OU_64_CARACTERES_AQUI",
-  "cyberlabCallbackUrl": "http://127.0.0.1:4180/api/studio/partner-gateway",
+  "cyberlabCallbackUrl": "http://127.0.0.1:4096/api/cyberlab/partner-gateway",
   "partners": [
     {
       "partnerId": "salem",

@@ -91,36 +91,26 @@ Para conectar ferramentas externas via **MCP (Model Context Protocol)** nativo d
 
 ---
 
-## 3. Como Usar o Sistema (Security Studio Visual + CLI + TUI + IA)
+## 3. Como Usar o Sistema (Aplicação Única Unificada — OpenCode V2 + CyberLab OS)
 
-### Modo Principal — Security Studio Visual Completo (7 Abas Manuais Interativas, sem sair do CyberLab OS)
-
-Você **não precisa sair do CyberLab OS** para abrir a UI do Burp Suite, Wireshark, Zenmap ou digitar JSON cru na mão. Todas as ferramentas — **tanto os motores internos `MIT` quanto os binários externos (`nmap`, `nuclei`, `ffuf`, `tshark`)** — possuem **controles visuais dedicados, presets, seletores, tabelas e comparadores** dentro do próprio CyberLab OS:
-
-1. **Aba `1. Proxy & Repeater`**:
-   - **Proxy HTTP Local de Captura (`127.0.0.1:8899`)** com botão *Start/Stop*, filtro de escopo (`ScopeController`), bloqueio anti-SSRF (`169.254.169.254`), tabela de histórico ao vivo e botões de 1 clique **`→ Repeater`**, **`→ Baseline`** e **`Save SHA-256`**.
-   - **HTTP Repeater & Comparer** estilo Burp/OpenTRAP: seletor de método (`GET`/`POST`/`PUT`/`PATCH`/`DELETE`/`HEAD`/`OPTIONS`), editor chave-valor de cabeçalhos com checkboxes e presets (`+ JSON`, `+ Bearer`, `+ XFF`), editor de body e diff visual contra URL de baseline.
-2. **Aba `2. Decoder & JWT`**: pipeline visual encadeado em 1 clique (`URL`, `Base64`, `Base64URL`, `Hex`, `HTML`, `SHA-256`), auditoria de segurança JWT (`alg:none`, ausência de `exp`, injeção `jku`/`x5u`) e Sequencer de entropia de tokens de sessão.
-3. **Aba `3. Web Scanner & Fuzzer`**: formulários visuais, sliders de concorrência/rate-limit e tags para disparar tanto o **Scanner Nativo `MIT`** e o **Inspetor de Headers/CORS** quanto **`nuclei`** e **`ffuf`** externos.
-4. **Aba `4. Network & TLS`**: perfis rápidos de portas (*Web*, *Infra*, *Database*), toggle `-sV`, campo TLS SNI e visualização estruturada de certificados `X.509` e banners TCP/Nmap.
-5. **Aba `5. Packets (.pcap)`**: seletor visual entre o dissecador nativo Pure-TS e o `tshark` (Wireshark CLI), slider de pacotes e visualização de fluxos, queries DNS, SNI TLS e requisições HTTP.
-6. **Aba `6. Reverse & Mobile`**: controles visuais para triagem estática de binários `ELF`/`PE`/`Mach-O` (NX, PIE/ASLR, Canary, entropia de packers, imports suspeitos) e pacotes mobile `.apk`/`.ipa`/backups (permissões críticas e caça a domínios IoC).
-7. **Aba `7. Scope & Custody`**: construtor visual de regras de escopo (`ip`, `cidr`, `domain`, `url_origin`, `workspace_path`), fila de aprovações humanas, *Kill-Switch* em tempo real de processos, radar de ferramentas externas, `.cyberlab/inbox/`, inspetor de evidências `SHA-256` e gerador de relatório Markdown.
-
-Você pode abrir o **Security Studio Visual** de duas formas:
+Tudo vive em **uma única aplicação integrada** (construída diretamente sobre o OpenCode V2, na porta `4096`), sem separar o OpenCode de páginas externas de ferramentas:
 
 ```bash
-# Opção A: Workbench Visual em Tela Cheia no navegador (porta 4180)
-bun run cyberlab:studio
-
-# Ou com laboratório local de demonstração integrado (alvo HTTP + TLS + .pcap + .elf + .apk prontos para testar em 1 clique):
-bun run cyberlab studio --demo-lab --port 4180
+# Inicia a aplicação completa (OpenCode V2 + Chat + Configurações + CyberLab OS + Gateway CDI) em http://localhost:4096
+bun run start
 ```
 
-```bash
-# Opção B: Integrado dentro do OpenCode V2 Web/Desktop (atalho Ctrl+Alt+L / Ctrl+Cmd+L)
-bun run dev serve --hostname 127.0.0.1 --port 4096
-```
+Dentro dessa **única interface (`http://localhost:4096`)**, você tem acesso imediato a:
+1. **Todas as funções nativas do OpenCode V2**: Sessões de Chat com IA, Provedores e Modelos (`Settings → Providers / Models`), Servidores MCP, Plugins, Atalhos, Árvore de Arquivos, Visualizador de Diffs e Terminal integrado.
+2. **Configurações Nativas do CyberLab OS (`Settings → CyberLab OS` ou `/settings?tab=cyberlab`)**:
+   - **Escopo & Proteção de Alvos**: toggle de alvos externos e cadastro visual de IPs, domínios, CIDRs e URLs autorizados.
+   - **Agentes Externos CDI (`Salem`, `Kairós`, `Naia`, `CDI-04` — Portas `8788–8791`)**: botão de 1 clique **"Preset 4 CDIs"**, geração/edição do `CYBERLAB_PARTNER_SECRET`, botão **"Copiar Comandos PowerShell"**, teste de Ping e nível de autonomia de cada CDI.
+   - **Motores Externos Opcionais**: status de `nmap`, `nuclei`, `ffuf`, `tshark` e botão de sincronização da pasta `.cyberlab/inbox`.
+3. **Painel Lateral Limpo do CyberLab dentro de qualquer Sessão** (clique no botão **`CyberLab`** no topo da sessão, digite **`/cyberlab`** no chat, ou use `Ctrl+Alt+L`):
+   - **Aba `Web & API`**: HTTP Repeater & Comparer, Proxy Local de Captura (`127.0.0.1:8899`), Scanner Web (Nativo, Nuclei ou ffuf) e Decoder/JWT/Entropia.
+   - **Aba `Rede & Arquivos`**: Inspetor de Certificado TLS/X.509, Teste de Portas TCP / Nmap, Dissecador `.pcap` e Triagem Estática de Binários (`ELF`/`PE`) ou `.apk`.
+   - **Aba `Agentes CDI`**: Despacho individual ou paralelo para Salem, Kairós, Naia e CDI-04, visualização das respostas e anexo em 1 clique direto no Chat da IA (**"Anexar ao Chat"**).
+   - **Aba `Evidências`**: Aprovações humanas pendentes em 1 clique, cadeia de custódia `SHA-256`, registo de Findings e exportação de Relatório Markdown (`.md`).
 
 ### Modo CLI — Linha de Comando Direta (`cyberlab` CLI)
 
@@ -233,7 +223,7 @@ O CyberLab OS implementa um **Bridge Bidirecional v2.0** completo (`cyberlab/par
 
 ### Respostas diretas para a configuração do seu CDI Runtime
 1. **Como o CyberLab OS regista parceiros?**
-   - Pela interface visual na **Aba `8. Agentes CDI (Bridge Bidirecional 8788-8791)`** do Security Studio (`http://localhost:4180`), pela CLI (`bun run cyberlab partner --preset-4`) ou editando `.cyberlab/partners.json` (modelo pronto em `config/partners.example.json`). Com 1 clique no botão **"Carregar Preset 4 CDIs"**, o sistema regista automaticamente `salem` (`8788`), `kairos` (`8789`), `naia` (`8790`) e `cdi-4` (`8791`).
+   - Direto em **`Settings → CyberLab OS` (`http://localhost:4096/settings?tab=cyberlab`)**, pela CLI (`bun run cyberlab partner --preset-4`) ou editando `.cyberlab/partners.json` (modelo pronto em `config/partners.example.json`). Com 1 clique no botão **"Preset 4 CDIs (8788–8791)"**, o sistema regista automaticamente `salem` (`8788`), `kairos` (`8789`), `naia` (`8790`) e `cdi-4` (`8791`).
 2. **O `CYBERLAB_PARTNER_SECRET` — o OS gera ou você define?**
    - **Suporta ambos!** Você pode clicar em **"Gerar Novo Secret (256-bit)"** (`bun run cyberlab partner --generate-secret`) para o CyberLab OS gerar e salvar um segredo criptográfico de 64 caracteres hex em `.cyberlab/partners.json`, **ou** definir o seu próprio segredo (`bun run cyberlab partner --set-secret "seu-segredo..."` ou variável `CYBERLAB_PARTNER_SECRET`). Todos os 4 CDIs podem compartilhar o mesmo `CYBERLAB_PARTNER_SECRET` (ou ter `secretOverride` individual).
 3. **Os CDIs são chamados em paralelo ou 1 por tarefa?**
@@ -242,7 +232,7 @@ O CyberLab OS implementa um **Bridge Bidirecional v2.0** completo (`cyberlab/par
      - **Colaboração em paralelo (`Promise.all`)**: selecionar múltiplos CDIs na Aba 8 ou rodar `--partners salem,kairos,naia` (ou `partnerIds: ["salem", "kairos", "naia"]` na tool de IA `cyberlab_partner_delegate`).
 
 ### O que os CDIs agora fazem autonomamente de dentro do Python (`CyberLabOSClient`)
-Importando `CyberLabOSClient` de `integrations/partners/chat_py_bridge.py` dentro do seu `chat.py` / `process_message()`, qualquer CDI pode enviar mensagens assinadas **do CDI → para o CyberLab OS** (`POST /api/studio/partner-gateway` ou `POST /api/cyberlab/partner-gateway`):
+Importando `CyberLabOSClient` de `integrations/partners/chat_py_bridge.py` dentro do seu `chat.py` / `process_message()`, qualquer CDI pode enviar mensagens assinadas **do CDI → para o CyberLab OS** (`POST http://127.0.0.1:4096/api/cyberlab/partner-gateway`):
 
 ```python
 from chat_py_bridge import CyberLabOSClient, build_cyberlab_cdi_tools

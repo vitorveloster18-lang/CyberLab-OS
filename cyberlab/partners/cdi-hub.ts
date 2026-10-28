@@ -202,7 +202,7 @@ export class CdiPartnerHub {
         ? process.env.CYBERLAB_PARTNER_SECRET.trim()
         : crypto.randomBytes(32).toString("hex")
     this.cyberlabCallbackUrl =
-      process.env.CYBERLAB_CALLBACK_URL?.trim() || "http://127.0.0.1:4180/api/studio/partner-gateway"
+      process.env.CYBERLAB_CALLBACK_URL?.trim() || "http://127.0.0.1:4096/api/cyberlab/partner-gateway"
 
     this.loadInitialConfig()
     this.syncAllToAuthenticator()

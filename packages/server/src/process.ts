@@ -8,6 +8,7 @@ import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/persistent-pty"
 import { hasMcpClientTicketURL } from "@opencode/protocol/groups/mcp"
 import { isPairingConnectURL } from "@opencode/protocol/groups/server"
+import { hasCyberLabPartnerGatewaySignature } from "@opencode/protocol/groups/cyberlab"
 import { Global } from "@opencode/util/global"
 import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
 import { HttpMiddleware, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
@@ -51,8 +52,9 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   transform?: Transform,
   remoteURLs?: () => ReadonlyArray<string>,
 ) {
+  const allowNoAuth = process.env.CYBERLAB_NO_SERVER_AUTH === "1" || process.env.CYBERLAB_NO_SERVER_AUTH === "true"
   const password = options.password
-  if (!password) return yield* Effect.fail(new Error("Missing server password"))
+  if (!password && !allowNoAuth) return yield* Effect.fail(new Error("Missing server password"))
   const hostname = options.hostname ?? "127.0.0.1"
   const port = Option.fromNullishOr(options.port)
   const shutdown = yield* Latch.make()
@@ -172,14 +174,15 @@ function addressInUse(error: unknown) {
 }
 
 function dispatch(
-  password: string,
+  password: string | undefined,
   status: Status.Interface,
   application: Ref.Ref<Option.Option<App>>,
   version: string,
   urls: () => ReadonlyArray<string>,
   tmp: string,
 ): App {
-  const auth = ServerAuth.Config.of({ password: Option.some(password), username: "opencode" })
+  const auth = ServerAuth.Config.of({ password: Option.fromNullishOr(password), username: "opencode" })
+  const authRequired = ServerAuth.required(auth)
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest
     const url = new URL(request.url, "http://localhost")
@@ -187,13 +190,17 @@ function dispatch(
     const app = yield* Ref.get(application)
     const ready = state.type === "ready" && Option.isSome(app)
     if (request.method === "GET" && url.pathname === "/api/info" && !ready) {
-      if (!(yield* authorizedRequest(request, auth))) return unauthorizedResponse(request)
+      if (authRequired && !(yield* authorizedRequest(request, auth))) return unauthorizedResponse(request)
       return yield* infoResponse(status, version, urls, tmp)
     }
     if (
+      authRequired &&
       !isPairingConnectURL(url) &&
       (!ready ||
-        (!hasPtyConnectTicketURL(url) && !hasPersistentPtyConnectTicketURL(url) && !hasMcpClientTicketURL(url))) &&
+        (!hasPtyConnectTicketURL(url) &&
+          !hasPersistentPtyConnectTicketURL(url) &&
+          !hasMcpClientTicketURL(url) &&
+          !hasCyberLabPartnerGatewaySignature(request.headers, url))) &&
       !(yield* authorizedRequest(request, auth))
     )
       return unauthorizedResponse(request)

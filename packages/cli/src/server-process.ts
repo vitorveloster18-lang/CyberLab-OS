@@ -88,13 +88,16 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         delete process.env.OPENCODE_PASSWORD
         delete process.env.OPENCODE_SERVER_PASSWORD
       }
+      const allowNoAuth = truthy(process.env.CYBERLAB_NO_SERVER_AUTH)
       const password =
         options.mode === "service"
           ? config.password || randomBytes(32).toString("base64url")
           : environmentPassword
             ? Redacted.value(environmentPassword)
-            : randomBytes(32).toString("base64url")
-      if (!password) return yield* Effect.fail(new Error("Missing server password"))
+            : allowNoAuth
+              ? undefined
+              : randomBytes(32).toString("base64url")
+      if (!password && !allowNoAuth) return yield* Effect.fail(new Error("Missing server password"))
       const instanceID = randomUUID()
       const transform = yield* WebUi.handler()
       const remote = { urls: [] as ReadonlyArray<string> }
@@ -148,10 +151,11 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           : {
               onListen: (address, shutdown) =>
                 Effect.gen(function* () {
-                  if (!config.password) yield* ServiceConfig.password(password)
+                  const servicePassword = password ?? randomBytes(32).toString("base64url")
+                  if (!config.password) yield* ServiceConfig.password(servicePassword)
                   return yield* ServiceRegistration.register({
                     address,
-                    password,
+                    password: servicePassword,
                     id: instanceID,
                     file: serviceOptions.file,
                     shutdown,
@@ -206,7 +210,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       }
       const url = HttpServer.formatAddress(server.address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
-      if (foreground && !environmentPassword) console.log(`server password ${password}`)
+      if (foreground && !environmentPassword && password) console.log(`server password ${password}`)
       return yield* options.mode === "service"
         ? server.shutdown
         : options.mode === "stdio"

@@ -1,11 +1,7 @@
-export type StudioTabId =
-  | "repeater"
-  | "decoder"
-  | "webscan"
-  | "network"
-  | "packets"
-  | "forensics"
-  | "cockpit"
+export type WorkspaceSectionId = "web" | "network" | "cdi" | "evidence"
+
+export type WebToolId = "repeater" | "proxy" | "scanner" | "decoder"
+export type NetworkToolId = "tls" | "ports" | "pcap" | "binary"
 
 export interface HeaderRow {
   id: string
@@ -89,21 +85,27 @@ export interface FindingDto {
   confidence?: number
   status: string
   evidenceIds: string[]
+  affectedAssets: string[]
+  proposedRemediation?: string
+}
+
+export interface ExternalToolStatusDto {
+  toolId: string
+  displayName: string
+  available: boolean
+  resolvedPath: string | null
+  sourceLocation: "workspace_local_bin" | "system_path" | "custom_config" | "missing"
+  licenseSpdx: string
+  integrationMode: "plugin_only" | "approved_internal_process" | "mcp"
+  governedCapabilityId: string | null
+  installHint: string
+  description: string
 }
 
 export interface ExternalToolsOverviewDto {
   pendingInboxCount: number
   inboxDirectory: string
-  tools: Array<{
-    toolId: string
-    displayName: string
-    available: boolean
-    resolvedPath: string | null
-    licenseSpdx: string
-    integrationMode: string
-    governedCapabilityId: string | null
-    installHint: string
-  }>
+  tools: ExternalToolStatusDto[]
 }
 
 export interface ProxyHistoryEntryDto {
@@ -117,7 +119,6 @@ export interface ProxyHistoryEntryDto {
   elapsedMs: number
   requestHeaders: Record<string, string>
   requestBody: string
-  responseHeaders: Record<string, string>
   responseBody: string
   responseBytes: number
   blockedByScope: boolean
@@ -134,4 +135,69 @@ export interface ProxyOverviewDto {
     capturedCount: number
   }
   history: ProxyHistoryEntryDto[]
+}
+
+export type CdiInitiateMode = "disabled" | "propose_only" | "allow_readonly_propose_others"
+
+export interface CdiPartnerPermissionsDto {
+  readProjectState: boolean
+  readEvidenceAndFiles: boolean
+  createArtifactsAndFindings: boolean
+  initiateActions: CdiInitiateMode
+}
+
+export interface CdiPartnerDto {
+  partnerId: string
+  displayName: string
+  specialty: string
+  endpointUrl: string
+  enabled: boolean
+  usesCustomSecret: boolean
+  permissions: CdiPartnerPermissionsDto
+}
+
+export interface CdiInboundActivityDto {
+  activityId: string
+  partnerId: string
+  action: string
+  outcome: "allowed" | "queued_for_approval" | "denied"
+  summary: string
+  timestamp: string
+}
+
+export interface PartnersOverviewDto {
+  secretConfigured: boolean
+  secretPreview: string
+  cyberlabCallbackUrl: string
+  configFilePath: string
+  partners: CdiPartnerDto[]
+  inboundActivity: CdiInboundActivityDto[]
+}
+
+export interface CdiSecretOutputDto {
+  sharedSecret: string
+  cyberlabCallbackUrl: string
+}
+
+export interface MultiCdiDispatchItemDto {
+  partnerId: string
+  displayName: string
+  ok: boolean
+  durationMs: number
+  outcome?: {
+    result?: {
+      summary?: string
+    }
+    rawEvidenceId?: string
+  }
+  error?: string
+}
+
+export interface DispatchPartnersResultDto {
+  mode: "single" | "parallel"
+  objective: string
+  totalDispatched: number
+  succeededCount: number
+  failedCount: number
+  results: MultiCdiDispatchItemDto[]
 }
