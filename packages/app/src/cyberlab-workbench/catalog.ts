@@ -4,6 +4,8 @@ import type {
   ManualToolDraftMap,
   ManualToolId,
   ManualToolMeta,
+  ToolSuiteId,
+  ToolSuiteMeta,
 } from "./types"
 
 export const MANUAL_TOOL_CATEGORIES: Array<{
@@ -247,6 +249,346 @@ export const DEFAULT_QUICK_TOOLS: ManualToolId[] = [
   "scope-governance",
 ]
 
+/**
+ * 7 Ferramentas / Suítes Distintas (estilo Burp Suite / Wireshark / Nmap).
+ * Cada suíte aparece como 1 único item limpo na caixa vertical, e suas funcionalidades
+ * correlatas são alternadas por abas/motores internos lá dentro.
+ */
+export const TOOL_SUITES: ToolSuiteMeta[] = [
+  {
+    id: "web-suite",
+    title: "Web Security Suite",
+    shortTitle: "Web Suite",
+    subtitle: "Proxy Local · Repeater & Comparer · Scanner & Fuzzer (Nativo, Nuclei, ffuf) · Headers · Decoder & JWT",
+    icon: "globe",
+    keywords: ["burp", "opentrap", "proxy", "repeater", "comparer", "nuclei", "ffuf", "jwt", "decoder", "base64", "headers", "cookies", "cors", "web", "http"],
+    functions: [
+      {
+        id: "repeater",
+        label: "Repeater & Comparer",
+        description: "Manipule requisições HTTP manualmente e compare diferenças lado a lado contra uma URL baseline",
+        engines: [
+          {
+            toolId: "http-repeater",
+            label: "HTTP Repeater & Diff",
+            badge: "Nativo",
+            description: "Requisição estruturada + comparação de resposta",
+          },
+        ],
+      },
+      {
+        id: "proxy",
+        label: "Proxy Intercept",
+        description: "Capture tráfego HTTP local em 127.0.0.1:8899 e envie requisições com 1 clique para o Repeater ou Decoder",
+        engines: [
+          {
+            toolId: "http-proxy",
+            label: "Proxy Local (8899)",
+            badge: "Nativo",
+            description: "Listener HTTP com filtro de escopo",
+          },
+        ],
+      },
+      {
+        id: "scanner",
+        label: "Scanner & Fuzzer",
+        description: "Descubra rotas sensíveis, rode templates de vulnerabilidade ou faça fuzzing controlado com wordlist",
+        engines: [
+          {
+            toolId: "web-surface",
+            label: "Surface Scanner (Anti-Soft-404)",
+            badge: "MIT Nativo",
+            description: "Rápido, zero binários externos, filtra falsos 200 OK",
+          },
+          {
+            toolId: "nuclei",
+            label: "Nuclei Templates",
+            badge: "Motor Externo",
+            description: "Varredura por tags (misconfig, exposure, cve, tech)",
+          },
+          {
+            toolId: "ffuf",
+            label: "ffuf Directory Fuzzer",
+            badge: "Motor Externo",
+            description: "Fuzzing de endpoints usando wordlist do projeto",
+          },
+        ],
+      },
+      {
+        id: "headers",
+        label: "Headers & Cookies",
+        description: "Auditoria passiva imediata de HSTS, CSP, X-Frame-Options, CORS e flags de sessão (HttpOnly/Secure/SameSite)",
+        engines: [
+          {
+            toolId: "http-headers",
+            label: "Inspetor de Segurança HTTP",
+            badge: "Nativo",
+            description: "Análise passiva de cabeçalhos e cookies",
+          },
+        ],
+      },
+      {
+        id: "decoder",
+        label: "Decoder, JWT & Sequencer",
+        description: "Encadeie decodificações (Base64, URL, Hex, HTML, SHA-256), audite tokens JWT e meça entropia de sessões",
+        engines: [
+          {
+            toolId: "decoder-jwt",
+            label: "Decoder + JWT + Sequencer",
+            badge: "Nativo",
+            description: "Transformações em cadeia e análise criptográfica de tokens",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "network-suite",
+    title: "Network & TLS Recon",
+    shortTitle: "Rede & TLS",
+    subtitle: "Port Scanner TCP & Banners · Nmap (-sV) · Inspetor de Certificados TLS / X.509 & SANs",
+    icon: "server",
+    keywords: ["nmap", "tcp", "portas", "banner", "tls", "ssl", "x509", "certificado", "sni", "rede"],
+    functions: [
+      {
+        id: "ports",
+        label: "Port & Service Scanner",
+        description: "Verifique portas abertas, banners de serviço e versões ativas no host alvo",
+        engines: [
+          {
+            toolId: "tcp-probe",
+            label: "Sonda TCP & Banners (Porta Única ou Lista)",
+            badge: "MIT Nativo",
+            description: "Execução imediata sem depender do Nmap instalado",
+          },
+          {
+            toolId: "nmap",
+            label: "Nmap Service Scanner (-sV)",
+            badge: "Motor Externo",
+            description: "Detecção profunda de serviços/versões via binário Nmap",
+          },
+        ],
+      },
+      {
+        id: "tls",
+        label: "Certificado TLS / X.509",
+        description: "Inspecione versão do protocolo TLS, cifra negociada, cadeia X.509, SANs, expiração e hash SHA-256",
+        engines: [
+          {
+            toolId: "tls-inspector",
+            label: "Inspetor TLS & X.509",
+            badge: "Nativo",
+            description: "Handshake passivo com suporte a SNI customizado",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "packet-suite",
+    title: "Packet Capture Analyzer",
+    shortTitle: "Analisador PCAP",
+    subtitle: "Dissecação de arquivos .pcap (estilo Wireshark): fluxos IP, conversas TCP/UDP, DNS, HTTP e TLS SNI",
+    icon: "window-analytics",
+    keywords: ["wireshark", "tshark", "pcap", "pacotes", "dns", "sni", "trafego"],
+    functions: [
+      {
+        id: "pcap",
+        label: "Inspeção de Captura .pcap",
+        description: "Analise capturas de rede salvas no projeto usando o dissecador nativo ou o Wireshark tshark",
+        engines: [
+          {
+            toolId: "pcap-analyzer",
+            label: "Dissecador Nativo (.pcap)",
+            badge: "MIT Nativo",
+            description: "Extrai fluxos IPv4/IPv6, portas, DNS, HTTP e TLS SNI offline",
+          },
+          {
+            toolId: "tshark",
+            label: "Wireshark tshark (-r)",
+            badge: "Motor Externo",
+            description: "Resumo profundo via motor oficial tshark somente-leitura",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "reversing-suite",
+    title: "Reverse Engineering & Mobile Lab",
+    shortTitle: "Reversa & Mobile",
+    subtitle: "Triagem estática de executáveis (ELF / PE / Mach-O + entropia) e forense de pacotes Mobile (.apk / .ipa)",
+    icon: "cube",
+    keywords: ["ghidra", "radare2", "elf", "pe", "exe", "dll", "mach-o", "apk", "ipa", "android", "ios", "mvt", "mobsf", "binario", "entropia"],
+    functions: [
+      {
+        id: "binary",
+        label: "Binários Desktop/Servidor (ELF / PE / Mach-O)",
+        description: "Arquitetura, seções compactadas (alta entropia), flags NX/PIE/ASLR e strings suspeitas sem executar a amostra",
+        engines: [
+          {
+            toolId: "binary-triage",
+            label: "Triagem Estática de Binários",
+            badge: "Nativo",
+            description: "Parser seguro offline ELF / PE / Mach-O",
+          },
+        ],
+      },
+      {
+        id: "mobile",
+        label: "Forense Mobile (.apk / .ipa / Backups)",
+        description: "Inspeção em memória (anti-ZipSlip) de manifestos, permissões perigosas, DEX/JNI e cruzamento de domínios IoC",
+        engines: [
+          {
+            toolId: "mobile-triage",
+            label: "Analisador de Artefatos Mobile",
+            badge: "Nativo",
+            description: "Alternativa integrada estilo MVT / MobSF",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "code-suite",
+    title: "Auditor de Código & Segredos (SAST)",
+    shortTitle: "Auditoria de Código",
+    subtitle: "Varredura estática somente-leitura de credenciais hardcoded, chaves privadas e padrões inseguros no projeto",
+    icon: "code-lines",
+    keywords: ["sast", "codigo", "segredos", "api key", "token", "audit", "semgrep", "gitleaks"],
+    functions: [
+      {
+        id: "audit",
+        label: "Varredura do Repositório",
+        description: "Inspecione pastas ou arquivos do workspace sem executar código nem modificar arquivos",
+        engines: [
+          {
+            toolId: "workspace-audit",
+            label: "Workspace Code & Secret Audit",
+            badge: "Nativo",
+            description: "Regras estáticas para segredos, TLS e execução insegura",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "cdi-suite",
+    title: "Hub de Agentes Externos CDI",
+    shortTitle: "Agentes CDI",
+    subtitle: "Salem, Kairós, Naia e CDI-04 (portas 8788–8791) — despacho individual ou paralelo e ponte HMAC-SHA256",
+    icon: "brain",
+    keywords: ["cdi", "salem", "kairos", "naia", "chat.py", "parceiro", "hmac", "paralelo"],
+    functions: [
+      {
+        id: "dispatch",
+        label: "Despachar Missão",
+        description: "Envie tarefas para 1 CDI especialista ou dispare os 4 CDIs em paralelo anexando evidências SHA-256",
+        cdiSubTab: "dispatch",
+        engines: [
+          {
+            toolId: "cdi-hub",
+            label: "Orquestrador Multi-CDI",
+            badge: "HMAC-SHA256",
+            description: "Comunicação bidirecional autenticada",
+          },
+        ],
+      },
+      {
+        id: "setup",
+        label: "Conexão, Secret & PowerShell",
+        description: "Registre o Preset dos 4 CDIs (8788–8791), gere/defina o CYBERLAB_PARTNER_SECRET e copie os comandos de inicialização",
+        cdiSubTab: "setup",
+        engines: [
+          {
+            toolId: "cdi-hub",
+            label: "Configuração dos Parceiros CDI",
+            badge: "Gateway :4096",
+            description: "Registro rápido e gerenciamento de segredo",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "governance-suite",
+    title: "Escopo, Cofre SHA-256 & Relatório",
+    shortTitle: "Escopo & Evidências",
+    subtitle: "Controle de alvos permitidos, aprovações humanas, evidências SHA-256, importação externa, Findings e Relatório .md",
+    icon: "shield",
+    keywords: ["escopo", "alvo", "aprovacao", "evidencia", "sha256", "finding", "relatorio", "markdown", "inbox", "importar"],
+    functions: [
+      {
+        id: "scope",
+        label: "Escopo de Alvos",
+        description: "Libere alvos externos e cadastre IPs, CIDRs, domínios e URLs autorizados para os testes",
+        governanceSubTab: "scope",
+        engines: [{ toolId: "scope-governance", label: "Regras de Escopo", badge: "PolicyEngine", description: "Confinamento anti-TOCTOU" }],
+      },
+      {
+        id: "approvals",
+        label: "Aprovações",
+        description: "Aprove ou cancele execuções moderadas/externas pendentes em 1 clique",
+        governanceSubTab: "approvals",
+        engines: [{ toolId: "scope-governance", label: "Fila de Tickets", badge: "Uso Único", description: "Autorização humana" }],
+      },
+      {
+        id: "evidence",
+        label: "Cofre SHA-256",
+        description: "Leia o conteúdo redigido das evidências coletadas e revalide o hash criptográfico SHA-256",
+        governanceSubTab: "evidence",
+        engines: [{ toolId: "scope-governance", label: "EvidenceStore", badge: "SQLite WAL", description: "Cadeia de custódia" }],
+      },
+      {
+        id: "import",
+        label: "Importar Externo / Inbox",
+        description: "Sincronize a pasta .cyberlab/inbox ou cole/importe saídas manuais de ferramentas externas (Burp, OpenTRAP, Ghidra)",
+        engines: [{ toolId: "external-ingest", label: "Ingestão Externa Governada", badge: "Inbox", description: "Redação + SHA-256 automático" }],
+      },
+      {
+        id: "findings",
+        label: "Findings",
+        description: "Registre vulnerabilidades vinculadas às evidências e confirme/rejeite revisões analíticas",
+        governanceSubTab: "findings",
+        engines: [{ toolId: "scope-governance", label: "Gestão de Findings", badge: "Analítico", description: "Severidade independente de confiança" }],
+      },
+      {
+        id: "report",
+        label: "Relatório (.md)",
+        description: "Gere, baixe ou anexe na caixa de diálogo o relatório técnico reproduzível em Markdown",
+        governanceSubTab: "report",
+        engines: [{ toolId: "scope-governance", label: "Gerador de Relatório", badge: "Markdown", description: "Referências SHA-256 verificáveis" }],
+      },
+    ],
+  },
+]
+
+export function getSuiteMeta(suiteId: ToolSuiteId): ToolSuiteMeta {
+  return TOOL_SUITES.find((s) => s.id === suiteId) ?? TOOL_SUITES[0]!
+}
+
+export function getSuiteAllToolIds(suiteId: ToolSuiteId): ManualToolId[] {
+  const suite = getSuiteMeta(suiteId)
+  const set = new Set<ManualToolId>()
+  for (const fn of suite.functions) {
+    for (const eng of fn.engines) {
+      set.add(eng.toolId)
+    }
+  }
+  return [...set]
+}
+
+export function findSuiteAndFunctionForTool(toolId: ManualToolId): { suiteId: ToolSuiteId; functionId: string } {
+  for (const suite of TOOL_SUITES) {
+    for (const fn of suite.functions) {
+      if (fn.engines.some((e) => e.toolId === toolId)) {
+        return { suiteId: suite.id, functionId: fn.id }
+      }
+    }
+  }
+  return { suiteId: "web-suite", functionId: "repeater" }
+}
+
 export function getToolMeta(toolId: ManualToolId): ManualToolMeta {
   return MANUAL_TOOLS.find((t) => t.id === toolId) ?? MANUAL_TOOLS[0]!
 }
@@ -379,6 +721,7 @@ export function createDefaultToolDrafts(): ManualToolDraftMap {
       rawJson: "{\n  \"artifactPath\": \"aplicativo.apk\"\n}",
     },
     "cdi-hub": {
+      cdiSubTab: "dispatch",
       selectedPartnerIds: ["salem"],
       objective: "Revisar evidências e sugerir próximas verificações de segurança dentro do escopo",
       contextText: "",

@@ -2,6 +2,43 @@ import type { IconName } from "@opencode/plugin/gui"
 
 export type ManualToolCategoryId = "web" | "network" | "forensics" | "cdi_external" | "governance"
 
+export type ToolSuiteId =
+  | "web-suite"
+  | "network-suite"
+  | "packet-suite"
+  | "reversing-suite"
+  | "code-suite"
+  | "cdi-suite"
+  | "governance-suite"
+
+export interface ToolSuiteEngineOption {
+  toolId: ManualToolId
+  label: string
+  badge: string
+  description: string
+}
+
+export interface ToolSuiteFunctionTab {
+  id: string
+  label: string
+  description: string
+  /** Sub-aba específica quando aponta para scope-governance ou cdi-hub */
+  governanceSubTab?: ScopeGovernanceDraft["subTab"]
+  cdiSubTab?: "dispatch" | "setup"
+  /** Lista de motores selecionáveis dentro desta mesma função (estilo Burp / Scanner) */
+  engines: ToolSuiteEngineOption[]
+}
+
+export interface ToolSuiteMeta {
+  id: ToolSuiteId
+  title: string
+  shortTitle: string
+  subtitle: string
+  icon: IconName
+  keywords: string[]
+  functions: ToolSuiteFunctionTab[]
+}
+
 export type ManualToolId =
   | "http-repeater"
   | "http-proxy"
@@ -180,6 +217,7 @@ export interface MobileTriageDraft {
 }
 
 export interface CdiHubDraft {
+  cdiSubTab?: "dispatch" | "setup"
   selectedPartnerIds: string[]
   objective: string
   contextText: string

@@ -9,8 +9,11 @@ import {
   buildCapabilityInput,
   createDefaultToolDrafts,
   DEFAULT_QUICK_TOOLS,
+  findSuiteAndFunctionForTool,
+  getSuiteMeta,
   getToolMeta,
   MANUAL_TOOLS,
+  TOOL_SUITES,
 } from "./catalog"
 import type {
   ApprovalDto,
@@ -28,6 +31,7 @@ import type {
   ReadEvidenceDto,
   ScopeRuleDto,
   ToolHistoryEntry,
+  ToolSuiteId,
   WorkbenchLayoutMode,
   WorkspaceStatusDto,
 } from "./types"
@@ -41,6 +45,10 @@ type StoredUiPrefs = {
   open: boolean
   layoutMode: WorkbenchLayoutMode
   splitWidthPct: number
+  activeSuiteId?: ToolSuiteId
+  activeFunctionBySuite?: Partial<Record<ToolSuiteId, string>>
+  activeEngineByFunction?: Record<string, ManualToolId>
+  historyScope?: "function" | "suite"
   activeToolId: ManualToolId
   quickToolIds: ManualToolId[]
   showHistoryColumn: boolean
@@ -136,10 +144,36 @@ function createWorkbenchService() {
     ? savedUi.quickToolIds.filter((id): id is ManualToolId => typeof id === "string" && isValidToolId(id))
     : []
 
+  const initialToolId: ManualToolId =
+    typeof savedUi.activeToolId === "string" && isValidToolId(savedUi.activeToolId)
+      ? savedUi.activeToolId
+      : "http-repeater"
+
+  const inferredSuite = findSuiteAndFunctionForTool(initialToolId)
+  const initialSuiteId: ToolSuiteId =
+    savedUi.activeSuiteId && TOOL_SUITES.some((s) => s.id === savedUi.activeSuiteId)
+      ? savedUi.activeSuiteId
+      : inferredSuite.suiteId
+
+  const defaultFnBySuite: Record<ToolSuiteId, string> = {
+    "web-suite": "repeater",
+    "network-suite": "ports",
+    "packet-suite": "pcap",
+    "reversing-suite": "binary",
+    "code-suite": "audit",
+    "cdi-suite": "dispatch",
+    "governance-suite": "scope",
+    ...(savedUi.activeFunctionBySuite ?? {}),
+  }
+
   const [ui, setUi] = createStore<{
     open: boolean
     layoutMode: WorkbenchLayoutMode
     splitWidthPct: number
+    activeSuiteId: ToolSuiteId
+    activeFunctionBySuite: Record<ToolSuiteId, string>
+    activeEngineByFunction: Record<string, ManualToolId>
+    historyScope: "function" | "suite"
     activeToolId: ManualToolId
     quickToolIds: ManualToolId[]
     showHistoryColumn: boolean
@@ -154,10 +188,11 @@ function createWorkbenchService() {
     layoutMode: savedUi.layoutMode === "fullscreen" ? "fullscreen" : "split",
     splitWidthPct:
       typeof savedUi.splitWidthPct === "number" ? Math.min(72, Math.max(38, savedUi.splitWidthPct)) : 54,
-    activeToolId:
-      typeof savedUi.activeToolId === "string" && isValidToolId(savedUi.activeToolId)
-        ? savedUi.activeToolId
-        : "http-repeater",
+    activeSuiteId: initialSuiteId,
+    activeFunctionBySuite: defaultFnBySuite,
+    activeEngineByFunction: savedUi.activeEngineByFunction ?? {},
+    historyScope: savedUi.historyScope === "suite" ? "suite" : "function",
+    activeToolId: initialToolId,
     quickToolIds: initialQuickTools.length > 0 ? initialQuickTools : [...DEFAULT_QUICK_TOOLS],
     showHistoryColumn: savedUi.showHistoryColumn !== false,
     directoryOverride: typeof savedUi.directoryOverride === "string" ? savedUi.directoryOverride : "",
@@ -213,6 +248,10 @@ function createWorkbenchService() {
       open: ui.open,
       layoutMode: ui.layoutMode,
       splitWidthPct: ui.splitWidthPct,
+      activeSuiteId: ui.activeSuiteId,
+      activeFunctionBySuite: { ...ui.activeFunctionBySuite },
+      activeEngineByFunction: { ...ui.activeEngineByFunction },
+      historyScope: ui.historyScope,
       activeToolId: ui.activeToolId,
       quickToolIds: [...ui.quickToolIds],
       showHistoryColumn: ui.showHistoryColumn,
@@ -268,18 +307,92 @@ function createWorkbenchService() {
     })
   }
 
-  const selectTool = (toolId: ManualToolId, opts?: { openWorkbench?: boolean }) => {
+  const applySuiteAndFunction = (suiteId: ToolSuiteId, functionId?: string, engineToolId?: ManualToolId) => {
+    const suite = getSuiteMeta(suiteId)
+    const fn =
+      suite.functions.find((f) => f.id === (functionId ?? ui.activeFunctionBySuite[suiteId])) ?? suite.functions[0]!
+    const fnKey = `${suiteId}:${fn.id}`
+    const rememberedEngine = ui.activeEngineByFunction[fnKey]
+    const resolvedEngine =
+      (engineToolId && fn.engines.some((e) => e.toolId === engineToolId) ? engineToolId : undefined) ??
+      (rememberedEngine && fn.engines.some((e) => e.toolId === rememberedEngine) ? rememberedEngine : undefined) ??
+      fn.engines[0]!.toolId
+
     batch(() => {
+      setUi("activeSuiteId", suiteId)
+      setUi("activeFunctionBySuite", suiteId, fn.id)
+      setUi("activeEngineByFunction", fnKey, resolvedEngine)
+      setUi("activeToolId", resolvedEngine)
+      setUi("open", true)
+      if (fn.governanceSubTab) {
+        setDrafts("scope-governance", "subTab", fn.governanceSubTab)
+      }
+      if (fn.cdiSubTab) {
+        setDrafts("cdi-hub", "cdiSubTab", fn.cdiSubTab)
+      }
+    })
+    persistUi()
+    persistDrafts()
+  }
+
+  const selectSuite = (suiteId: ToolSuiteId, functionId?: string, engineToolId?: ManualToolId) => {
+    applySuiteAndFunction(suiteId, functionId, engineToolId)
+  }
+
+  const selectSuiteFunction = (functionId: string) => {
+    applySuiteAndFunction(ui.activeSuiteId, functionId)
+  }
+
+  const selectSuiteEngine = (toolId: ManualToolId) => {
+    const fnId = ui.activeFunctionBySuite[ui.activeSuiteId]
+    applySuiteAndFunction(ui.activeSuiteId, fnId, toolId)
+  }
+
+  const setHistoryScope = (scope: "function" | "suite") => {
+    setUi("historyScope", scope)
+    persistUi()
+  }
+
+  const selectTool = (toolId: ManualToolId, opts?: { openWorkbench?: boolean }) => {
+    const loc = findSuiteAndFunctionForTool(toolId)
+    batch(() => {
+      setUi("activeSuiteId", loc.suiteId)
+      setUi("activeFunctionBySuite", loc.suiteId, loc.functionId)
+      setUi("activeEngineByFunction", `${loc.suiteId}:${loc.functionId}`, toolId)
       setUi("activeToolId", toolId)
       if (opts?.openWorkbench !== false) {
         setUi("open", true)
       }
-      if (!ui.quickToolIds.includes(toolId)) {
-        const next = [toolId, ...ui.quickToolIds].slice(0, 10)
-        setUi("quickToolIds", next)
-      }
     })
     persistUi()
+  }
+
+  const sendUrlAcrossWebSuite = (url: string, targetFunction: "headers" | "scanner") => {
+    const clean = url.trim()
+    if (!clean) return
+    if (targetFunction === "headers") {
+      updateDraft("http-headers", (p) => ({ ...p, url: clean }))
+      applySuiteAndFunction("web-suite", "headers", "http-headers")
+      setNotice(`URL enviada para Headers & Cookies (${clean}).`)
+      return
+    }
+    try {
+      const parsed = new URL(clean)
+      const originUrl = parsed.origin
+      updateDraft("web-surface", (p) => ({ ...p, baseUrl: originUrl }))
+      updateDraft("nuclei", (p) => ({ ...p, url: clean }))
+      updateDraft("ffuf", (p) => ({ ...p, baseUrl: originUrl }))
+    } catch {
+      updateDraft("web-surface", (p) => ({ ...p, baseUrl: clean }))
+    }
+    applySuiteAndFunction("web-suite", "scanner")
+    setNotice(`URL enviada para Scanner & Fuzzer (${clean}).`)
+  }
+
+  const sendTextToDecoder = (value: string) => {
+    updateDraft("decoder-jwt", (p) => ({ ...p, value: value.slice(0, 65000) }))
+    applySuiteAndFunction("web-suite", "decoder", "decoder-jwt")
+    setNotice("Conteúdo enviado para o Decoder / JWT Inspector.")
   }
 
   const toggleWorkbench = (force?: boolean) => {
@@ -372,11 +485,16 @@ function createWorkbenchService() {
     if (!entry.draftSnapshot) return
     const defaults = createDefaultToolDrafts()[entry.toolId]
     const merged = { ...defaults, ...entry.draftSnapshot }
+    const loc = findSuiteAndFunctionForTool(entry.toolId)
     batch(() => {
       setDrafts(entry.toolId, reconcile(merged as never))
+      setUi("activeSuiteId", loc.suiteId)
+      setUi("activeFunctionBySuite", loc.suiteId, loc.functionId)
+      setUi("activeEngineByFunction", `${loc.suiteId}:${loc.functionId}`, entry.toolId)
       setUi("activeToolId", entry.toolId)
       setUi("selectedHistoryByTool", entry.toolId, entry.id)
     })
+    persistUi()
     persistDrafts()
     setNotice(`Parâmetros de "${entry.targetSummary}" carregados na ferramenta.`)
   }
@@ -1108,6 +1226,12 @@ function createWorkbenchService() {
     backend,
     resolvedDirectory,
     registerComposer,
+    selectSuite,
+    selectSuiteFunction,
+    selectSuiteEngine,
+    setHistoryScope,
+    sendUrlAcrossWebSuite,
+    sendTextToDecoder,
     selectTool,
     toggleWorkbench,
     setLayoutMode,

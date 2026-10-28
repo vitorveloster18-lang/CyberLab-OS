@@ -14,7 +14,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-const UI_BUILD_STAMP = "cyberlab-unified-v2.2-manual-workbench"
+const UI_BUILD_STAMP = "cyberlab-unified-v2.3-suites"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const distDir = path.join(repoRoot, "packages", "app", "dist")

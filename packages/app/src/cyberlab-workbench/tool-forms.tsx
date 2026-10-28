@@ -196,7 +196,34 @@ export function ManualToolConfigForm(props: { wb: CyberLabWorkbenchService }) {
                   </select>
                 </div>
                 <div class="flex flex-col gap-1">
-                  <label class={LABEL_CLS}>URL Alvo (dentro do escopo)</label>
+                  <div class="flex flex-wrap items-center justify-between gap-1.5">
+                    <label class={LABEL_CLS}>URL Alvo (dentro do escopo)</label>
+                    <div class="flex flex-wrap items-center gap-1">
+                      <button
+                        type="button"
+                        class={CHIP_CLS}
+                        onClick={() => wb.sendUrlAcrossWebSuite(d().url, "headers")}
+                      >
+                        → Auditar Headers
+                      </button>
+                      <button
+                        type="button"
+                        class={CHIP_CLS}
+                        onClick={() => wb.sendUrlAcrossWebSuite(d().url, "scanner")}
+                      >
+                        → Enviar p/ Scanner
+                      </button>
+                      <Show when={d().body}>
+                        <button
+                          type="button"
+                          class={CHIP_CLS}
+                          onClick={() => wb.sendTextToDecoder(d().body)}
+                        >
+                          → Corpo p/ Decoder
+                        </button>
+                      </Show>
+                    </div>
+                  </div>
                   <input
                     type="text"
                     value={d().url}
@@ -499,6 +526,13 @@ export function ManualToolConfigForm(props: { wb: CyberLabWorkbenchService }) {
                           onClick={() => wb.sendProxyCaptureToRepeater(sel())}
                         >
                           Enviar p/ Repeater
+                        </button>
+                        <button
+                          type="button"
+                          class={CHIP_CLS}
+                          onClick={() => wb.sendTextToDecoder(sel().responseBody || sel().requestBody || sel().url)}
+                        >
+                          → Decoder / JWT
                         </button>
                         <button
                           type="button"
@@ -1671,58 +1705,78 @@ export function ManualToolConfigForm(props: { wb: CyberLabWorkbenchService }) {
 
           return (
             <div class="flex flex-col gap-3">
-              <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/50 p-2.5 flex flex-col gap-2">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <span class={LABEL_CLS}>
-                    Agentes CDI Registrados ({partners().length}) — Secret:{" "}
-                    {wb.backend.partners?.secretConfigured
-                      ? wb.backend.partners.secretPreview
-                      : "NÃO CONFIGURADO"}
-                  </span>
-                  <div class="flex flex-wrap items-center gap-1.5">
-                    <button type="button" class={CHIP_CLS} onClick={() => void wb.loadFourCdiPreset()}>
-                      Preset 4 CDIs (8788–8791)
-                    </button>
-                    <button type="button" class={CHIP_CLS} onClick={() => void wb.manageCdiSecret("generate")}>
-                      Gerar Secret 256-bit
-                    </button>
-                    <button type="button" class={CHIP_CLS} onClick={() => void wb.manageCdiSecret("reveal")}>
-                      Revelar Secret
-                    </button>
-                  </div>
-                </div>
-
-                <Show when={wb.backend.revealedSecret}>
-                  <div class="rounded bg-v2-background-bg-base p-2 font-mono text-[11px] text-emerald-500 select-text break-all">
-                    $env:CYBERLAB_PARTNER_SECRET="{wb.backend.revealedSecret}"{"\n"}
-                    $env:CYBERLAB_CALLBACK_URL="{wb.backend.partners?.cyberlabCallbackUrl || "http://127.0.0.1:4096/api/cyberlab/partner-gateway"}"
-                  </div>
-                </Show>
-
-                <div class="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={d().customSecretInput}
-                    placeholder="Ou defina seu próprio CYBERLAB_PARTNER_SECRET (mín. 16 caracteres)..."
-                    class={MONO_INPUT_CLS}
-                    onInput={(e) =>
-                      wb.updateDraft("cdi-hub", (p) => ({ ...p, customSecretInput: e.currentTarget.value }))
-                    }
-                  />
-                  <button type="button" class={BTN_SECONDARY} onClick={() => void wb.manageCdiSecret("set")}>
-                    Salvar Secret
-                  </button>
-                </div>
-
-                <Show
-                  when={partners().length > 0}
-                  fallback={
-                    <div class="text-[12px] text-v2-text-text-muted">
-                      Clique em <strong>Preset 4 CDIs (8788–8791)</strong> acima para registrar Salem, Kairós, Naia e CDI-04.
+              <Show when={d().cdiSubTab === "setup"}>
+                <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/50 p-3 flex flex-col gap-2.5">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <span class={LABEL_CLS}>
+                      Agentes CDI Registrados ({partners().length}) — Secret:{" "}
+                      {wb.backend.partners?.secretConfigured
+                        ? wb.backend.partners.secretPreview
+                        : "NÃO CONFIGURADO"}
+                    </span>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <button type="button" class={CHIP_CLS} onClick={() => void wb.loadFourCdiPreset()}>
+                        Preset 4 CDIs (8788–8791)
+                      </button>
+                      <button type="button" class={CHIP_CLS} onClick={() => void wb.manageCdiSecret("generate")}>
+                        Gerar Secret 256-bit
+                      </button>
+                      <button type="button" class={CHIP_CLS} onClick={() => void wb.manageCdiSecret("reveal")}>
+                        Revelar Comandos PowerShell
+                      </button>
                     </div>
-                  }
-                >
+                  </div>
+
+                  <Show when={wb.backend.revealedSecret}>
+                    <div class="rounded bg-v2-background-bg-base p-2.5 font-mono text-[11px] text-emerald-500 select-text break-all">
+                      $env:CYBERLAB_PARTNER_SECRET="{wb.backend.revealedSecret}"{"\n"}
+                      $env:CYBERLAB_CALLBACK_URL="{wb.backend.partners?.cyberlabCallbackUrl || "http://127.0.0.1:4096/api/cyberlab/partner-gateway"}"
+                    </div>
+                  </Show>
+
+                  <div class="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={d().customSecretInput}
+                      placeholder="Ou defina seu próprio CYBERLAB_PARTNER_SECRET (mín. 16 caracteres)..."
+                      class={MONO_INPUT_CLS}
+                      onInput={(e) =>
+                        wb.updateDraft("cdi-hub", (p) => ({ ...p, customSecretInput: e.currentTarget.value }))
+                      }
+                    />
+                    <button type="button" class={BTN_SECONDARY} onClick={() => void wb.manageCdiSecret("set")}>
+                      Salvar Secret
+                    </button>
+                  </div>
+
                   <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+                    <For each={partners()}>
+                      {(partner) => (
+                        <div class="rounded border border-v2-border-border-base bg-v2-background-bg-base p-2 text-[12px]">
+                          <div class="font-medium text-v2-text-text-strong">
+                            {partner.displayName} ({partner.partnerId})
+                          </div>
+                          <div class="font-mono text-[11px] text-v2-text-text-muted truncate">
+                            {partner.endpointUrl}
+                          </div>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </div>
+              </Show>
+
+              <Show when={d().cdiSubTab !== "setup"}>
+                <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/50 p-2.5 flex flex-col gap-2">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <span class={LABEL_CLS}>Selecione 1 CDI (Especialista) ou Múltiplos em Paralelo</span>
+                    <Show when={partners().length === 0}>
+                      <button type="button" class={CHIP_CLS} onClick={() => void wb.loadFourCdiPreset()}>
+                        + Carregar Preset 4 CDIs (8788–8791)
+                      </button>
+                    </Show>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                     <For each={partners()}>
                       {(partner) => (
                         <label class="flex items-start gap-2 rounded border border-v2-border-border-base bg-v2-background-bg-base p-2 text-[12px] cursor-pointer">
@@ -1743,31 +1797,33 @@ export function ManualToolConfigForm(props: { wb: CyberLabWorkbenchService }) {
                       )}
                     </For>
                   </div>
-                </Show>
-              </div>
+                </div>
+              </Show>
 
-              <div class="flex flex-col gap-1">
-                <label class={LABEL_CLS}>Objetivo da Missão para os CDIs Selecionados</label>
-                <input
-                  type="text"
-                  value={d().objective}
-                  class={INPUT_CLS}
-                  onInput={(e) => wb.updateDraft("cdi-hub", (p) => ({ ...p, objective: e.currentTarget.value }))}
-                />
-              </div>
+              <Show when={d().cdiSubTab !== "setup"}>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Objetivo da Missão para os CDIs Selecionados</label>
+                  <input
+                    type="text"
+                    value={d().objective}
+                    class={INPUT_CLS}
+                    onInput={(e) => wb.updateDraft("cdi-hub", (p) => ({ ...p, objective: e.currentTarget.value }))}
+                  />
+                </div>
 
-              <div class="flex flex-col gap-1">
-                <label class={LABEL_CLS}>Contexto / Instruções Detalhadas (redigido automaticamente antes do envio)</label>
-                <textarea
-                  rows={3}
-                  value={d().contextText}
-                  placeholder="Descreva a hipótese, endpoint ou contexto para análise especialista ou paralela..."
-                  class={INPUT_CLS}
-                  onInput={(e) => wb.updateDraft("cdi-hub", (p) => ({ ...p, contextText: e.currentTarget.value }))}
-                />
-              </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Contexto / Instruções Detalhadas (redigido automaticamente antes do envio)</label>
+                  <textarea
+                    rows={3}
+                    value={d().contextText}
+                    placeholder="Descreva a hipótese, endpoint ou contexto para análise especialista ou paralela..."
+                    class={INPUT_CLS}
+                    onInput={(e) => wb.updateDraft("cdi-hub", (p) => ({ ...p, contextText: e.currentTarget.value }))}
+                  />
+                </div>
+              </Show>
 
-              <Show when={wb.backend.evidence.length > 0}>
+              <Show when={d().cdiSubTab !== "setup" && wb.backend.evidence.length > 0}>
                 <div class="flex flex-col gap-1">
                   <label class={LABEL_CLS}>Anexar Evidências SHA-256 do Projeto ({d().selectedEvidenceIds.length})</label>
                   <div class="max-h-28 overflow-y-auto rounded border border-v2-border-border-base p-2 flex flex-col gap-1" data-scrollable>
@@ -1788,35 +1844,37 @@ export function ManualToolConfigForm(props: { wb: CyberLabWorkbenchService }) {
                 </div>
               </Show>
 
-              <div class="flex items-center gap-2">
-                <div class="w-44">
-                  <label class={LABEL_CLS}>Timeout (ms)</label>
-                  <input
-                    type="number"
-                    min={1000}
-                    max={120000}
-                    value={d().timeoutMs}
-                    class={INPUT_CLS}
-                    onInput={(e) =>
-                      wb.updateDraft("cdi-hub", (p) => ({ ...p, timeoutMs: Number(e.currentTarget.value) }))
-                    }
-                  />
+              <Show when={d().cdiSubTab !== "setup"}>
+                <div class="flex items-center gap-2">
+                  <div class="w-44">
+                    <label class={LABEL_CLS}>Timeout (ms)</label>
+                    <input
+                      type="number"
+                      min={1000}
+                      max={120000}
+                      value={d().timeoutMs}
+                      class={INPUT_CLS}
+                      onInput={(e) =>
+                        wb.updateDraft("cdi-hub", (p) => ({ ...p, timeoutMs: Number(e.currentTarget.value) }))
+                      }
+                    />
+                  </div>
+                  <div class="pt-4 flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={isRunning()}
+                      class={BTN_PRIMARY}
+                      onClick={() => void wb.dispatchCdiMission()}
+                    >
+                      {isRunning()
+                        ? "Consultando CDIs..."
+                        : d().selectedPartnerIds.length > 1
+                          ? `Disparar em Paralelo (${d().selectedPartnerIds.length} CDIs)`
+                          : "Enviar Tarefa ao CDI"}
+                    </button>
+                  </div>
                 </div>
-                <div class="pt-4 flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={isRunning()}
-                    class={BTN_PRIMARY}
-                    onClick={() => void wb.dispatchCdiMission()}
-                  >
-                    {isRunning()
-                      ? "Consultando CDIs..."
-                      : d().selectedPartnerIds.length > 1
-                        ? `Disparar em Paralelo (${d().selectedPartnerIds.length} CDIs)`
-                        : "Enviar Tarefa ao CDI"}
-                  </button>
-                </div>
-              </div>
+              </Show>
             </div>
           )
         })()}
@@ -1954,32 +2012,6 @@ export function ManualToolConfigForm(props: { wb: CyberLabWorkbenchService }) {
 
           return (
             <div class="flex flex-col gap-3">
-              <div class="flex flex-wrap gap-1 border-b border-v2-border-border-base pb-2">
-                <For
-                  each={[
-                    { id: "scope", label: "Escopo de Alvos" },
-                    { id: "approvals", label: `Aprovações (${wb.backend.approvals.length})` },
-                    { id: "evidence", label: `Evidências SHA-256 (${wb.backend.evidence.length})` },
-                    { id: "findings", label: `Findings (${wb.backend.findings.length})` },
-                    { id: "report", label: "Relatório .md" },
-                  ] as const}
-                >
-                  {(tab) => (
-                    <button
-                      type="button"
-                      class={`rounded-md px-2.5 py-1 text-[12px] font-medium cursor-pointer ${
-                        d().subTab === tab.id
-                          ? "bg-emerald-600 text-white"
-                          : "bg-v2-background-bg-deep text-v2-text-text-base"
-                      }`}
-                      onClick={() => wb.updateDraft("scope-governance", (p) => ({ ...p, subTab: tab.id }))}
-                    >
-                      {tab.label}
-                    </button>
-                  )}
-                </For>
-              </div>
-
               <Show when={d().subTab === "scope"}>
                 <div class="flex flex-col gap-2.5">
                   <label class="flex items-center justify-between gap-2 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/50 p-2.5 text-[12px] cursor-pointer">
