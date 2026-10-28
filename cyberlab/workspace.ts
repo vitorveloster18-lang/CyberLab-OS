@@ -19,6 +19,7 @@ import {
   EXTERNAL_JADX_INPUT_SCHEMA_ID,
   EXTERNAL_NMAP_INPUT_SCHEMA_ID,
   EXTERNAL_NUCLEI_INPUT_SCHEMA_ID,
+  EXTERNAL_TRIVY_INPUT_SCHEMA_ID,
   EXTERNAL_TSHARK_INPUT_SCHEMA_ID,
   EXTERNAL_YARAX_INPUT_SCHEMA_ID,
   ExternalControlPlane,
@@ -40,6 +41,9 @@ import {
   ExternalNucleiCapability,
   ExternalNucleiExecutor,
   ExternalNucleiInputSchema,
+  ExternalTrivyCapability,
+  ExternalTrivyExecutor,
+  ExternalTrivyInputSchema,
   ExternalTsharkCapability,
   ExternalTsharkExecutor,
   ExternalTsharkInputSchema,
@@ -149,6 +153,36 @@ import {
   YaraScanCapability,
   YaraScanInputSchema,
 } from "../integrations/reverse-forensics/yara-rule-scanner.js"
+import {
+  API_SECURITY_LAB_INPUT_SCHEMA_ID,
+  ApiGraphqlOauthCapability,
+  ApiGraphqlOauthInputSchema,
+  ApiGraphqlOauthLabExecutor,
+} from "../integrations/web-security/api-graphql-oauth-lab.js"
+import {
+  SCA_SBOM_IAC_INPUT_SCHEMA_ID,
+  ScaSbomIacAuditorExecutor,
+  ScaSbomIacCapability,
+  ScaSbomIacInputSchema,
+} from "../integrations/code-analysis/sca-sbom-iac-auditor.js"
+import {
+  DFIR_SIGMA_INPUT_SCHEMA_ID,
+  DfirSigmaAnalyzerExecutor,
+  DfirSigmaCapability,
+  DfirSigmaInputSchema,
+} from "../integrations/reverse-forensics/dfir-sigma-analyzer.js"
+import {
+  AD_SMB_LDAP_INPUT_SCHEMA_ID,
+  AdSmbLdapCapability,
+  AdSmbLdapInputSchema,
+  AdSmbLdapInspectorExecutor,
+} from "../integrations/network-observation/ad-smb-ldap-inspector.js"
+import {
+  ENTROPY_RECIPE_INPUT_SCHEMA_ID,
+  EntropyRecipeCapability,
+  EntropyRecipeInputSchema,
+  EntropyRecipeStudioExecutor,
+} from "../integrations/reverse-forensics/entropy-recipe-studio.js"
 
 const repoSkillsDir = fileURLToPath(new URL("../skills", import.meta.url))
 
@@ -338,6 +372,26 @@ export class CyberLabWorkspace {
     this.executors.registerExecutor(new YaraRuleScannerExecutor())
     await this.capabilities.register(YaraScanCapability)
 
+    this.schemas.registerEffectSchema(API_SECURITY_LAB_INPUT_SCHEMA_ID, ApiGraphqlOauthInputSchema)
+    this.executors.registerExecutor(new ApiGraphqlOauthLabExecutor())
+    await this.capabilities.register(ApiGraphqlOauthCapability)
+
+    this.schemas.registerEffectSchema(SCA_SBOM_IAC_INPUT_SCHEMA_ID, ScaSbomIacInputSchema)
+    this.executors.registerExecutor(new ScaSbomIacAuditorExecutor())
+    await this.capabilities.register(ScaSbomIacCapability)
+
+    this.schemas.registerEffectSchema(DFIR_SIGMA_INPUT_SCHEMA_ID, DfirSigmaInputSchema)
+    this.executors.registerExecutor(new DfirSigmaAnalyzerExecutor())
+    await this.capabilities.register(DfirSigmaCapability)
+
+    this.schemas.registerEffectSchema(AD_SMB_LDAP_INPUT_SCHEMA_ID, AdSmbLdapInputSchema)
+    this.executors.registerExecutor(new AdSmbLdapInspectorExecutor())
+    await this.capabilities.register(AdSmbLdapCapability)
+
+    this.schemas.registerEffectSchema(ENTROPY_RECIPE_INPUT_SCHEMA_ID, EntropyRecipeInputSchema)
+    this.executors.registerExecutor(new EntropyRecipeStudioExecutor())
+    await this.capabilities.register(EntropyRecipeCapability)
+
     // Register governed External Tool Control Plane bridges (Nmap, Nuclei, ffuf, tshark, dalfox, ghidra, jadx, yarax)
     this.schemas.registerEffectSchema(EXTERNAL_NMAP_INPUT_SCHEMA_ID, ExternalNmapInputSchema)
     this.executors.registerExecutor(new ExternalNmapExecutor(() => this.workspaceRoot))
@@ -370,6 +424,10 @@ export class CyberLabWorkspace {
     this.schemas.registerEffectSchema(EXTERNAL_YARAX_INPUT_SCHEMA_ID, ExternalYaraXInputSchema)
     this.executors.registerExecutor(new ExternalYaraXExecutor(() => this.workspaceRoot))
     await this.capabilities.register(ExternalYaraXCapability)
+
+    this.schemas.registerEffectSchema(EXTERNAL_TRIVY_INPUT_SCHEMA_ID, ExternalTrivyInputSchema)
+    this.executors.registerExecutor(new ExternalTrivyExecutor(() => this.workspaceRoot))
+    await this.capabilities.register(ExternalTrivyCapability)
 
     // Load CyberLab skills
     this.skills.loadFromDirectory(repoSkillsDir)

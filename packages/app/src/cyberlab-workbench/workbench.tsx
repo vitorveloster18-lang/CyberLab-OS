@@ -6,7 +6,163 @@ import { useCyberLabWorkbench } from "./state"
 import { ManualToolConfigForm } from "./tool-forms"
 import type { ManualToolId, ToolHistoryEntry, ToolSuiteFunctionTab } from "./types"
 
-const EXTERNAL_BINARY_TOOLS = new Set<ManualToolId>(["nuclei", "ffuf", "nmap", "tshark"])
+const EXTERNAL_BINARY_TOOLS = new Set<ManualToolId>([
+  "nuclei",
+  "ffuf",
+  "nmap",
+  "tshark",
+  "dalfox",
+  "ghidra",
+  "jadx",
+  "yarax",
+  "trivy",
+])
+
+interface EntropyBlockDto {
+  offsetHex: string
+  entropy: number
+  classification: "null_padding" | "plaintext_or_code" | "structured_binary" | "compressed_or_encrypted"
+}
+
+function StructuredResultVisualizer(props: { outputText: string }) {
+  const parsed = createMemo<Record<string, unknown> | null>(() => {
+    const txt = props.outputText?.trim()
+    if (!txt || !txt.startsWith("{")) return null
+    try {
+      const obj = JSON.parse(txt) as unknown
+      return obj && typeof obj === "object" && !Array.isArray(obj) ? (obj as Record<string, unknown>) : null
+    } catch {
+      return null
+    }
+  })
+
+  const entropyBlocks = createMemo<EntropyBlockDto[]>(() => {
+    const obj = parsed()
+    const prof = obj?.entropyProfile as Record<string, unknown> | undefined
+    const blocks = prof?.buckets
+    return Array.isArray(blocks) ? (blocks as EntropyBlockDto[]) : []
+  })
+
+  const tlsDeepAudit = createMemo<Record<string, unknown> | null>(() => {
+    const obj = parsed()
+    const da = obj?.deepAudit
+    return da && typeof da === "object" ? (da as Record<string, unknown>) : null
+  })
+
+  const dfirTimeline = createMemo<Array<Record<string, unknown>>>(() => {
+    const obj = parsed()
+    const tl = obj?.incidentTimeline
+    return Array.isArray(tl) ? (tl as Array<Record<string, unknown>>) : []
+  })
+
+  const barColor = (cls: EntropyBlockDto["classification"]) => {
+    switch (cls) {
+      case "compressed_or_encrypted":
+        return "bg-rose-500"
+      case "structured_binary":
+        return "bg-amber-500"
+      case "plaintext_or_code":
+        return "bg-sky-500"
+      default:
+        return "bg-emerald-500"
+    }
+  }
+
+  return (
+    <>
+      <Show when={entropyBlocks().length > 0}>
+        <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-base p-2.5 flex flex-col gap-1.5">
+          <div class="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+            <strong class="text-v2-text-text-strong">
+              Espectro Visual de Entropia de Shannon (Byte 0 → EOF · {entropyBlocks().length} faixas)
+            </strong>
+            <div class="flex flex-wrap items-center gap-2 text-[10px] text-v2-text-text-muted">
+              <span class="inline-flex items-center gap-1"><span class="size-2 rounded-full bg-emerald-500" /> Padding/Zeros</span>
+              <span class="inline-flex items-center gap-1"><span class="size-2 rounded-full bg-sky-500" /> Texto/Código</span>
+              <span class="inline-flex items-center gap-1"><span class="size-2 rounded-full bg-amber-500" /> Binário Estruturado</span>
+              <span class="inline-flex items-center gap-1"><span class="size-2 rounded-full bg-rose-500" /> Cifrado/Comprimido (&ge;7.2)</span>
+            </div>
+          </div>
+          <div class="flex h-16 items-end gap-[1px] rounded bg-v2-background-bg-deep/70 p-1.5 overflow-hidden">
+            <For each={entropyBlocks()}>
+              {(blk) => (
+                <div
+                  title={`${blk.offsetHex} · Entropia ${blk.entropy.toFixed(2)}/8.00 (${blk.classification})`}
+                  class={`flex-1 min-w-[2px] rounded-t-[1px] transition-opacity hover:opacity-80 ${barColor(blk.classification)}`}
+                  style={{ height: `${Math.max(8, Math.round((blk.entropy / 8) * 100))}%` }}
+                />
+              )}
+            </For>
+          </div>
+        </div>
+      </Show>
+
+      <Show when={tlsDeepAudit()}>
+        {(() => {
+          const da = () => tlsDeepAudit() ?? {}
+          const grade = () => String(da().securityGrade ?? "?")
+          const matrix = () =>
+            Array.isArray(da().protocolSupportMatrix)
+              ? (da().protocolSupportMatrix as Array<Record<string, unknown>>)
+              : []
+          return (
+            <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-base p-2.5 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+              <div class="flex items-center gap-2">
+                <span class="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-2 py-0.5 font-mono text-[13px] font-bold text-emerald-400">
+                  Nota TLS: {grade()}
+                </span>
+                <span class="text-v2-text-text-muted">
+                  Forward Secrecy: {da().forwardSecrecy ? "Sim (ECDHE/TLS1.3)" : "Ausente"} · AEAD:{" "}
+                  {da().aeadAuthenticated ? "Sim" : "CBC/Stream"}
+                </span>
+              </div>
+              <div class="flex flex-wrap items-center gap-1">
+                <For each={matrix()}>
+                  {(m) => (
+                    <span
+                      class={`rounded border px-1.5 py-0.5 font-mono text-[10px] ${
+                        m.supported
+                          ? String(m.version) === "TLSv1" || String(m.version) === "TLSv1.1"
+                            ? "border-red-500/40 bg-red-500/15 text-red-400"
+                            : "border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
+                          : "border-v2-border-border-base bg-v2-background-bg-deep text-v2-text-text-muted"
+                      }`}
+                    >
+                      {String(m.version)}: {m.supported ? "ON" : "OFF"}
+                    </span>
+                  )}
+                </For>
+              </div>
+            </div>
+          )
+        })()}
+      </Show>
+
+      <Show when={dfirTimeline().length > 0}>
+        <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-base p-2.5 flex flex-col gap-1">
+          <div class="text-[11px] font-medium text-v2-text-text-strong">
+            Timeline Forense de Incidente ({dfirTimeline().length} alerta(s) correlacionado(s))
+          </div>
+          <div class="max-h-32 overflow-y-auto flex flex-col gap-1" data-scrollable>
+            <For each={dfirTimeline().slice(0, 12)}>
+              {(ev) => (
+                <div class="flex items-center justify-between gap-2 rounded bg-v2-background-bg-deep/50 px-2 py-1 text-[11px]">
+                  <span class="truncate text-v2-text-text-strong">
+                    <strong class="uppercase text-amber-400">[{String(ev.level ?? ev.severity ?? "alert")}]</strong>{" "}
+                    {String(ev.ruleTitle)} — {String(ev.rawLine ?? ev.summary ?? "")}
+                  </span>
+                  <span class="shrink-0 font-mono text-[10px] text-v2-text-text-muted">
+                    #{String(ev.lineNumber ?? "")}
+                  </span>
+                </div>
+              )}
+            </For>
+          </div>
+        </div>
+      </Show>
+    </>
+  )
+}
 
 export function CyberLabWorkbenchSurface() {
   const wb = useCyberLabWorkbench()
@@ -73,8 +229,9 @@ export function CyberLabWorkbenchSurface() {
 
   const isExternalToolInstalled = (toolId: ManualToolId): boolean => {
     if (!EXTERNAL_BINARY_TOOLS.has(toolId)) return true
+    const backendId = toolId === "ghidra" ? "ghidra-headless" : toolId
     const list = wb.backend.external?.tools ?? []
-    const found = list.find((t) => t.toolId === toolId)
+    const found = list.find((t) => t.toolId === backendId)
     return Boolean(found?.available)
   }
 
@@ -450,6 +607,8 @@ export function CyberLabWorkbenchSurface() {
                         Custódia Criptográfica SHA-256: {entry().sha256}
                       </div>
                     </Show>
+
+                    <StructuredResultVisualizer outputText={entry().outputText} />
 
                     <pre
                       class="max-h-72 overflow-auto rounded-md border border-v2-border-border-base bg-v2-background-bg-base p-2.5 font-mono text-[11px] leading-[var(--line-height-compact)] text-v2-text-text-strong select-text"

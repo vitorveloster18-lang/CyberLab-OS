@@ -122,7 +122,20 @@ export function extractTargetsFromInput(input: unknown): ExtractedTargets {
   }
 
   const record = input as Record<string, unknown>
-  const networkKeys = ["target", "url", "baseUrl", "baselineUrl", "host", "ip", "endpoint", "origin"]
+  const networkKeys = [
+    "target",
+    "url",
+    "baseUrl",
+    "baselineUrl",
+    "host",
+    "ip",
+    "endpoint",
+    "origin",
+    "graphqlUrl",
+    "issuerUrl",
+    "authorizeUrl",
+    "ntlmHttpUrl",
+  ]
   const networkArrayKeys = ["targets", "urls", "hosts"]
   const pathKeys = [
     "path",
@@ -137,6 +150,11 @@ export function extractTargetsFromInput(input: unknown): ExtractedTargets {
     "wordlistPath",
     "rulesPath",
     "outputSubdir",
+    "specPath",
+    "logPath",
+    "sigmaRulesPath",
+    "iacPath",
+    "lockfilePath",
   ]
   const pathArrayKeys = ["paths", "files"]
 

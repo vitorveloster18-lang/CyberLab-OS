@@ -7,6 +7,7 @@ export type ToolSuiteId =
   | "network-suite"
   | "packet-suite"
   | "reversing-suite"
+  | "dfir-suite"
   | "code-suite"
   | "cdi-suite"
   | "governance-suite"
@@ -45,6 +46,7 @@ export type ManualToolId =
   | "http-intruder"
   | "param-audit"
   | "dalfox"
+  | "api-security-lab"
   | "http-headers"
   | "web-surface"
   | "nuclei"
@@ -54,16 +56,21 @@ export type ManualToolId =
   | "tcp-probe"
   | "nmap"
   | "dns-recon"
+  | "ad-smb-ldap"
   | "pcap-analyzer"
   | "tshark"
   | "workspace-audit"
+  | "sca-sbom-iac"
+  | "trivy"
   | "binary-triage"
   | "binary-disasm"
   | "ghidra"
+  | "entropy-recipe"
   | "mobile-triage"
   | "jadx"
   | "yara-scan"
   | "yarax"
+  | "dfir-sigma"
   | "cdi-hub"
   | "external-ingest"
   | "scope-governance"
@@ -259,7 +266,121 @@ export interface TlsInspectorDraft {
   host: string
   port: number
   servername: string
+  deepCipherAudit: boolean
+  checkHsts: boolean
   timeoutMs: number
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
+}
+
+export interface ApiSecurityLabDraft {
+  baseUrl: string
+  specPath: string
+  inlineSpecJson: string
+  userAAuthHeader: string
+  userBAuthHeader: string
+  testUnauthenticated: boolean
+  maxEndpoints: number
+  graphqlUrl: string
+  graphqlTestBatching: boolean
+  graphqlMaxDepthProbe: number
+  issuerUrl: string
+  authorizeUrl: string
+  timeoutMs: number
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
+}
+
+export interface ScaSbomIacDraft {
+  targetPath: string
+  queryOsv: boolean
+  generateCycloneDx: boolean
+  auditIac: boolean
+  maxFiles: number
+  timeoutMs: number
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
+}
+
+export interface TrivyDraft {
+  targetPath: string
+  scanners: string
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
+}
+
+export interface DfirSigmaDraft {
+  logPath: string
+  logFormat: "auto" | "syslog" | "nginx" | "json"
+  useBuiltinSigma: boolean
+  sigmaRulesPath: string
+  inlineSigmaYaml: string
+  maxEvents: number
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
+}
+
+export interface AdSmbLdapDraft {
+  host: string
+  checkSmbSigning: boolean
+  smbPort: number
+  checkLdapRootDse: boolean
+  ldapPort: number
+  ntlmHttpUrl: string
+  timeoutMs: number
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
+}
+
+export type EntropyRecipeOp =
+  | "from_base64"
+  | "to_base64"
+  | "from_hex"
+  | "to_hex"
+  | "url_decode"
+  | "url_encode"
+  | "gunzip"
+  | "gzip"
+  | "zlib_inflate"
+  | "raw_inflate"
+  | "xor_key"
+  | "xor_single_byte_bruteforce"
+  | "aes_cbc_decrypt"
+  | "aes_gcm_decrypt"
+  | "protobuf_raw_decode"
+  | "extract_strings"
+  | "sha256"
+
+export interface EntropyRecipeStepRow {
+  id: string
+  op: EntropyRecipeOp
+  key: string
+  keyEncoding: "utf8" | "hex"
+  ivHex: string
+  authTagHex: string
+  minLength: number
+}
+
+export interface SavedCyberChefRecipe {
+  id: string
+  name: string
+  steps: EntropyRecipeStepRow[]
+}
+
+export interface EntropyRecipeDraft {
+  targetPath: string
+  windowSize: number
+  rawInput: string
+  inputEncoding: "utf8" | "hex" | "base64"
+  recipeSteps: EntropyRecipeStepRow[]
+  newRecipeName: string
+  savedRecipes: SavedCyberChefRecipe[]
   executionMode: "manual" | "proposed"
   useRawJson: boolean
   rawJson: string
@@ -364,6 +485,7 @@ export interface ManualToolDraftMap {
   "http-intruder": HttpIntruderDraft
   "param-audit": ParamAuditDraft
   dalfox: DalfoxDraft
+  "api-security-lab": ApiSecurityLabDraft
   "http-headers": HttpHeadersDraft
   "web-surface": WebSurfaceDraft
   nuclei: NucleiDraft
@@ -373,16 +495,21 @@ export interface ManualToolDraftMap {
   "tcp-probe": TcpProbeDraft
   nmap: NmapDraft
   "dns-recon": DnsReconDraft
+  "ad-smb-ldap": AdSmbLdapDraft
   "pcap-analyzer": PcapAnalyzerDraft
   tshark: TsharkDraft
   "workspace-audit": WorkspaceAuditDraft
+  "sca-sbom-iac": ScaSbomIacDraft
+  trivy: TrivyDraft
   "binary-triage": BinaryTriageDraft
   "binary-disasm": BinaryDisasmDraft
   ghidra: GhidraDraft
+  "entropy-recipe": EntropyRecipeDraft
   "mobile-triage": MobileTriageDraft
   jadx: JadxDraft
   "yara-scan": YaraScanDraft
   yarax: YaraXDraft
+  "dfir-sigma": DfirSigmaDraft
   "cdi-hub": CdiHubDraft
   "external-ingest": ExternalIngestDraft
   "scope-governance": ScopeGovernanceDraft

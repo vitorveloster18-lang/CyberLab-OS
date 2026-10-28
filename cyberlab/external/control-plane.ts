@@ -146,6 +146,16 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
     installHint: "go install github.com/hahwul/dalfox/v2@latest (or place in .cyberlab/bin)",
     description: "MIT parameter reflection analyzer governed by ScopeController and ApprovalTicket.",
   },
+  {
+    toolId: "trivy",
+    displayName: "Aqua Trivy SCA / Container / IaC Scanner",
+    binaryCandidates: ["trivy"],
+    licenseSpdx: "Apache-2.0",
+    integrationMode: "approved_internal_process",
+    governedCapabilityId: "external.trivy-scan",
+    installHint: "winget install AquaSecurity.Trivy (Windows) or brew/apt install trivy",
+    description: "Apache-2.0 filesystem vulnerability, container & IaC misconfiguration scanner governed inside workspace.",
+  },
 ]
 
 function expandPlatformNames(name: string): string[] {
@@ -1097,6 +1107,108 @@ export class ExternalJadxExecutor implements CyberLabExecutor {
       status: out.exitCode === 0 ? "succeeded" : "failed",
       evidenceIds: [evId],
       summary: `JADX decompiled ${params.artifactPath} -> ${outDirRel.replace(/\\/g, "/")} (exit=${out.exitCode}).`,
+      exitCode: out.exitCode,
+    }
+  }
+}
+
+export const EXTERNAL_TRIVY_INPUT_SCHEMA_ID = "cyberlab.external.trivy.input.v1"
+export const ExternalTrivyInputSchema = Schema.Struct({
+  targetPath: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
+  scanners: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(64))),
+})
+
+export const ExternalTrivyCapability: CapabilityDefinition = {
+  id: "external.trivy-scan",
+  version: "1.0.0",
+  title: "External Aqua Trivy SCA, Secret & IaC Scanner (Apache-2.0 Bridge)",
+  description:
+    "Executes Aqua Trivy ('trivy fs', Apache-2.0) strictly inside workspace paths for dependency CVE, Dockerfile/Kubernetes/Terraform misconfiguration, and secret scanning with SHA-256 custody.",
+  inputSchemaId: EXTERNAL_TRIVY_INPUT_SCHEMA_ID,
+  outputSchemaId: "cyberlab.external.output.v1",
+  risk: "read_only",
+  supportedModes: ["manual", "proposed", "approved", "lab_automation"],
+  requiredPermissions: ["cyberlab:read"],
+  requiredScope: ["workspace_path"],
+  executorId: "external-trivy-executor",
+  skillIds: ["code-review", "evidence-review"],
+  licenseRefs: ["Apache-2.0"],
+  enabled: true,
+}
+
+export class ExternalTrivyExecutor implements CyberLabExecutor {
+  readonly id = "external-trivy-executor"
+  readonly version = "1.0.0"
+
+  constructor(private readonly getWorkspaceRoot: () => string) {}
+
+  async checkAvailability(): Promise<{ available: boolean; version?: string; reason?: string }> {
+    const root = this.getWorkspaceRoot()
+    const resolved = resolveExternalBinary(root, ["trivy"], loadCustomBinaryOverrides(root))
+    if (!resolved.resolvedPath) {
+      return { available: false, reason: "Trivy ('trivy') not found in .cyberlab/bin or PATH" }
+    }
+    return { available: true, version: resolved.resolvedPath }
+  }
+
+  async validate(input: unknown): Promise<{ valid: boolean; errors: string[] }> {
+    try {
+      const d = Schema.decodeUnknownSync(ExternalTrivyInputSchema)(input)
+      if (d.targetPath.includes("\0") || d.targetPath.startsWith("-")) {
+        return { valid: false, errors: ["Invalid targetPath"] }
+      }
+      if (d.scanners && !/^[a-z,]+$/.test(d.scanners)) {
+        return { valid: false, errors: ["scanners must contain comma-separated lowercase names (e.g. vuln,misconfig)"] }
+      }
+      return { valid: true, errors: [] }
+    } catch (err) {
+      return { valid: false, errors: [err instanceof Error ? err.message : String(err)] }
+    }
+  }
+
+  async execute(execInput: ExecutorInput, ctx: ExecutorContext): Promise<ExecutorResult> {
+    const params = Schema.decodeUnknownSync(ExternalTrivyInputSchema)(execInput.input)
+    if (!isPathInsideRoot(params.targetPath, ctx.workspaceRoot)) {
+      return { status: "failed", evidenceIds: [], summary: "targetPath escapes workspaceRoot", exitCode: 2 }
+    }
+    const resolved = resolveExternalBinary(
+      ctx.workspaceRoot,
+      ["trivy"],
+      loadCustomBinaryOverrides(ctx.workspaceRoot),
+    )
+    if (!resolved.resolvedPath) {
+      return { status: "failed", evidenceIds: [], summary: "trivy binary not installed", exitCode: 127 }
+    }
+
+    const fullTarget = path.resolve(ctx.workspaceRoot, params.targetPath)
+    const scanners = params.scanners?.trim() || "vuln,misconfig"
+    const args = ["fs", "--scanners", scanners, "--format", "json", "--quiet", fullTarget]
+    const out = await runSafeChildProcess({
+      binaryPath: resolved.resolvedPath,
+      args,
+      cwd: ctx.workspaceRoot,
+      signal: ctx.signal,
+    })
+
+    const evId = await ctx.emitEvidence(
+      normalizeRawOutputDraft({
+        kind: "json",
+        title: `External Trivy Scan ${params.targetPath} (${scanners})`,
+        rawText: out.stdout || out.stderr || "{}",
+        mediaType: "application/json",
+        toolId: "external:trivy",
+        toolVersion: "external",
+        executorId: this.id,
+        executionId: ctx.executionId,
+        maxOutputBytes: 768 * 1024,
+        labels: ["external-plugin", "trivy", "sca", "iac"],
+      }),
+    )
+
+    return {
+      status: out.exitCode === 0 ? "succeeded" : "failed",
+      evidenceIds: [evId],
+      summary: `External Trivy scan finished on ${params.targetPath} (exit=${out.exitCode}).`,
       exitCode: out.exitCode,
     }
   }

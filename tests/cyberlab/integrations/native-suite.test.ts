@@ -137,12 +137,12 @@ function buildMinimalZipArchive(files: Array<{ name: string; content: string }>)
 }
 
 describe("Embedded Native Security Suite (All-In-One MIT Capabilities)", () => {
-  test("registers all 15 built-in native capabilities plus 8 governed external plugin bridges out-of-the-box", async () => {
+  test("registers all 20 built-in native capabilities plus 9 governed external plugin bridges out-of-the-box", async () => {
     const tmpDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-suite-caps-"))
     try {
       const ws = new CyberLabWorkspace({ projectId: "proj-caps", workspaceRoot: tmpDir, inMemoryDb: true })
       const caps = await ws.listCapabilities()
-      expect(caps.length).toBe(23)
+      expect(caps.length).toBe(29)
       const ids = caps.map((c) => c.id)
       expect(ids).toContain(HttpRepeaterCapability.id)
       expect(ids).toContain(DecoderSequencerCapability.id)

@@ -120,9 +120,9 @@ export const MANUAL_TOOLS: ManualToolMeta[] = [
   {
     id: "tls-inspector",
     category: "network",
-    title: "Inspetor TLS & Certificado X.509",
+    title: "Inspetor TLS, Cifras, PFS, HSTS & Certificado X.509",
     shortTitle: "TLS / X.509",
-    subtitle: "Handshake TLS passivo com protocolo, cifra, cadeia X.509, SANs, validade e fingerprint SHA-256",
+    subtitle: "Handshake TLS passivo + matriz TLS 1.0–1.3, cifras fracas/CBC, Forward Secrecy, HSTS Preload e nota A+..F",
     icon: "lock",
     badge: "MIT Nativo",
     capabilityId: "network-assessment.tls-inspector",
@@ -305,6 +305,72 @@ export const MANUAL_TOOLS: ManualToolMeta[] = [
     riskLabel: "Somente Leitura",
   },
   {
+    id: "api-security-lab",
+    category: "web",
+    title: "API, GraphQL & OAuth2/OIDC Security Lab",
+    shortTitle: "API / GraphQL / OAuth",
+    subtitle: "Importador OpenAPI/Postman com matriz diferencial BOLA/IDOR (User A vs User B), GraphQL e OAuth2/PKCE",
+    icon: "globe",
+    badge: "MIT Nativo",
+    capabilityId: "web-assessment.api-graphql-oauth-lab",
+    riskLabel: "Risco Baixo (Escopo)",
+  },
+  {
+    id: "ad-smb-ldap",
+    category: "network",
+    title: "Inspetor Active Directory, SMB, LDAP & NTLM (Lab)",
+    shortTitle: "AD / SMB / LDAP",
+    subtitle: "Enumeração passiva sem credenciais: SMB2/3 Signing, LDAPv3 RootDSE anônimo e metadados NTLM Type-2",
+    icon: "server",
+    badge: "MIT Nativo",
+    capabilityId: "network-assessment.ad-smb-ldap-inspector",
+    riskLabel: "Somente Leitura (Lab)",
+  },
+  {
+    id: "sca-sbom-iac",
+    category: "forensics",
+    title: "SCA (Vulnerabilidades), SBOM CycloneDX & Auditor IaC",
+    shortTitle: "SCA / SBOM / IaC",
+    subtitle: "Lockfiles (npm/bun/PyPI/Go/Cargo/Maven) + OSV.dev CVEs + SBOM CycloneDX 1.5 + Dockerfile/K8s/Terraform",
+    icon: "code-lines",
+    badge: "MIT Nativo",
+    capabilityId: "code-analysis.sca-sbom-iac-audit",
+    riskLabel: "Somente Leitura",
+  },
+  {
+    id: "trivy",
+    category: "forensics",
+    title: "Aqua Trivy SCA, Container & IaC Scanner",
+    shortTitle: "Trivy (Apache-2.0)",
+    subtitle: "Varredura externa governada via binário trivy fs (vuln, misconfig, secret) com custódia SHA-256",
+    icon: "code-lines",
+    badge: "Plugin Externo",
+    capabilityId: "external.trivy-scan",
+    riskLabel: "Somente Leitura",
+  },
+  {
+    id: "entropy-recipe",
+    category: "forensics",
+    title: "Visualizador de Entropia Binária & CyberChef Studio",
+    shortTitle: "Entropia & CyberChef",
+    subtitle: "Gráfico de entropia byte 0 → EOF, carving de assinaturas e receitas salváveis (XOR, AES, Zlib, Protobuf)",
+    icon: "cube",
+    badge: "MIT Nativo",
+    capabilityId: "reverse-engineering.entropy-recipe-studio",
+    riskLabel: "Somente Leitura",
+  },
+  {
+    id: "dfir-sigma",
+    category: "forensics",
+    title: "DFIR Log Analyzer & Motor de Regras Sigma (YAML)",
+    shortTitle: "DFIR & Sigma",
+    subtitle: "Triagem Blue Team/SOC de logs Linux, Nginx/Apache e JSON/Windows Events com Sigma YAML e Timeline SHA-256",
+    icon: "file-document",
+    badge: "MIT Nativo",
+    capabilityId: "forensics.dfir-sigma-triage",
+    riskLabel: "Somente Leitura",
+  },
+  {
     id: "cdi-hub",
     category: "cdi_external",
     title: "Hub Multi-CDI (Kairós, Naia, Salem, Nova)",
@@ -356,9 +422,9 @@ export const DEFAULT_QUICK_TOOLS: ManualToolId[] = [
 export const TOOL_SUITES: ToolSuiteMeta[] = [
   {
     id: "web-suite",
-    title: "Web Security Suite",
-    shortTitle: "Web Suite",
-    subtitle: "Proxy HTTPS CA & WS · Repeater · Intruder (§slot§) · Auditor de Parâmetros & Dalfox · Scanner · JWT",
+    title: "Web & API Security Suite",
+    shortTitle: "Web & API Suite",
+    subtitle: "Proxy HTTPS CA & WS · Repeater · Intruder (§slot§) · API/GraphQL/OAuth2 BOLA · Parâmetros & Dalfox · JWT",
     icon: "globe",
     keywords: [
       "burp",
@@ -370,6 +436,16 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
       "repeater",
       "intruder",
       "sniper",
+      "api",
+      "openapi",
+      "swagger",
+      "postman",
+      "bola",
+      "idor",
+      "graphql",
+      "oauth",
+      "oidc",
+      "pkce",
       "dalfox",
       "xss",
       "sqli",
@@ -479,6 +555,19 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
         ],
       },
       {
+        id: "api-lab",
+        label: "API, GraphQL & OAuth2 Lab",
+        description: "Importe OpenAPI/Postman com matriz diferencial BOLA/IDOR (User A vs User B), audite GraphQL e fluxos OAuth2/PKCE",
+        engines: [
+          {
+            toolId: "api-security-lab",
+            label: "OpenAPI BOLA + GraphQL + OAuth2/OIDC",
+            badge: "MIT Nativo",
+            description: "BOLA diferencial, introspecção/batching GraphQL e higiene OIDC/PKCE",
+          },
+        ],
+      },
+      {
         id: "decoder",
         label: "Decoder, JWT & Sequencer",
         description: "Encadeie decodificações (Base64, URL, Hex, HTML, SHA-256), audite tokens JWT e meça entropia de sessões",
@@ -495,11 +584,38 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
   },
   {
     id: "network-suite",
-    title: "Network & TLS Recon",
-    shortTitle: "Rede, DNS & TLS",
-    subtitle: "Port Scanner TCP & Nmap (-sV) · Certificados TLS / X.509 · DNS, Subdomínios, SPF/DMARC & crt.sh",
+    title: "Network, TLS Deep Audit & AD Lab",
+    shortTitle: "Rede, TLS & AD",
+    subtitle: "Port Scanner TCP & Nmap (-sV) · TLS 1.0–1.3, Cifras, PFS, HSTS & Nota A+..F · DNS/SPF/DMARC · AD/SMB/LDAP/NTLM",
     icon: "server",
-    keywords: ["nmap", "tcp", "portas", "banner", "tls", "ssl", "x509", "certificado", "sni", "rede", "dns", "subdominio", "spf", "dmarc", "takeover", "crt"],
+    keywords: [
+      "nmap",
+      "tcp",
+      "portas",
+      "banner",
+      "tls",
+      "ssl",
+      "x509",
+      "certificado",
+      "hsts",
+      "cifras",
+      "pfs",
+      "sni",
+      "rede",
+      "dns",
+      "subdominio",
+      "spf",
+      "dmarc",
+      "takeover",
+      "crt",
+      "ad",
+      "active directory",
+      "smb",
+      "signing",
+      "ldap",
+      "rootdse",
+      "ntlm",
+    ],
     functions: [
       {
         id: "ports",
@@ -522,14 +638,14 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
       },
       {
         id: "tls",
-        label: "Certificado TLS / X.509",
-        description: "Inspecione versão do protocolo TLS, cifra negociada, cadeia X.509, SANs, expiração e hash SHA-256",
+        label: "TLS Profundo, Cifras & HSTS",
+        description: "Inspecione cadeia X.509, matriz TLS 1.0–1.3, cifras fracas/CBC, Forward Secrecy (ECDHE), RSA, HSTS Preload e nota A+..F",
         engines: [
           {
             toolId: "tls-inspector",
-            label: "Inspetor TLS & X.509",
+            label: "Inspetor TLS Profundo & Nota de Segurança",
             badge: "MIT Nativo",
-            description: "Handshake passivo com suporte a SNI customizado",
+            description: "Handshake + matriz de downgrade TLS + HSTS Preload",
           },
         ],
       },
@@ -543,6 +659,19 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
             label: "DNS Surface, SPF/DMARC & Takeover Hygiene",
             badge: "MIT Nativo",
             description: "Reconhecimento DNS completo + transparência de certificados",
+          },
+        ],
+      },
+      {
+        id: "ad-lab",
+        label: "AD, SMB, LDAP & NTLM Lab",
+        description: "Enumeração passiva autorizada sem credenciais: SMB2/3 Signing obrigatório, LDAPv3 RootDSE anônimo e challenge HTTP NTLM",
+        engines: [
+          {
+            toolId: "ad-smb-ldap",
+            label: "Inspetor Passivo SMB / LDAP / NTLM",
+            badge: "MIT Nativo",
+            description: "Verifica exposição a NTLM Relay e políticas RootDSE sem brute-force",
           },
         ],
       },
@@ -579,9 +708,9 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
   },
   {
     id: "reversing-suite",
-    title: "Reverse Engineering & Mobile Lab",
-    shortTitle: "Reversa, Mobile & YARA",
-    subtitle: "ELF/PE/Mach-O · Disassembler x86_64/ARM64 & Ghidra · Android DEX & JADX (.java) · Regras YARA / YARA-X",
+    title: "Reverse Engineering, Entropy & Mobile Lab",
+    shortTitle: "Reversa, Entropia & Mobile",
+    subtitle: "ELF/PE/Mach-O · Disasm x86_64/ARM64 & Ghidra · Entropia Visual & CyberChef · Android DEX & JADX · YARA",
     icon: "cube",
     keywords: [
       "ghidra",
@@ -594,6 +723,13 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
       "exe",
       "dll",
       "mach-o",
+      "entropia",
+      "cyberchef",
+      "firmware",
+      "xor",
+      "aes",
+      "zlib",
+      "protobuf",
       "apk",
       "dex",
       "jadx",
@@ -658,6 +794,19 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
         ],
       },
       {
+        id: "entropy",
+        label: "Entropia & CyberChef Studio",
+        description: "Visualize o gráfico de entropia byte 0 → EOF (regiões cifradas/comprimidas) e monte receitas XOR/AES/Zlib/Protobuf",
+        engines: [
+          {
+            toolId: "entropy-recipe",
+            label: "Visualizador de Entropia + CyberChef Studio",
+            badge: "MIT Nativo",
+            description: "Espectro de Shannon, carving de assinaturas e receitas salváveis",
+          },
+        ],
+      },
+      {
         id: "yara",
         label: "Caça com YARA / YARA-X",
         description: "Execute regras YARA customizadas (strings ASCII/wide, hex curinga ?? e condições) em binários ou pastas",
@@ -679,23 +828,86 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
     ],
   },
   {
+    id: "dfir-suite",
+    title: "DFIR & Incident Response Lab (Sigma)",
+    shortTitle: "DFIR & Sigma (SOC)",
+    subtitle: "Análise forense Blue Team de logs Linux (auth.log/syslog), Web (Nginx/Apache) e JSON/Windows Events com regras Sigma YAML",
+    icon: "file-document",
+    keywords: ["dfir", "soc", "blue team", "sigma", "logs", "auth.log", "syslog", "nginx", "apache", "evtx", "windows", "timeline", "incidente"],
+    functions: [
+      {
+        id: "sigma-triage",
+        label: "Triagem de Logs & Regras Sigma",
+        description: "Aplique regras Sigma YAML integradas ou customizadas sobre logs e gere Timeline de Incidente com custódia SHA-256",
+        engines: [
+          {
+            toolId: "dfir-sigma",
+            label: "Motor DFIR Multi-Formato + Sigma YAML",
+            badge: "MIT Nativo",
+            description: "Detecta brute-force, webshells, escalonamento e movimento lateral",
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: "code-suite",
-    title: "Auditor de Código & Segredos (SAST)",
-    shortTitle: "Auditoria de Código",
-    subtitle: "Varredura estática somente-leitura de credenciais hardcoded, chaves privadas e padrões inseguros no projeto",
+    title: "SAST, SCA, SBOM CycloneDX & Containers/IaC",
+    shortTitle: "Código, SCA & IaC",
+    subtitle: "Segredos & SAST · Vulnerabilidades de Dependências (OSV.dev) · SBOM CycloneDX 1.5 · Dockerfile/K8s/Terraform & Trivy",
     icon: "code-lines",
-    keywords: ["sast", "codigo", "segredos", "api key", "token", "audit", "semgrep", "gitleaks"],
+    keywords: [
+      "sast",
+      "sca",
+      "sbom",
+      "cyclonedx",
+      "osv",
+      "cve",
+      "dependencias",
+      "npm",
+      "lockfile",
+      "dockerfile",
+      "kubernetes",
+      "k8s",
+      "terraform",
+      "iac",
+      "trivy",
+      "codigo",
+      "segredos",
+      "api key",
+      "token",
+      "audit",
+    ],
     functions: [
       {
         id: "audit",
-        label: "Varredura do Repositório",
-        description: "Inspecione pastas ou arquivos do workspace sem executar código nem modificar arquivos",
+        label: "SAST & Segredos",
+        description: "Inspecione pastas ou arquivos do workspace em busca de segredos hardcoded, chaves privadas e código inseguro",
         engines: [
           {
             toolId: "workspace-audit",
             label: "Workspace Code & Secret Audit",
             badge: "MIT Nativo",
             description: "Regras estáticas para segredos, TLS e execução insegura",
+          },
+        ],
+      },
+      {
+        id: "sca-iac",
+        label: "SCA, SBOM CycloneDX & IaC",
+        description: "Audite dependências (package-lock, requirements, go.mod, Cargo, pom.xml), gere SBOM CycloneDX e valide Dockerfile/K8s/Terraform",
+        engines: [
+          {
+            toolId: "sca-sbom-iac",
+            label: "SCA + OSV.dev + SBOM CycloneDX + IaC",
+            badge: "MIT Nativo",
+            description: "Zero binários externos, gera CycloneDX 1.5 e audita Containers/IaC",
+          },
+          {
+            toolId: "trivy",
+            label: "Aqua Trivy Scanner (trivy fs)",
+            badge: "Apache-2.0 Externo",
+            description: "Scanner externo oficial Aqua Trivy para CVEs, IaC e segredos",
           },
         ],
       },
@@ -933,10 +1145,12 @@ export function createDefaultToolDrafts(): ManualToolDraftMap {
       host: "127.0.0.1",
       port: 443,
       servername: "",
+      deepCipherAudit: true,
+      checkHsts: true,
       timeoutMs: 5000,
       executionMode: "manual",
       useRawJson: false,
-      rawJson: "{\n  \"host\": \"127.0.0.1\",\n  \"port\": 443\n}",
+      rawJson: '{\n  "host": "127.0.0.1",\n  "port": 443,\n  "deepCipherAudit": true,\n  "checkHsts": true\n}',
     },
     "tcp-probe": {
       host: "127.0.0.1",
@@ -1038,6 +1252,116 @@ export function createDefaultToolDrafts(): ManualToolDraftMap {
       executionMode: "manual",
       useRawJson: false,
       rawJson: '{\n  "rulesPath": "regras.yar",\n  "targetPath": "amostra.elf"\n}',
+    },
+    "api-security-lab": {
+      baseUrl: "http://127.0.0.1:4096",
+      specPath: "",
+      inlineSpecJson: JSON.stringify(
+        {
+          openapi: "3.0.3",
+          info: { title: "CyberLab Demo API", version: "1.0.0" },
+          paths: {
+            "/api/info": { get: { summary: "System Info" } },
+            "/api/cyberlab/status": { get: { summary: "Workspace Status" } },
+          },
+        },
+        null,
+        2,
+      ),
+      userAAuthHeader: "Bearer token-user-a-example",
+      userBAuthHeader: "Bearer token-user-b-example",
+      testUnauthenticated: true,
+      maxEndpoints: 12,
+      graphqlUrl: "",
+      graphqlTestBatching: true,
+      graphqlMaxDepthProbe: 6,
+      issuerUrl: "",
+      authorizeUrl: "",
+      timeoutMs: 6000,
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson: '{\n  "baseUrl": "http://127.0.0.1:4096",\n  "testUnauthenticated": true\n}',
+    },
+    "sca-sbom-iac": {
+      targetPath: ".",
+      queryOsv: false,
+      generateCycloneDx: true,
+      auditIac: true,
+      maxFiles: 200,
+      timeoutMs: 8000,
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson: '{\n  "targetPath": ".",\n  "generateCycloneDx": true,\n  "auditIac": true\n}',
+    },
+    trivy: {
+      targetPath: ".",
+      scanners: "vuln,misconfig",
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson: '{\n  "targetPath": ".",\n  "scanners": "vuln,misconfig"\n}',
+    },
+    "dfir-sigma": {
+      logPath: "logs/auth.log",
+      logFormat: "auto",
+      useBuiltinSigma: true,
+      sigmaRulesPath: "",
+      inlineSigmaYaml: "",
+      maxEvents: 5000,
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson: '{\n  "logPath": "logs/auth.log",\n  "useBuiltinSigma": true\n}',
+    },
+    "ad-smb-ldap": {
+      host: "127.0.0.1",
+      checkSmbSigning: true,
+      smbPort: 445,
+      checkLdapRootDse: true,
+      ldapPort: 389,
+      ntlmHttpUrl: "",
+      timeoutMs: 4000,
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson: '{\n  "host": "127.0.0.1",\n  "checkSmbSigning": true,\n  "checkLdapRootDse": true\n}',
+    },
+    "entropy-recipe": {
+      targetPath: "package.json",
+      windowSize: 64,
+      rawInput: "Q3liZXJMYWIgT1MgUmVjaXBlIFN0dWRpbw==",
+      inputEncoding: "utf8",
+      recipeSteps: [
+        {
+          id: "step-1",
+          op: "from_base64",
+          key: "",
+          keyEncoding: "utf8",
+          ivHex: "",
+          authTagHex: "",
+          minLength: 4,
+        },
+      ],
+      newRecipeName: "",
+      savedRecipes: [
+        {
+          id: "preset-b64-gunzip",
+          name: "Base64 → Gunzip → Strings",
+          steps: [
+            { id: "s1", op: "from_base64", key: "", keyEncoding: "utf8", ivHex: "", authTagHex: "", minLength: 4 },
+            { id: "s2", op: "gunzip", key: "", keyEncoding: "utf8", ivHex: "", authTagHex: "", minLength: 4 },
+            { id: "s3", op: "extract_strings", key: "", keyEncoding: "utf8", ivHex: "", authTagHex: "", minLength: 4 },
+          ],
+        },
+        {
+          id: "preset-hex-xor1",
+          name: "Hex → XOR Brute-Force 1-Byte",
+          steps: [
+            { id: "x1", op: "from_hex", key: "", keyEncoding: "utf8", ivHex: "", authTagHex: "", minLength: 4 },
+            { id: "x2", op: "xor_single_byte_bruteforce", key: "", keyEncoding: "utf8", ivHex: "", authTagHex: "", minLength: 4 },
+          ],
+        },
+      ],
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson: '{\n  "targetPath": "package.json",\n  "windowSize": 256\n}',
     },
     "cdi-hub": {
       cdiSubTab: "dispatch",
@@ -1264,13 +1588,15 @@ export function buildCapabilityInput<K extends ManualToolId>(
       const input: Record<string, unknown> = {
         host: d.host.trim(),
         port: Math.min(65535, Math.max(1, Math.trunc(Number(d.port) || 443))),
+        deepCipherAudit: Boolean(d.deepCipherAudit),
+        checkHsts: Boolean(d.checkHsts),
         timeoutMs: Math.min(10000, Math.max(200, Math.trunc(Number(d.timeoutMs) || 5000))),
       }
       if (d.servername.trim()) input.servername = d.servername.trim()
       return {
         capabilityId: "network-assessment.tls-inspector",
         mode: d.executionMode,
-        targetSummary: `TLS ${d.host.trim()}:${input.port}${d.servername.trim() ? ` (SNI: ${d.servername.trim()})` : ""}`,
+        targetSummary: `TLS ${d.host.trim()}:${input.port}${d.deepCipherAudit ? " [Deep+Grade]" : ""}${d.servername.trim() ? ` (SNI: ${d.servername.trim()})` : ""}`,
         input,
       }
     }
@@ -1666,6 +1992,178 @@ export function buildCapabilityInput<K extends ManualToolId>(
           rulesPath: d.rulesPath.trim(),
           targetPath: d.targetPath.trim(),
         },
+      }
+    }
+    case "api-security-lab": {
+      const d = drafts["api-security-lab"]
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "web-assessment.api-graphql-oauth-lab",
+          mode: d.executionMode,
+          targetSummary: String(parsed.baseUrl ?? parsed.graphqlUrl ?? parsed.issuerUrl ?? "API Lab"),
+          input: parsed,
+        }
+      }
+      const input: Record<string, unknown> = {
+        testUnauthenticated: d.testUnauthenticated,
+        checkGraphqlIntrospection: true,
+        checkGraphqlBatchingAndDepth: d.graphqlTestBatching,
+        timeoutMs: Math.min(15000, Math.max(500, Math.trunc(Number(d.timeoutMs) || 6000))),
+      }
+      if (d.baseUrl.trim()) input.baseUrl = d.baseUrl.trim()
+      if (d.specPath.trim()) input.specPath = d.specPath.trim()
+      if (d.inlineSpecJson.trim()) input.specJsonText = d.inlineSpecJson
+      if (d.userAAuthHeader.trim()) input.authHeaderA = d.userAAuthHeader.trim()
+      if (d.userBAuthHeader.trim()) input.authHeaderB = d.userBAuthHeader.trim()
+      if (d.graphqlUrl.trim()) input.graphqlUrl = d.graphqlUrl.trim()
+      if (d.issuerUrl.trim()) input.issuerUrl = d.issuerUrl.trim()
+      if (d.authorizeUrl.trim()) input.authorizeUrl = d.authorizeUrl.trim()
+      const parts = [d.baseUrl.trim(), d.graphqlUrl.trim(), d.issuerUrl.trim()].filter(Boolean)
+      return {
+        capabilityId: "web-assessment.api-graphql-oauth-lab",
+        mode: d.executionMode,
+        targetSummary: `API/GraphQL/OAuth (${parts[0] ?? "Inline Spec"})`,
+        input,
+      }
+    }
+    case "sca-sbom-iac": {
+      const d = drafts["sca-sbom-iac"]
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "code-analysis.sca-sbom-iac-audit",
+          mode: d.executionMode,
+          targetSummary: `SCA/SBOM/IaC ${String(parsed.subpath ?? d.targetPath)}`,
+          input: parsed,
+        }
+      }
+      const subpath = d.targetPath.trim() || "."
+      return {
+        capabilityId: "code-analysis.sca-sbom-iac-audit",
+        mode: d.executionMode,
+        targetSummary: `SCA/SBOM/IaC ${subpath}${d.queryOsv ? " + OSV.dev" : ""}`,
+        input: {
+          subpath,
+          queryOsvDev: d.queryOsv,
+          generateCycloneDxSbom: d.generateCycloneDx,
+          auditContainersAndIac: d.auditIac,
+          maxFiles: Math.min(500, Math.max(5, Math.trunc(Number(d.maxFiles) || 200))),
+        },
+      }
+    }
+    case "trivy": {
+      const d = drafts.trivy
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "external.trivy-scan",
+          mode: d.executionMode,
+          targetSummary: `Trivy ${String(parsed.targetPath ?? d.targetPath)}`,
+          input: parsed,
+        }
+      }
+      const targetPath = d.targetPath.trim() || "."
+      const scanners = d.scanners.trim() || "vuln,misconfig"
+      return {
+        capabilityId: "external.trivy-scan",
+        mode: d.executionMode,
+        targetSummary: `Trivy (${scanners}) → ${targetPath}`,
+        input: {
+          targetPath,
+          scanners,
+        },
+      }
+    }
+    case "dfir-sigma": {
+      const d = drafts["dfir-sigma"]
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "forensics.dfir-sigma-triage",
+          mode: d.executionMode,
+          targetSummary: `DFIR Sigma ${String(parsed.logPath ?? d.logPath)}`,
+          input: parsed,
+        }
+      }
+      const input: Record<string, unknown> = {
+        includeBuiltinRules: d.useBuiltinSigma,
+        maxEvents: Math.min(10000, Math.max(10, Math.trunc(Number(d.maxEvents) || 5000))),
+      }
+      if (d.logPath.trim()) input.logPath = d.logPath.trim()
+      if (d.sigmaRulesPath.trim()) input.sigmaRulesPath = d.sigmaRulesPath.trim()
+      if (d.inlineSigmaYaml.trim()) input.sigmaRulesYaml = d.inlineSigmaYaml
+      return {
+        capabilityId: "forensics.dfir-sigma-triage",
+        mode: d.executionMode,
+        targetSummary: `DFIR Sigma → ${d.logPath.trim() || "Inline"}`,
+        input,
+      }
+    }
+    case "ad-smb-ldap": {
+      const d = drafts["ad-smb-ldap"]
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "network-assessment.ad-smb-ldap-inspector",
+          mode: d.executionMode,
+          targetSummary: `AD/SMB/LDAP ${String(parsed.host ?? d.host)}`,
+          input: parsed,
+        }
+      }
+      const input: Record<string, unknown> = {
+        host: d.host.trim(),
+        checkSmbSigning: d.checkSmbSigning,
+        smbPort: Math.min(65535, Math.max(1, Math.trunc(Number(d.smbPort) || 445))),
+        checkLdapRootDse: d.checkLdapRootDse,
+        ldapPort: Math.min(65535, Math.max(1, Math.trunc(Number(d.ldapPort) || 389))),
+        timeoutMs: Math.min(10000, Math.max(300, Math.trunc(Number(d.timeoutMs) || 4000))),
+      }
+      if (d.ntlmHttpUrl.trim()) input.ntlmHttpUrl = d.ntlmHttpUrl.trim()
+      return {
+        capabilityId: "network-assessment.ad-smb-ldap-inspector",
+        mode: d.executionMode,
+        targetSummary: `AD/SMB/LDAP ${d.host.trim()}${d.ntlmHttpUrl.trim() ? " + NTLM" : ""}`,
+        input,
+      }
+    }
+    case "entropy-recipe": {
+      const d = drafts["entropy-recipe"]
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "reverse-engineering.entropy-recipe-studio",
+          mode: d.executionMode,
+          targetSummary: `Entropia/CyberChef ${String(parsed.filePath ?? "Recipe")}`,
+          input: parsed,
+        }
+      }
+      const input: Record<string, unknown> = {
+        bucketCount: Math.min(256, Math.max(8, Math.trunc(Number(d.windowSize) || 64))),
+      }
+      if (d.targetPath.trim()) input.filePath = d.targetPath.trim()
+      if (d.rawInput.length > 0) input.inputText = d.rawInput
+      if (d.recipeSteps.length > 0) {
+        input.recipeSteps = d.recipeSteps.slice(0, 16).map((s) => {
+          const step: Record<string, unknown> = { op: s.op }
+          if (s.key) {
+            step.keyHexOrUtf8 = s.key
+          }
+          if (s.ivHex.trim()) {
+            const combinedIv =
+              s.op === "aes_gcm_decrypt" && s.authTagHex.trim()
+                ? `${s.ivHex.trim()}:${s.authTagHex.trim()}`
+                : s.ivHex.trim()
+            step.ivHex = combinedIv
+          }
+          return step
+        })
+      }
+      return {
+        capabilityId: "reverse-engineering.entropy-recipe-studio",
+        mode: d.executionMode,
+        targetSummary: `${d.targetPath.trim() ? `Entropia ${d.targetPath.trim()}` : "Buffer"}${d.recipeSteps.length ? ` + ${d.recipeSteps.length} etapas` : ""}`,
+        input,
       }
     }
     default:

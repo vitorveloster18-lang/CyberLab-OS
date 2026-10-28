@@ -1,7 +1,12 @@
 import { For, Match, Show, Switch } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
 import type { CyberLabWorkbenchService } from "./state"
-import type { DecoderTransformStep, KeyValueHeaderRow } from "./types"
+import type {
+  DecoderTransformStep,
+  EntropyRecipeOp,
+  EntropyRecipeStepRow,
+  KeyValueHeaderRow,
+} from "./types"
 
 const INPUT_CLS =
   "w-full rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-2.5 py-1.5 text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-strong outline-none focus:border-v2-icon-icon-accent"
@@ -24,6 +29,26 @@ const DECODER_STEPS: Array<{ id: DecoderTransformStep; label: string }> = [
   { id: "hex_encode", label: "Hex Encode" },
   { id: "html_decode", label: "HTML Decode" },
   { id: "sha256", label: "SHA-256 Hash" },
+]
+
+const ENTROPY_RECIPE_OPS: Array<{ id: EntropyRecipeOp; label: string }> = [
+  { id: "from_base64", label: "From Base64" },
+  { id: "to_base64", label: "To Base64" },
+  { id: "from_hex", label: "From Hex" },
+  { id: "to_hex", label: "To Hex" },
+  { id: "url_decode", label: "URL Decode" },
+  { id: "url_encode", label: "URL Encode" },
+  { id: "gunzip", label: "Gunzip (.gz)" },
+  { id: "gzip", label: "Gzip Compress" },
+  { id: "zlib_inflate", label: "Zlib Inflate" },
+  { id: "raw_inflate", label: "Raw Deflate Inflate" },
+  { id: "xor_key", label: "XOR com Chave" },
+  { id: "xor_single_byte_bruteforce", label: "XOR Brute-Force (1 Byte)" },
+  { id: "aes_cbc_decrypt", label: "AES-CBC Decrypt" },
+  { id: "aes_gcm_decrypt", label: "AES-GCM Decrypt" },
+  { id: "protobuf_raw_decode", label: "Protobuf Raw Wire Decode" },
+  { id: "extract_strings", label: "Extract Printable Strings" },
+  { id: "sha256", label: "SHA-256 Digest" },
 ]
 
 function HeaderEditorTable(props: {
@@ -1215,6 +1240,30 @@ export function ManualToolConfigForm(props: { wb: CyberLabWorkbenchService }) {
                     }
                   />
                 </div>
+              </div>
+              <div class="flex flex-wrap items-center gap-4 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/40 p-2.5 text-[12px]">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(d().deepCipherAudit)}
+                    onChange={(e) =>
+                      wb.updateDraft("tls-inspector", (p) => ({ ...p, deepCipherAudit: e.currentTarget.checked }))
+                    }
+                  />
+                  <span class="text-v2-text-text-strong">
+                    Auditoria Profunda (Matriz TLS 1.0–1.3, Cifras Fracas/CBC, Forward Secrecy ECDHE, RSA & Nota A+..F)
+                  </span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(d().checkHsts)}
+                    onChange={(e) =>
+                      wb.updateDraft("tls-inspector", (p) => ({ ...p, checkHsts: e.currentTarget.checked }))
+                    }
+                  />
+                  <span class="text-v2-text-text-strong">Verificar HSTS & Preload HTTPS</span>
+                </label>
               </div>
               <RawJsonOverrideSection
                 enabled={d().useRawJson}
@@ -3230,6 +3279,939 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
                   {isRunning() ? "Executando YARA-X..." : "Executar YARA-X (yr scan)"}
                 </button>
                 <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("yarax")}>
+                  Restaurar Padrão
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Match>
+
+      {/* 28. API, GRAPHQL & OAUTH2 SECURITY LAB */}
+      <Match when={toolId() === "api-security-lab"}>
+        {(() => {
+          const d = () => wb.drafts["api-security-lab"]
+          return (
+            <div class="flex flex-col gap-3">
+              <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/30 p-2.5 flex flex-col gap-2">
+                <div class="text-[11px] font-medium uppercase tracking-wide text-emerald-500">
+                  1. OpenAPI / Swagger / Postman Collection + Matriz Diferencial BOLA / IDOR
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-[1fr_1fr_120px] gap-2">
+                  <div class="flex flex-col gap-1">
+                    <label class={LABEL_CLS}>Base URL da API REST</label>
+                    <input
+                      type="text"
+                      value={d().baseUrl}
+                      placeholder="http://127.0.0.1:4096"
+                      class={MONO_INPUT_CLS}
+                      onInput={(e) =>
+                        wb.updateDraft("api-security-lab", (p) => ({ ...p, baseUrl: e.currentTarget.value }))
+                      }
+                    />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <label class={LABEL_CLS}>Caminho da Spec no Projeto (opcional)</label>
+                    <input
+                      type="text"
+                      value={d().specPath}
+                      placeholder="openapi.json ou collection.postman.json"
+                      class={MONO_INPUT_CLS}
+                      onInput={(e) =>
+                        wb.updateDraft("api-security-lab", (p) => ({ ...p, specPath: e.currentTarget.value }))
+                      }
+                    />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <label class={LABEL_CLS}>Máx Rotas (1–40)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={40}
+                      value={d().maxEndpoints}
+                      class={INPUT_CLS}
+                      onInput={(e) =>
+                        wb.updateDraft("api-security-lab", (p) => ({
+                          ...p,
+                          maxEndpoints: Number(e.currentTarget.value),
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <div class="flex flex-col gap-1">
+                    <label class={LABEL_CLS}>Header Authorization — User A (Dono do Recurso)</label>
+                    <input
+                      type="text"
+                      value={d().userAAuthHeader}
+                      placeholder="Bearer eyJhbGci..."
+                      class={MONO_INPUT_CLS}
+                      onInput={(e) =>
+                        wb.updateDraft("api-security-lab", (p) => ({ ...p, userAAuthHeader: e.currentTarget.value }))
+                      }
+                    />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <label class={LABEL_CLS}>Header Authorization — User B (Cross-Tenant / BOLA)</label>
+                    <input
+                      type="text"
+                      value={d().userBAuthHeader}
+                      placeholder="Bearer eyJhbGci..."
+                      class={MONO_INPUT_CLS}
+                      onInput={(e) =>
+                        wb.updateDraft("api-security-lab", (p) => ({ ...p, userBAuthHeader: e.currentTarget.value }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <label class="flex items-center gap-2 text-[12px] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={d().testUnauthenticated}
+                      onChange={(e) =>
+                        wb.updateDraft("api-security-lab", (p) => ({
+                          ...p,
+                          testUnauthenticated: e.currentTarget.checked,
+                        }))
+                      }
+                    />
+                    <span class="text-v2-text-text-strong">Testar também acesso Sem Autenticação (Broken Auth)</span>
+                  </label>
+                  <label class="text-[11px] text-v2-text-text-muted flex items-center gap-1.5">
+                    <span>Importar JSON/YAML local:</span>
+                    <input
+                      type="file"
+                      accept=".json,.yaml,.yml"
+                      class="text-[11px]"
+                      onChange={(e) => {
+                        const file = e.currentTarget.files?.[0]
+                        if (!file) return
+                        void file.text().then((txt) => {
+                          wb.updateDraft("api-security-lab", (p) => ({ ...p, inlineSpecJson: txt }))
+                        })
+                      }}
+                    />
+                  </label>
+                </div>
+
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Spec OpenAPI 3 / Swagger 2 / Postman Collection v2.1 Inline</label>
+                  <textarea
+                    rows={4}
+                    value={d().inlineSpecJson}
+                    placeholder='{"openapi":"3.0.3","paths":{"/api/users/{id}":{"get":{}}}}'
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("api-security-lab", (p) => ({ ...p, inlineSpecJson: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/30 p-2.5 flex flex-col gap-2">
+                  <div class="text-[11px] font-medium uppercase tracking-wide text-sky-400">
+                    2. GraphQL Posture Inspector (opcional)
+                  </div>
+                  <input
+                    type="text"
+                    value={d().graphqlUrl}
+                    placeholder="http://127.0.0.1:8080/graphql"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("api-security-lab", (p) => ({ ...p, graphqlUrl: e.currentTarget.value }))
+                    }
+                  />
+                  <div class="flex items-center justify-between gap-2 text-[12px]">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={d().graphqlTestBatching}
+                        onChange={(e) =>
+                          wb.updateDraft("api-security-lab", (p) => ({
+                            ...p,
+                            graphqlTestBatching: e.currentTarget.checked,
+                          }))
+                        }
+                      />
+                      <span class="text-v2-text-text-strong">Testar Array Query Batching</span>
+                    </label>
+                    <div class="flex items-center gap-1">
+                      <span class="text-[11px] text-v2-text-text-muted">Profundidade:</span>
+                      <input
+                        type="number"
+                        min={2}
+                        max={12}
+                        value={d().graphqlMaxDepthProbe}
+                        class="w-16 rounded border border-v2-border-border-base bg-v2-background-bg-deep px-1.5 py-0.5 text-[12px]"
+                        onInput={(e) =>
+                          wb.updateDraft("api-security-lab", (p) => ({
+                            ...p,
+                            graphqlMaxDepthProbe: Number(e.currentTarget.value),
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/30 p-2.5 flex flex-col gap-2">
+                  <div class="text-[11px] font-medium uppercase tracking-wide text-amber-400">
+                    3. OAuth2 / OIDC Hygiene Auditor (opcional)
+                  </div>
+                  <input
+                    type="text"
+                    value={d().issuerUrl}
+                    placeholder="Issuer URL (ex.: http://127.0.0.1:8080/realms/lab)"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("api-security-lab", (p) => ({ ...p, issuerUrl: e.currentTarget.value }))
+                    }
+                  />
+                  <input
+                    type="text"
+                    value={d().authorizeUrl}
+                    placeholder="URL /authorize?client_id=...&redirect_uri=... (audita state/PKCE)"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("api-security-lab", (p) => ({ ...p, authorizeUrl: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("api-security-lab", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("api-security-lab", (p) => ({ ...p, rawJson: v }))}
+              />
+
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("api-security-lab")}
+                >
+                  {isRunning() ? "Auditando API / GraphQL / OAuth2..." : "Executar Auditoria API, BOLA, GraphQL & OAuth2"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("api-security-lab")}>
+                  Restaurar Padrão
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Match>
+
+      {/* 29. SCA, SBOM CYCLONEDX & IAC AUDITOR */}
+      <Match when={toolId() === "sca-sbom-iac"}>
+        {(() => {
+          const d = () => wb.drafts["sca-sbom-iac"]
+          return (
+            <div class="flex flex-col gap-3">
+              <div class="grid grid-cols-1 md:grid-cols-[1fr_140px_140px] gap-2">
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Pasta ou Manifest Alvo no Projeto</label>
+                  <input
+                    type="text"
+                    value={d().targetPath}
+                    placeholder=". ou packages/app"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("sca-sbom-iac", (p) => ({ ...p, targetPath: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Máx Arquivos (5–500)</label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={500}
+                    value={d().maxFiles}
+                    class={INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("sca-sbom-iac", (p) => ({ ...p, maxFiles: Number(e.currentTarget.value) }))
+                    }
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Timeout OSV (ms)</label>
+                  <input
+                    type="number"
+                    min={1000}
+                    max={20000}
+                    value={d().timeoutMs}
+                    class={INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("sca-sbom-iac", (p) => ({ ...p, timeoutMs: Number(e.currentTarget.value) }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-4 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/40 p-2.5 text-[12px]">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={d().generateCycloneDx}
+                    onChange={(e) =>
+                      wb.updateDraft("sca-sbom-iac", (p) => ({ ...p, generateCycloneDx: e.currentTarget.checked }))
+                    }
+                  />
+                  <span class="text-v2-text-text-strong">Gerar SBOM CycloneDX 1.5 JSON (evidência dedicada)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={d().auditIac}
+                    onChange={(e) =>
+                      wb.updateDraft("sca-sbom-iac", (p) => ({ ...p, auditIac: e.currentTarget.checked }))
+                    }
+                  />
+                  <span class="text-v2-text-text-strong">Auditar Dockerfile, Compose, Kubernetes & Terraform (.tf)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={d().queryOsv}
+                    onChange={(e) =>
+                      wb.updateDraft("sca-sbom-iac", (p) => ({ ...p, queryOsv: e.currentTarget.checked }))
+                    }
+                  />
+                  <span class="text-v2-text-text-strong">Consultar OSV.dev Online (CVEs em Tempo Real)</span>
+                </label>
+              </div>
+
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("sca-sbom-iac", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("sca-sbom-iac", (p) => ({ ...p, rawJson: v }))}
+              />
+
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("sca-sbom-iac")}
+                >
+                  {isRunning() ? "Auditando Dependências & IaC..." : "Executar SCA + SBOM CycloneDX + Auditor IaC"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("sca-sbom-iac")}>
+                  Restaurar Padrão
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Match>
+
+      {/* 30. AQUA TRIVY EXTERNAL BRIDGE */}
+      <Match when={toolId() === "trivy"}>
+        {(() => {
+          const d = () => wb.drafts.trivy
+          return (
+            <div class="flex flex-col gap-3">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Pasta ou Arquivo Alvo no Projeto</label>
+                  <input
+                    type="text"
+                    value={d().targetPath}
+                    placeholder="."
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) => wb.updateDraft("trivy", (p) => ({ ...p, targetPath: e.currentTarget.value }))}
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Scanners Trivy (--scanners)</label>
+                  <input
+                    type="text"
+                    value={d().scanners}
+                    placeholder="vuln,misconfig,secret"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) => wb.updateDraft("trivy", (p) => ({ ...p, scanners: e.currentTarget.value }))}
+                  />
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <For each={["vuln,misconfig", "vuln,misconfig,secret", "vuln", "misconfig", "secret"]}>
+                  {(preset) => (
+                    <button
+                      type="button"
+                      class={CHIP_CLS}
+                      onClick={() => wb.updateDraft("trivy", (p) => ({ ...p, scanners: preset }))}
+                    >
+                      {preset}
+                    </button>
+                  )}
+                </For>
+              </div>
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("trivy", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("trivy", (p) => ({ ...p, rawJson: v }))}
+              />
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("trivy")}
+                >
+                  {isRunning() ? "Executando Aqua Trivy..." : "Executar Aqua Trivy (trivy fs)"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("trivy")}>
+                  Restaurar Padrão
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Match>
+
+      {/* 31. DFIR LOG ANALYZER & SIGMA RULES */}
+      <Match when={toolId() === "dfir-sigma"}>
+        {(() => {
+          const d = () => wb.drafts["dfir-sigma"]
+          return (
+            <div class="flex flex-col gap-3">
+              <div class="grid grid-cols-1 md:grid-cols-[1fr_180px_140px] gap-2">
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Arquivo ou Pasta de Logs no Projeto</label>
+                  <input
+                    type="text"
+                    value={d().logPath}
+                    placeholder="logs/auth.log, access.log ou events.jsonl"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("dfir-sigma", (p) => ({ ...p, logPath: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Formato do Log</label>
+                  <select
+                    value={d().logFormat}
+                    class={INPUT_CLS}
+                    onChange={(e) =>
+                      wb.updateDraft("dfir-sigma", (p) => ({
+                        ...p,
+                        logFormat: e.currentTarget.value as "auto" | "syslog" | "nginx" | "json",
+                      }))
+                    }
+                  >
+                    <option value="auto">Auto-detectar</option>
+                    <option value="syslog">Linux syslog / auth.log</option>
+                    <option value="nginx">Nginx / Apache Combined</option>
+                    <option value="json">JSON / NDJSON / Windows Event</option>
+                  </select>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Máx Eventos</label>
+                  <input
+                    type="number"
+                    min={10}
+                    max={50000}
+                    value={d().maxEvents}
+                    class={INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("dfir-sigma", (p) => ({ ...p, maxEvents: Number(e.currentTarget.value) }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] items-center gap-3 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/40 p-2.5">
+                <label class="flex items-center gap-2 text-[12px] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={d().useBuiltinSigma}
+                    onChange={(e) =>
+                      wb.updateDraft("dfir-sigma", (p) => ({ ...p, useBuiltinSigma: e.currentTarget.checked }))
+                    }
+                  />
+                  <span class="text-v2-text-text-strong">
+                    Usar pacote Sigma integrado (SSH Brute-Force, Sudo Escalation, Webshells, PowerShell Encoded, Pass-the-Hash)
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={d().sigmaRulesPath}
+                  placeholder="Pasta/arquivo .yml Sigma extra no projeto (opcional)"
+                  class={MONO_INPUT_CLS}
+                  onInput={(e) =>
+                    wb.updateDraft("dfir-sigma", (p) => ({ ...p, sigmaRulesPath: e.currentTarget.value }))
+                  }
+                />
+              </div>
+
+              <div class="flex flex-col gap-1">
+                <div class="flex flex-wrap items-center justify-between gap-1">
+                  <label class={LABEL_CLS}>Regra Sigma YAML Customizada Inline (opcional — suporta |contains, |startswith, |re, |all)</label>
+                  <div class="flex items-center gap-1">
+                    <button
+                      type="button"
+                      class={CHIP_CLS}
+                      onClick={() =>
+                        wb.updateDraft("dfir-sigma", (p) => ({
+                          ...p,
+                          inlineSigmaYaml: `title: Custom Suspicious Admin Login\nid: sigma-custom-admin-01\nlevel: high\ndescription: Detecta falhas ou logins administrativos suspeitos\ndetection:\n  selection:\n    message|contains:\n      - 'Accepted publickey for root'\n      - 'Failed password for admin'\n  condition: selection`,
+                        }))
+                      }
+                    >
+                      Template Sigma SSH
+                    </button>
+                    <button
+                      type="button"
+                      class={CHIP_CLS}
+                      onClick={() =>
+                        wb.updateDraft("dfir-sigma", (p) => ({
+                          ...p,
+                          inlineSigmaYaml: `title: Custom Web Exploit Probe\nid: sigma-custom-web-02\nlevel: critical\ndescription: Detecta SQLi ou RCE na URL HTTP\ndetection:\n  selection:\n    url|contains:\n      - 'UNION SELECT'\n      - '/etc/passwd'\n      - 'cmd.exe'\n  condition: selection`,
+                        }))
+                      }
+                    >
+                      Template Sigma Web
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  rows={5}
+                  value={d().inlineSigmaYaml}
+                  placeholder="Cole aqui uma ou mais regras Sigma YAML separadas por ---"
+                  class={MONO_INPUT_CLS}
+                  onInput={(e) =>
+                    wb.updateDraft("dfir-sigma", (p) => ({ ...p, inlineSigmaYaml: e.currentTarget.value }))
+                  }
+                />
+              </div>
+
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("dfir-sigma", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("dfir-sigma", (p) => ({ ...p, rawJson: v }))}
+              />
+
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("dfir-sigma")}
+                >
+                  {isRunning() ? "Correlacionando Eventos Sigma..." : "Executar Triagem DFIR & Gerar Timeline SHA-256"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("dfir-sigma")}>
+                  Restaurar Padrão
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Match>
+
+      {/* 32. ACTIVE DIRECTORY, SMB, LDAP & NTLM LAB INSPECTOR */}
+      <Match when={toolId() === "ad-smb-ldap"}>
+        {(() => {
+          const d = () => wb.drafts["ad-smb-ldap"]
+          return (
+            <div class="flex flex-col gap-3">
+              <div class="grid grid-cols-1 md:grid-cols-[1fr_140px] gap-2">
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Host / Controlador de Domínio de Laboratório</label>
+                  <input
+                    type="text"
+                    value={d().host}
+                    placeholder="127.0.0.1 ou dc01.lab.interno"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("ad-smb-ldap", (p) => ({ ...p, host: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Timeout (ms)</label>
+                  <input
+                    type="number"
+                    min={500}
+                    max={10000}
+                    value={d().timeoutMs}
+                    class={INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("ad-smb-ldap", (p) => ({ ...p, timeoutMs: Number(e.currentTarget.value) }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/40 p-2.5 flex items-center justify-between gap-2">
+                  <label class="flex items-center gap-2 text-[12px] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={d().checkSmbSigning}
+                      onChange={(e) =>
+                        wb.updateDraft("ad-smb-ldap", (p) => ({ ...p, checkSmbSigning: e.currentTarget.checked }))
+                      }
+                    />
+                    <span class="text-v2-text-text-strong">Checar SMB2/3 Signing (Exposição NTLM Relay)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={d().smbPort}
+                    class="w-20 rounded border border-v2-border-border-base bg-v2-background-bg-deep px-2 py-1 font-mono text-[12px]"
+                    onInput={(e) =>
+                      wb.updateDraft("ad-smb-ldap", (p) => ({ ...p, smbPort: Number(e.currentTarget.value) }))
+                    }
+                  />
+                </div>
+
+                <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/40 p-2.5 flex items-center justify-between gap-2">
+                  <label class="flex items-center gap-2 text-[12px] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={d().checkLdapRootDse}
+                      onChange={(e) =>
+                        wb.updateDraft("ad-smb-ldap", (p) => ({ ...p, checkLdapRootDse: e.currentTarget.checked }))
+                      }
+                    />
+                    <span class="text-v2-text-text-strong">Checar LDAPv3 RootDSE Anônimo</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={d().ldapPort}
+                    class="w-20 rounded border border-v2-border-border-base bg-v2-background-bg-deep px-2 py-1 font-mono text-[12px]"
+                    onInput={(e) =>
+                      wb.updateDraft("ad-smb-ldap", (p) => ({ ...p, ldapPort: Number(e.currentTarget.value) }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div class="flex flex-col gap-1">
+                <label class={LABEL_CLS}>Endpoint HTTP NTLM Challenge Type-2 (opcional — extrai Domínio/FQDN/OS Build)</label>
+                <input
+                  type="text"
+                  value={d().ntlmHttpUrl}
+                  placeholder="http://127.0.0.1:8080/ews ou /autodiscover"
+                  class={MONO_INPUT_CLS}
+                  onInput={(e) =>
+                    wb.updateDraft("ad-smb-ldap", (p) => ({ ...p, ntlmHttpUrl: e.currentTarget.value }))
+                  }
+                />
+              </div>
+
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("ad-smb-ldap", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("ad-smb-ldap", (p) => ({ ...p, rawJson: v }))}
+              />
+
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("ad-smb-ldap")}
+                >
+                  {isRunning() ? "Inspecionando SMB / LDAP / NTLM..." : "Executar Inspeção Passiva AD / SMB / LDAP"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("ad-smb-ldap")}>
+                  Restaurar Padrão
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Match>
+
+      {/* 33. BINARY ENTROPY VISUALIZER & CYBERCHEF RECIPE STUDIO */}
+      <Match when={toolId() === "entropy-recipe"}>
+        {(() => {
+          const d = () => wb.drafts["entropy-recipe"]
+
+          const addRecipeStep = (op: EntropyRecipeOp = "from_base64") => {
+            const nextStep: EntropyRecipeStepRow = {
+              id: `step-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              op,
+              key: "",
+              keyEncoding: "utf8",
+              ivHex: "",
+              authTagHex: "",
+              minLength: 4,
+            }
+            wb.updateDraft("entropy-recipe", (p) => ({ ...p, recipeSteps: [...p.recipeSteps, nextStep] }))
+          }
+
+          const updateStep = (id: string, patch: Partial<EntropyRecipeStepRow>) => {
+            wb.updateDraft("entropy-recipe", (p) => ({
+              ...p,
+              recipeSteps: p.recipeSteps.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+            }))
+          }
+
+          const removeStep = (id: string) => {
+            wb.updateDraft("entropy-recipe", (p) => ({
+              ...p,
+              recipeSteps: p.recipeSteps.filter((s) => s.id !== id),
+            }))
+          }
+
+          const saveCurrentRecipe = () => {
+            const name = d().newRecipeName.trim()
+            if (!name || d().recipeSteps.length === 0) return
+            const entry = {
+              id: `rec-${Date.now()}`,
+              name,
+              steps: d().recipeSteps.map((s) => ({ ...s })),
+            }
+            wb.updateDraft("entropy-recipe", (p) => ({
+              ...p,
+              newRecipeName: "",
+              savedRecipes: [...p.savedRecipes, entry],
+            }))
+          }
+
+          return (
+            <div class="flex flex-col gap-3">
+              <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/30 p-2.5 flex flex-col gap-2">
+                <div class="text-[11px] font-medium uppercase tracking-wide text-emerald-500">
+                  1. Espectro Visual de Entropia (Byte 0 → EOF) & Assinaturas Embutidas
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-[1fr_180px] gap-2">
+                  <div class="flex flex-col gap-1">
+                    <label class={LABEL_CLS}>Arquivo no Projeto (Binário, Firmware, Imagem, Pacote — opcional)</label>
+                    <input
+                      type="text"
+                      value={d().targetPath}
+                      placeholder="firmware.bin, amostra.elf ou package.json"
+                      class={MONO_INPUT_CLS}
+                      onInput={(e) =>
+                        wb.updateDraft("entropy-recipe", (p) => ({ ...p, targetPath: e.currentTarget.value }))
+                      }
+                    />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <label class={LABEL_CLS}>Resolução do Gráfico (Buckets 8–256)</label>
+                    <select
+                      value={String(d().windowSize)}
+                      class={INPUT_CLS}
+                      onChange={(e) =>
+                        wb.updateDraft("entropy-recipe", (p) => ({
+                          ...p,
+                          windowSize: Number(e.currentTarget.value),
+                        }))
+                      }
+                    >
+                      <option value="32">32 faixas (Compacto)</option>
+                      <option value="64">64 faixas (Padrão)</option>
+                      <option value="128">128 faixas (Detalhado)</option>
+                      <option value="256">256 faixas (Máxima Resolução)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/30 p-2.5 flex flex-col gap-2.5">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="text-[11px] font-medium uppercase tracking-wide text-sky-400">
+                    2. CyberChef Recipe Studio (XOR, AES-CBC/GCM, Zlib/Gzip, Protobuf)
+                  </div>
+                  <div class="flex flex-wrap items-center gap-1">
+                    <For each={d().savedRecipes}>
+                      {(rec) => (
+                        <button
+                          type="button"
+                          class={CHIP_CLS}
+                          onClick={() =>
+                            wb.updateDraft("entropy-recipe", (p) => ({
+                              ...p,
+                              recipeSteps: rec.steps.map((s, idx) => ({ ...s, id: `loaded-${idx}-${Date.now()}` })),
+                            }))
+                          }
+                        >
+                          Receita: {rec.name}
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-[1fr_160px] gap-2">
+                  <div class="flex flex-col gap-1">
+                    <label class={LABEL_CLS}>Entrada da Receita (deixe vazio para usar os bytes do arquivo acima)</label>
+                    <textarea
+                      rows={2}
+                      value={d().rawInput}
+                      placeholder="Texto, Base64 ou Hex para decodificar..."
+                      class={MONO_INPUT_CLS}
+                      onInput={(e) =>
+                        wb.updateDraft("entropy-recipe", (p) => ({ ...p, rawInput: e.currentTarget.value }))
+                      }
+                    />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <label class={LABEL_CLS}>Codificação de Entrada</label>
+                    <select
+                      value={d().inputEncoding}
+                      class={INPUT_CLS}
+                      onChange={(e) =>
+                        wb.updateDraft("entropy-recipe", (p) => ({
+                          ...p,
+                          inputEncoding: e.currentTarget.value as "utf8" | "hex" | "base64",
+                        }))
+                      }
+                    >
+                      <option value="utf8">UTF-8 / Texto</option>
+                      <option value="hex">Hexadecimal Bruto</option>
+                      <option value="base64">Base64 Bruto</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                  <For each={d().recipeSteps}>
+                    {(step, idx) => (
+                      <div class="rounded border border-v2-border-border-base bg-v2-background-bg-base p-2 flex flex-col gap-1.5">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                          <div class="flex items-center gap-2">
+                            <span class="rounded bg-v2-background-bg-deep px-1.5 py-0.5 font-mono text-[10px] text-v2-text-text-muted">
+                              #{idx() + 1}
+                            </span>
+                            <select
+                              value={step.op}
+                              class="rounded border border-v2-border-border-base bg-v2-background-bg-deep px-2 py-1 text-[12px] text-v2-text-text-strong"
+                              onChange={(e) =>
+                                updateStep(step.id, { op: e.currentTarget.value as EntropyRecipeOp })
+                              }
+                            >
+                              <For each={ENTROPY_RECIPE_OPS}>
+                                {(opt) => <option value={opt.id}>{opt.label}</option>}
+                              </For>
+                            </select>
+                          </div>
+                          <button
+                            type="button"
+                            class="text-[11px] text-v2-text-text-muted hover:text-red-500 cursor-pointer"
+                            onClick={() => removeStep(step.id)}
+                          >
+                            Remover
+                          </button>
+                        </div>
+
+                        <Show
+                          when={
+                            step.op === "xor_key" ||
+                            step.op === "aes_cbc_decrypt" ||
+                            step.op === "aes_gcm_decrypt"
+                          }
+                        >
+                          <div class="grid grid-cols-1 md:grid-cols-[1fr_110px_1fr_1fr] gap-1.5">
+                            <input
+                              type="text"
+                              value={step.key}
+                              placeholder="Chave (UTF-8 ou Hex)"
+                              class={MONO_INPUT_CLS}
+                              onInput={(e) => updateStep(step.id, { key: e.currentTarget.value })}
+                            />
+                            <select
+                              value={step.keyEncoding}
+                              class={INPUT_CLS}
+                              onChange={(e) =>
+                                updateStep(step.id, { keyEncoding: e.currentTarget.value as "utf8" | "hex" })
+                              }
+                            >
+                              <option value="utf8">Key UTF-8</option>
+                              <option value="hex">Key Hex</option>
+                            </select>
+                            <Show when={step.op === "aes_cbc_decrypt" || step.op === "aes_gcm_decrypt"}>
+                              <input
+                                type="text"
+                                value={step.ivHex}
+                                placeholder={step.op === "aes_cbc_decrypt" ? "IV Hex (32 chars)" : "Nonce/IV Hex (24 chars)"}
+                                class={MONO_INPUT_CLS}
+                                onInput={(e) => updateStep(step.id, { ivHex: e.currentTarget.value })}
+                              />
+                            </Show>
+                            <Show when={step.op === "aes_gcm_decrypt"}>
+                              <input
+                                type="text"
+                                value={step.authTagHex}
+                                placeholder="AuthTag Hex (32 chars)"
+                                class={MONO_INPUT_CLS}
+                                onInput={(e) => updateStep(step.id, { authTagHex: e.currentTarget.value })}
+                              />
+                            </Show>
+                          </div>
+                        </Show>
+                      </div>
+                    )}
+                  </For>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <button type="button" class={BTN_SECONDARY} onClick={() => addRecipeStep("from_base64")}>
+                      + Adicionar Operação
+                    </button>
+                    <button
+                      type="button"
+                      class={CHIP_CLS}
+                      onClick={() => wb.updateDraft("entropy-recipe", (p) => ({ ...p, recipeSteps: [] }))}
+                    >
+                      Limpar Receita
+                    </button>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={d().newRecipeName}
+                      placeholder="Nome para salvar receita..."
+                      class="w-44 rounded border border-v2-border-border-base bg-v2-background-bg-deep px-2 py-1 text-[12px]"
+                      onInput={(e) =>
+                        wb.updateDraft("entropy-recipe", (p) => ({ ...p, newRecipeName: e.currentTarget.value }))
+                      }
+                    />
+                    <button type="button" class={BTN_SECONDARY} onClick={saveCurrentRecipe}>
+                      Salvar Receita
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("entropy-recipe", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("entropy-recipe", (p) => ({ ...p, rawJson: v }))}
+              />
+
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("entropy-recipe")}
+                >
+                  {isRunning() ? "Processando Entropia & Receita..." : "Executar Espectro de Entropia & Receita CyberChef"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("entropy-recipe")}>
                   Restaurar Padrão
                 </button>
               </div>

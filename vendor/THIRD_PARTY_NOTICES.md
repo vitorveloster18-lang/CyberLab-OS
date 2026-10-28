@@ -62,8 +62,13 @@ Os seguintes adaptadores e executores em `cyberlab/` e `integrations/` são impl
 - **`cyberlab-dns-recon`** (`integrations/network-observation/dns-surface-recon.ts`) — Reconhecimento DNS (`A/AAAA/CNAME/MX/NS/TXT/SOA/CAA`), postura `SPF`/`DMARC`, higiene contra *Subdomain Takeover* e transparência de certificados (`MIT`).
 - **`cyberlab-binary-disassembler`** (`integrations/reverse-forensics/binary-disassembler.ts`) — Disassembler estático multi-arquitetura (`x86_64` e `ARM64`) e resolvedor de símbolos offline para `ELF64`, `PE/COFF` e `Mach-O` (`MIT`).
 - **`cyberlab-yara-scanner`** (`integrations/reverse-forensics/yara-rule-scanner.ts`) — Motor nativo de regras YARA (padrões ASCII, UTF-16LE `wide`, `nocase`, hex curinga `??` e condições booleanas) para arquivos e pastas do projeto (`MIT`).
+- **`cyberlab-api-security-lab`** (`integrations/web-security/api-graphql-oauth-lab.ts`) — Importador OpenAPI/Swagger e Postman Collection v2.1 com matriz diferencial BOLA/IDOR, inspetor de postura GraphQL e auditor OAuth2/OIDC (`MIT`).
+- **`cyberlab-sca-sbom-iac`** (`integrations/code-analysis/sca-sbom-iac-auditor.ts`) — Scanner nativo SCA (`npm`/`bun`/`PyPI`/`Go`/`Cargo`/`Maven`) com geração de SBOM CycloneDX 1.5, integração OSV.dev e auditor estático de `Dockerfile`, `docker-compose`, Kubernetes e Terraform (`MIT`).
+- **`cyberlab-dfir-sigma`** (`integrations/reverse-forensics/dfir-sigma-analyzer.ts`) — Analisador forense DFIR de logs (`syslog`/`auth.log`, Nginx/Apache, JSON/Windows Events), motor de regras Sigma YAML e gerador de Timeline de Incidente com custódia `SHA-256` (`MIT`).
+- **`cyberlab-ad-smb-ldap`** (`integrations/network-observation/ad-smb-ldap-inspector.ts`) — Inspetor passivo de laboratório para assinatura SMB2/3 (`SMB Signing`), exposição anônima de `RootDSE` LDAPv3 e decodificação de metadados de challenge HTTP NTLM (`MIT`).
+- **`cyberlab-entropy-recipe-studio`** (`integrations/reverse-forensics/entropy-recipe-studio.ts`) — Mapeador visual de entropia de Shannon por janelas, detector de assinaturas mágicas embutidas e estúdio de receitas estilo CyberChef (`XOR`, `AES`, `Gzip/Zlib`, `Protobuf raw`) (`MIT`).
 
- Conectores externos opcionais sob licenças permissivas registrados em `vendor/manifests/` (invocados via `shell=false` sem incorporação binária): `dalfox-external-connector` (`MIT`), `ghidra-headless-connector` (`Apache-2.0`), `jadx-external-connector` (`Apache-2.0`) e `yarax-external-connector` (`BSD-3-Clause`).
+ Conectores externos opcionais sob licenças permissivas registrados em `vendor/manifests/` (invocados via `shell=false` sem incorporação binária): `dalfox-external-connector` (`MIT`), `ghidra-headless-connector` (`Apache-2.0`), `jadx-external-connector` (`Apache-2.0`), `yarax-external-connector` (`BSD-3-Clause`) e `trivy-external-connector` (`Apache-2.0`).
 
 ---
 

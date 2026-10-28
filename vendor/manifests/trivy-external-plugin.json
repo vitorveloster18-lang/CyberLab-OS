@@ -1,0 +1,20 @@
+{
+  "id": "trivy-external-connector",
+  "version": "0.56.0",
+  "source": "https://github.com/aquasecurity/trivy",
+  "commit": "external-user-installed",
+  "license": {
+    "spdx": "Apache-2.0",
+    "reviewStatus": "plugin_only",
+    "reviewNotes": [
+      "Apache-2.0 Aqua Trivy filesystem SCA, container, and IaC scanner invoked externally via shell=false."
+    ]
+  },
+  "integration": {
+    "mode": "plugin_only",
+    "linuxRequired": false
+  },
+  "dependenciesReviewed": true,
+  "noticesRecorded": true,
+  "lastReviewedAt": "2026-10-28T00:00:00.000Z"
+}

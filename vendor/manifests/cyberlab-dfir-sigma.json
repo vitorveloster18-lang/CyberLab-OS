@@ -1,0 +1,21 @@
+{
+  "id": "cyberlab-dfir-sigma",
+  "version": "1.0.0",
+  "source": "https://github.com/vitorveloster18-lang/CyberLab-OS",
+  "commit": "first-party",
+  "license": {
+    "spdx": "MIT",
+    "reviewStatus": "approved_embed",
+    "reviewNotes": [
+      "First-party MIT DFIR multi-format log parser, Sigma YAML rule engine, and chronological incident timeline builder."
+    ]
+  },
+  "integration": {
+    "mode": "embedded",
+    "executorId": "dfir-sigma-analyzer-executor",
+    "linuxRequired": false
+  },
+  "dependenciesReviewed": true,
+  "noticesRecorded": true,
+  "lastReviewedAt": "2026-10-28T00:00:00.000Z"
+}
