@@ -27,46 +27,49 @@ const appDir = path.resolve(scriptDir, "..")
 const appPkgPath = path.join(appDir, "package.json")
 const appRequire = createRequire(appPkgPath)
 
-function resolveViteCliPath() {
+function resolveVitePackage() {
   try {
     const vitePkgJson = appRequire.resolve("vite/package.json")
     const cliPath = path.join(path.dirname(vitePkgJson), "bin", "vite.js")
-    if (existsSync(cliPath)) return cliPath
+    if (existsSync(cliPath)) {
+      return { vitePkgJson, cliPath }
+    }
   } catch {
     // Handled below
   }
   return null
 }
 
-function checkWindowsNativeBindings() {
+function checkWindowsNativeBindings(vitePkgJson) {
   if (process.platform !== "win32") return null
   const arch = process.arch === "arm64" ? "arm64" : "x64"
-  const checks = [
-    { parent: "rolldown/package.json", pkg: `@rolldown/binding-win32-${arch}-msvc` },
-    { parent: "@tailwindcss/oxide/package.json", pkg: `@tailwindcss/oxide-win32-${arch}-msvc` },
-    { parent: "lightningcss/package.json", pkg: `lightningcss-win32-${arch}-msvc` },
-  ]
-  for (const item of checks) {
-    try {
-      const parentPkg = appRequire.resolve(item.parent)
-      const parentReq = createRequire(parentPkg)
-      parentReq.resolve(item.pkg)
-    } catch {
-      return item.pkg
-    }
+  try {
+    const viteReq = createRequire(vitePkgJson)
+    const rolldownReq = createRequire(viteReq.resolve("rolldown/package.json"))
+    rolldownReq.resolve(`@rolldown/binding-win32-${arch}-msvc`)
+
+    const lightningReq = createRequire(viteReq.resolve("lightningcss/package.json"))
+    lightningReq.resolve(`lightningcss-win32-${arch}-msvc`)
+
+    const twViteReq = createRequire(appRequire.resolve("@tailwindcss/vite/package.json"))
+    const twNodeReq = createRequire(twViteReq.resolve("@tailwindcss/node/package.json"))
+    const twOxideReq = createRequire(twNodeReq.resolve("@tailwindcss/oxide/package.json"))
+    twOxideReq.resolve(`@tailwindcss/oxide-win32-${arch}-msvc`)
+    return null
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err)
   }
-  return null
 }
 
-const viteCliPath = resolveViteCliPath()
-if (!viteCliPath) {
+const resolvedVite = resolveVitePackage()
+if (!resolvedVite) {
   console.error(
     "[CyberLab UI Build] Vite não encontrado em node_modules. Execute `bun install --ignore-scripts` na raiz do repositório.",
   )
   process.exit(MISSING_DEPS_EXIT_CODE)
 }
 
-const missingBinding = checkWindowsNativeBindings()
+const missingBinding = checkWindowsNativeBindings(resolvedVite.vitePkgJson)
 if (missingBinding) {
   console.error(
     `[CyberLab UI Build] Binding nativo Windows ausente (${missingBinding}). Execute \`bun install --ignore-scripts\` no PowerShell.`,
@@ -74,6 +77,7 @@ if (missingBinding) {
   process.exit(MISSING_DEPS_EXIT_CODE)
 }
 
+const viteCliPath = resolvedVite.cliPath
 const rawArgs = process.argv.slice(2)
 let forcePwa = false
 let forceSourcemap = false
