@@ -51,10 +51,49 @@ try {
 
 if (rebuild || !existsSync(distIndex) || currentStamp !== UI_BUILD_STAMP) {
   console.log("Construindo interface unificada do CyberLab OS (OpenCode V2 Web App)...")
-  const buildRes = spawnSync(bunExecutable, ["--cwd", "packages/app", "build"], {
+  const viteLauncher = path.join(repoRoot, "packages", "app", "script", "vite-cli.mjs")
+
+  const runInstallRepair = () => {
+    console.log("Sincronizando dependências do workspace (`bun install --ignore-scripts`)...")
+    const installRes = spawnSync(bunExecutable, ["install", "--ignore-scripts"], {
+      cwd: repoRoot,
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        ELECTRON_SKIP_BINARY_DOWNLOAD: process.env.ELECTRON_SKIP_BINARY_DOWNLOAD || "1",
+      },
+      windowsHide: true,
+    })
+    if (installRes.status !== 0) {
+      process.exit(installRes.status ?? 1)
+    }
+    if (process.platform !== "win32") {
+      spawnSync(bunExecutable, ["run", "--cwd", "packages/core", "fix-node-pty"], {
+        cwd: repoRoot,
+        stdio: "inherit",
+      })
+    }
+  }
+
+  if (!existsSync(path.join(repoRoot, "node_modules"))) {
+    runInstallRepair()
+  }
+
+  let buildRes = spawnSync(bunExecutable, [viteLauncher, "build"], {
     cwd: repoRoot,
     stdio: "inherit",
+    windowsHide: true,
   })
+
+  if (buildRes.status === 2) {
+    runInstallRepair()
+    buildRes = spawnSync(bunExecutable, [viteLauncher, "build"], {
+      cwd: repoRoot,
+      stdio: "inherit",
+      windowsHide: true,
+    })
+  }
+
   if (buildRes.status !== 0) {
     process.exit(buildRes.status ?? 1)
   }

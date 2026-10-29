@@ -85,13 +85,13 @@ bun run cyberlab:test
 ```
 
 ### Como atualizar após novos commits (`git pull`)
-O lançador `bun run start` verifica automaticamente o carimbo de versão da interface (`UI_BUILD_STAMP`) e reconstrói `packages/app/dist` sempre que houver atualização:
+O lançador `bun run start` verifica automaticamente o carimbo de versão da interface (`UI_BUILD_STAMP`), sincroniza dependências ausentes (`bun install --ignore-scripts` quando necessário) e constrói `packages/app/dist` invocando `vite/bin/vite.js` diretamente (sem depender de shims `.bunx` nem exigir `node.exe` no Windows PowerShell):
 
 ```powershell
 git pull
 bun run start
 ```
-*(Se quiser forçar uma reconstrução limpa da interface web a qualquer momento, execute `bun run start --rebuild`).*
+*(Se quiser forçar uma reconstrução limpa da interface web a qualquer momento, execute `bun run start -- --rebuild`).*
 
 ---
 

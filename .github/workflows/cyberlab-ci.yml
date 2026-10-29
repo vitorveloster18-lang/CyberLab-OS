@@ -34,9 +34,48 @@ jobs:
           bun --cwd packages/gui-plugins typecheck
           if [ -f cyberlab/package.json ]; then bun --cwd cyberlab typecheck; fi
 
+      - name: Build unified Web UI (`packages/app`)
+        run: |
+          bun --cwd packages/app build
+          test -f packages/app/dist/index.html
+          test -f packages/app/dist/sw.js
+
       - name: Verify license compliance & run test suites
         run: |
           bun --cwd packages/schema test
           bun --cwd packages/util test
           if [ -f script/check-cyberlab-licenses.ts ]; then bun run script/check-cyberlab-licenses.ts; fi
           if [ -f cyberlab/package.json ]; then bun --cwd cyberlab test; fi
+
+  verify-windows:
+    runs-on: windows-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun 1.4.4
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Install dependencies on Windows PowerShell
+        shell: pwsh
+        run: |
+          bun install --ignore-scripts
+
+      - name: Build unified Web UI on Windows PowerShell (pure Bun runtime, zero Node.js / zero .bunx)
+        shell: pwsh
+        run: |
+          $env:CYBERLAB_FORCE_BUN_VITE = "1"
+          bun --cwd packages/app build
+          if (-not (Test-Path "packages/app/dist/index.html")) { throw "Missing dist/index.html" }
+          if (-not (Test-Path "packages/app/dist/sw.js")) { throw "Missing dist/sw.js" }
+
+      - name: Verify CyberLab CDI autonomy & Training Labs on Windows NTFS
+        shell: pwsh
+        run: |
+          bun run script/check-cyberlab-licenses.ts
+          bun --cwd cyberlab typecheck
+          bun test --cwd cyberlab ../tests/cyberlab/partners ../tests/cyberlab/labs

@@ -28,6 +28,7 @@
     "pack": "bun run script/pack.ts",
     "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "postinstall": "bun run --cwd packages/core fix-node-pty",
+    "build": "bun ./packages/app/script/vite-cli.mjs build",
     "start": "bun run script/start-cyberlab.ts",
     "cyberlab": "bun run script/cyberlab-cli.ts",
     "cyberlab:app": "bun run script/start-cyberlab.ts",
