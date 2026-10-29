@@ -26,8 +26,9 @@ import {
 import { createPanelMotion, guardClosingFocus, panelOpacity } from "@/shell/panel-motion"
 import { createSidebarPeek } from "@/shell/sidebar-peek"
 import { windowDragEnabled } from "@/session/header/drag-area"
+import { Icon } from "@opencode/ui/icon"
 import { useCyberLabWorkbench } from "@/cyberlab-workbench/state"
-import { CyberLabWorkbenchSurface } from "@/cyberlab-workbench/workbench"
+import { CyberLabCenterStage, CyberLabLeftExplorer } from "@/cyberlab-workbench/workbench"
 
 // How far Home steps along a peek's header to clear the collapsed toggle: to the toggle's end, from the sidebar's 18px
 // start padding.
@@ -205,6 +206,9 @@ export default function Layout(props: ParentProps) {
   const bottomTitlebar = () => mobile() && preferences.general.mobileTitlebarPosition() === "bottom"
   const dragInset = () => windowDragEnabled(platform) && !mobile()
 
+  const wbShell = useCyberLabWorkbench()
+  const antigravityActive = () => Boolean(wbShell?.ui.open) && !settings.active() && !mobile()
+
   return (
     <div
       class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
@@ -243,6 +247,7 @@ export default function Layout(props: ParentProps) {
             style={{ "--sidebar-peek-width": `${state.tabsWidth}px` }}
             ref={(element) => setState("tabsAside", element)}
             class="relative z-10 h-full min-h-0 shrink-0"
+            classList={{ hidden: antigravityActive() }}
           >
             {/* Skipped rather than display: none or inert, so neither direction restyles the sidebar's contents and
                   a reopen reuses their layout. */}
@@ -308,7 +313,9 @@ export default function Layout(props: ParentProps) {
             </CyberLabMainSplit>
           </PluginServerCover>
         </main>
-        <CollapsedSidebarToggle />
+        <Show when={!antigravityActive()}>
+          <CollapsedSidebarToggle />
+        </Show>
       </div>
       <PluginSlot at="window.bottom" input={{}} />
       <ToastRegion />
@@ -322,36 +329,102 @@ function CyberLabMainSplit(
 ) {
   const wb = useCyberLabWorkbench()
   const active = () => Boolean(wb?.ui.open) && !props.settingsActive()
-  const fullscreen = () => active() && (wb?.ui.layoutMode === "fullscreen" || props.mobile())
 
   return (
-    <Show when={active()} fallback={props.children}>
-      <Show
-        when={!fullscreen()}
-        fallback={
-          <>
-            <div class="hidden">{props.children}</div>
-            <div class="flex size-full min-h-0 min-w-0 flex-1 flex-col px-[var(--shell-inline-inset,8px)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
-              <CyberLabWorkbenchSurface />
+    <Show when={active() && wb} fallback={props.children}>
+      {(service) => (
+        <div
+          data-slot="cyberlab-antigravity-workspace"
+          class="flex size-full min-h-0 min-w-0 flex-1 flex-row overflow-hidden rounded-t-lg border-t border-v2-border-border-base bg-v2-background-bg-base"
+        >
+          {/* 1. COLUNA ESQUERDA RETRÁTIL: Pastas, Outputs (.cyberlab/outputs) & Slots do Arsenal */}
+          <Show when={!props.mobile()}>
+            <div class="relative flex h-full min-h-0 shrink-0">
+              <CyberLabLeftExplorer />
+              <Show when={service().ui.leftSidebarOpen}>
+                <ResizeHandle
+                  class="-end-1"
+                  direction="horizontal"
+                  size={service().ui.leftSidebarWidth}
+                  min={210}
+                  max={440}
+                  onResize={(w) => service().setLeftSidebarWidth(w)}
+                />
+              </Show>
             </div>
-          </>
-        }
-      >
-        <div class="flex size-full min-h-0 min-w-0 flex-1 flex-row overflow-hidden">
-          <div
-            class="flex min-h-0 min-w-0 flex-col overflow-hidden"
-            style={{ width: `${100 - (wb?.ui.splitWidthPct ?? 54)}%` }}
-          >
-            {props.children}
+          </Show>
+
+          {/* 2. COLUNA CENTRAL (TELA CHEIA): A Ferramenta Real Ocupa Tudo no Centro! */}
+          <div class="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <CyberLabCenterStage />
           </div>
-          <div
-            class="flex min-h-0 min-w-0 flex-col pb-[var(--shell-bottom-inset,8px)] pe-[var(--shell-inline-inset,8px)] pt-[var(--shell-top-inset,8px)]"
-            style={{ width: `${wb?.ui.splitWidthPct ?? 54}%` }}
+
+          {/* 3. COLUNA DIREITA ESTREITA & RETRÁTIL: Agente OpenCode IA (Mantém sessão viva sem desmontar!) */}
+          <aside
+            data-slot="cyberlab-right-agent-panel"
+            style={{
+              width: service().ui.rightAgentOpen && !props.mobile()
+                ? `${service().ui.rightAgentWidth}px`
+                : "38px",
+            }}
+            class="relative flex h-full min-h-0 shrink-0 flex-col border-l border-v2-border-border-base bg-v2-background-bg-deep/70"
           >
-            <CyberLabWorkbenchSurface />
-          </div>
+            <Show when={service().ui.rightAgentOpen && !props.mobile()}>
+              <ResizeHandle
+                class="-start-1"
+                direction="horizontal"
+                edge="start"
+                size={service().ui.rightAgentWidth}
+                min={300}
+                max={620}
+                onResize={(w) => service().setRightAgentWidth(w)}
+              />
+            </Show>
+
+            {/* Barra colapsada de 38px quando o Agente IA está recolhido */}
+            <Show when={!service().ui.rightAgentOpen || props.mobile()}>
+              <div class="flex h-full w-[38px] flex-col items-center justify-between py-2 select-none">
+                <button
+                  type="button"
+                  title="Expandir Agente OpenCode IA"
+                  class="inline-flex size-7 items-center justify-center rounded-md border border-v2-border-border-base bg-v2-background-bg-base text-emerald-500 hover:border-emerald-500 cursor-pointer"
+                  onClick={() => service().toggleRightAgent(true)}
+                >
+                  <Icon name="chevron-left" class="size-3.5" />
+                </button>
+                <div class="text-[9px] font-medium tracking-widest text-emerald-500 [writing-mode:vertical-rl]">
+                  AGENTE OPENCODE IA
+                </div>
+                <span class="size-2 rounded-full bg-emerald-500" />
+              </div>
+            </Show>
+
+            {/* Conteúdo real do Agente OpenCode mantido montado (sem perder stream/histórico ao recolher!) */}
+            <div
+              class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+              classList={{ hidden: !service().ui.rightAgentOpen || props.mobile() }}
+            >
+              <div class="flex items-center justify-between border-b border-v2-border-border-base bg-v2-background-bg-deep px-2.5 py-1.5 shrink-0">
+                <span class="text-[11.5px] font-semibold text-emerald-500">
+                  🤖 Agente OpenCode IA
+                </span>
+                <button
+                  type="button"
+                  title="Recolher barra do Agente IA"
+                  class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] text-v2-text-text-muted hover:bg-v2-background-bg-base hover:text-v2-text-text-strong cursor-pointer"
+                  onClick={() => service().toggleRightAgent(false)}
+                >
+                  <span>Recolher</span>
+                  <Icon name="chevron-right" class="size-3" />
+                </button>
+              </div>
+              <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                {props.children}
+              </div>
+            </div>
+          </aside>
         </div>
-      </Show>
+      )}
     </Show>
   )
 }

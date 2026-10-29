@@ -506,83 +506,181 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
         }),
       ),
     )
-    .handle("cyberlab.proxy.overview", () =>
+    .handle("cyberlab.arsenal.overview", () =>
       response(
         Effect.gen(function* () {
           const ws = yield* resolveWorkspace
-          return yield* Effect.promise(() => ws.getProxyOverview())
+          const [raw, availableBrowsers] = yield* Effect.promise(() =>
+            Promise.all([ws.getArsenalOverview(false), ws.listAvailableBrowsers()]),
+          )
+          const clean = JSON.parse(JSON.stringify(raw)) as typeof raw
+          return { ...clean, availableBrowsers }
         }),
       ),
     )
-    .handle("cyberlab.proxy.control", ({ payload }) =>
+    .handle("cyberlab.arsenal.probe", () =>
       response(
         Effect.gen(function* () {
           const ws = yield* resolveWorkspace
-          return yield* runBadRequest(() =>
-            ws.controlProxy({
-              action: payload.action,
-              ...(payload.port !== undefined ? { port: payload.port } : {}),
-              ...(payload.scopeOnly !== undefined ? { scopeOnly: payload.scopeOnly } : {}),
-              ...(payload.httpsMode !== undefined ? { httpsMode: payload.httpsMode } : {}),
-              ...(payload.allowSelfSignedUpstream !== undefined
-                ? { allowSelfSignedUpstream: payload.allowSelfSignedUpstream }
+          const [raw, availableBrowsers] = yield* Effect.promise(() =>
+            Promise.all([ws.getArsenalOverview(true), ws.listAvailableBrowsers()]),
+          )
+          const clean = JSON.parse(JSON.stringify(raw)) as typeof raw
+          return { ...clean, availableBrowsers }
+        }),
+      ),
+    )
+    .handle("cyberlab.arsenal.config", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          const [updated, availableBrowsers] = yield* runBadRequest(async () => {
+            const ov = await ws.configureArsenal({
+              ...(payload.toolsRootDir !== undefined ? { toolsRootDir: payload.toolsRootDir } : {}),
+              ...(payload.preferredWslDistro !== undefined ? { preferredWslDistro: payload.preferredWslDistro } : {}),
+              ...(payload.enforceScopeOnCliRuns !== undefined
+                ? { enforceScopeOnCliRuns: payload.enforceScopeOnCliRuns }
                 : {}),
-              ...(payload.startUrl !== undefined ? { startUrl: payload.startUrl } : {}),
-              ...(payload.preferredBrowserId !== undefined ? { preferredBrowserId: payload.preferredBrowserId } : {}),
-              ...(payload.interceptEnabled !== undefined ? { interceptEnabled: payload.interceptEnabled } : {}),
-              ...(payload.interceptResponses !== undefined ? { interceptResponses: payload.interceptResponses } : {}),
-              ...(payload.interceptInScopeOnly !== undefined
-                ? { interceptInScopeOnly: payload.interceptInScopeOnly }
-                : {}),
-              ...(payload.skipStaticAssets !== undefined ? { skipStaticAssets: payload.skipStaticAssets } : {}),
-              ...(payload.interceptId !== undefined ? { interceptId: payload.interceptId } : {}),
-              ...(payload.decision !== undefined ? { decision: payload.decision } : {}),
-              ...(payload.method !== undefined ? { method: payload.method } : {}),
-              ...(payload.url !== undefined ? { url: payload.url } : {}),
-              ...(payload.headers !== undefined ? { headers: { ...payload.headers } } : {}),
-              ...(payload.body !== undefined ? { body: payload.body } : {}),
-              ...(payload.statusCode !== undefined ? { statusCode: payload.statusCode } : {}),
-              ...(payload.matchReplaceRule !== undefined
+              ...(payload.slotId !== undefined ? { slotId: payload.slotId } : {}),
+              ...(payload.slotOverride !== undefined
                 ? {
-                    matchReplaceRule: {
-                      ...(payload.matchReplaceRule.ruleId !== undefined
-                        ? { ruleId: payload.matchReplaceRule.ruleId }
+                    slotOverride: {
+                      ...(payload.slotOverride.customExecutablePath !== undefined
+                        ? { customExecutablePath: payload.slotOverride.customExecutablePath }
                         : {}),
-                      enabled: payload.matchReplaceRule.enabled,
-                      location: payload.matchReplaceRule.location,
-                      ...(payload.matchReplaceRule.headerName !== undefined
-                        ? { headerName: payload.matchReplaceRule.headerName }
+                      ...(payload.slotOverride.customEmbedUrl !== undefined
+                        ? { customEmbedUrl: payload.slotOverride.customEmbedUrl }
                         : {}),
-                      matchPattern: payload.matchReplaceRule.matchPattern,
-                      replaceWith: payload.matchReplaceRule.replaceWith,
-                      isRegex: payload.matchReplaceRule.isRegex,
-                      ...(payload.matchReplaceRule.comment !== undefined
-                        ? { comment: payload.matchReplaceRule.comment }
+                      ...(payload.slotOverride.preferredRuntime !== undefined
+                        ? { preferredRuntime: payload.slotOverride.preferredRuntime }
+                        : {}),
+                      ...(payload.slotOverride.defaultArgs !== undefined
+                        ? { defaultArgs: payload.slotOverride.defaultArgs }
+                        : {}),
+                      ...(payload.slotOverride.companionProxyPort !== undefined
+                        ? { companionProxyPort: payload.slotOverride.companionProxyPort }
                         : {}),
                     },
                   }
                 : {}),
-              ...(payload.ruleId !== undefined ? { ruleId: payload.ruleId } : {}),
-              ...(payload.oastPort !== undefined ? { oastPort: payload.oastPort } : {}),
-              ...(payload.externalOastDomain !== undefined ? { externalOastDomain: payload.externalOastDomain } : {}),
+            })
+            return [ov, await ws.listAvailableBrowsers()] as const
+          })
+          const clean = JSON.parse(JSON.stringify(updated)) as typeof updated
+          return { ...clean, availableBrowsers }
+        }),
+      ),
+    )
+    .handle("cyberlab.arsenal.custom.upsert", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          const [updated, availableBrowsers] = yield* runBadRequest(async () => {
+            const ov = await ws.upsertCustomArsenalSlot({
+              ...(payload.slotId !== undefined ? { slotId: payload.slotId } : {}),
+              name: payload.name,
+              ...(payload.shortLabel !== undefined ? { shortLabel: payload.shortLabel } : {}),
+              kind: payload.kind,
+              ...(payload.tagline !== undefined ? { tagline: payload.tagline } : {}),
+              ...(payload.description !== undefined ? { description: payload.description } : {}),
+              executableOrUrl: payload.executableOrUrl,
+              ...(payload.preferredRuntime !== undefined ? { preferredRuntime: payload.preferredRuntime } : {}),
+              ...(payload.companionProxyPort !== undefined
+                ? { companionProxyPort: payload.companionProxyPort }
+                : {}),
+              ...(payload.defaultArgsTemplate !== undefined
+                ? { defaultArgsTemplate: payload.defaultArgsTemplate }
+                : {}),
+            })
+            return [ov, await ws.listAvailableBrowsers()] as const
+          })
+          const clean = JSON.parse(JSON.stringify(updated)) as typeof updated
+          return { ...clean, availableBrowsers }
+        }),
+      ),
+    )
+    .handle("cyberlab.arsenal.custom.remove", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          const [updated, availableBrowsers] = yield* runBadRequest(async () => {
+            const ov = await ws.removeCustomArsenalSlot(payload.slotId)
+            return [ov, await ws.listAvailableBrowsers()] as const
+          })
+          const clean = JSON.parse(JSON.stringify(updated)) as typeof updated
+          return { ...clean, availableBrowsers }
+        }),
+      ),
+    )
+    .handle("cyberlab.arsenal.launch", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          const res = yield* runBadRequest(() =>
+            ws.launchArsenalSlot({
+              slotId: payload.slotId,
+              action: payload.action,
+              ...(payload.target !== undefined ? { target: payload.target } : {}),
+              ...(payload.rawArgs !== undefined ? { rawArgs: payload.rawArgs } : {}),
+              ...(payload.runtimeOverride !== undefined ? { runtimeOverride: payload.runtimeOverride } : {}),
+            }),
+          )
+          return JSON.parse(JSON.stringify(res)) as typeof res
+        }),
+      ),
+    )
+    .handle("cyberlab.arsenal.stop", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          const stoppedRun = yield* runBadRequest(() => ws.stopArsenalRun(payload.runId))
+          return { stopped: Boolean(stoppedRun) }
+        }),
+      ),
+    )
+    .handle("cyberlab.arsenal.browser", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          const res = yield* runBadRequest(() =>
+            ws.launchCompanionProxyBrowser({
+              ...(payload.proxyPort !== undefined ? { proxyPort: payload.proxyPort } : {}),
+              ...(payload.startUrl !== undefined ? { startUrl: payload.startUrl } : {}),
+              ...(payload.preferredBrowserId !== undefined ? { preferredBrowserId: payload.preferredBrowserId } : {}),
+            }),
+          )
+          return res
+        }),
+      ),
+    )
+    .handle("cyberlab.arsenal.persist", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() =>
+            ws.persistArsenalOutputToEvidence({
+              title: payload.title,
+              content: payload.content,
+              ...(payload.slotId !== undefined ? { slotId: payload.slotId } : {}),
+              actor: "operator:arsenal-workbench",
             }),
           )
         }),
       ),
     )
-    .handle("cyberlab.proxy.persist", ({ payload }) =>
+    .handle("cyberlab.files.list", ({ payload }) =>
       response(
         Effect.gen(function* () {
           const ws = yield* resolveWorkspace
-          return yield* runBadRequest(() => ws.persistProxyEntry(payload.entryId, "http-workbench"))
+          return yield* runBadRequest(() => ws.listWorkspaceFiles(payload.subpath ?? "."))
         }),
       ),
     )
-    .handle("cyberlab.proxy.replay", ({ payload }) =>
+    .handle("cyberlab.files.preview", ({ payload }) =>
       response(
         Effect.gen(function* () {
           const ws = yield* resolveWorkspace
-          return yield* runBadRequest(() => ws.exportProxyEntryForReplay(payload.entryId))
+          return yield* runBadRequest(() => ws.readWorkspaceFilePreview(payload.relativePath))
         }),
       ),
     )

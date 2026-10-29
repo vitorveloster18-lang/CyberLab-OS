@@ -322,232 +322,175 @@ export namespace CyberLab {
     manualBashCommand: Schema.String,
   })
 
-  export const ProxyStatusInfo = Schema.Struct({
-    running: Schema.Boolean,
-    listenHost: Schema.String,
-    listenPort: Schema.NullOr(Schema.Number),
-    scopeOnly: Schema.Boolean,
-    httpsMode: optional(Schema.Literals(["tls_intercept", "tunnel_passthrough"])),
-    allowSelfSignedUpstream: optional(Schema.Boolean),
-    interceptEnabled: optional(Schema.Boolean),
-    interceptResponses: optional(Schema.Boolean),
-    interceptInScopeOnly: optional(Schema.Boolean),
-    skipStaticAssets: optional(Schema.Boolean),
-    pendingInterceptCount: optional(Schema.Number),
-    matchReplaceRuleCount: optional(Schema.Number),
-    siteMapHostCount: optional(Schema.Number),
-    passiveAlertCount: optional(Schema.Number),
-    oastRunning: optional(Schema.Boolean),
-    oastListenPort: optional(Schema.NullOr(Schema.Number)),
-    oastCallbackBaseUrl: optional(Schema.NullOr(Schema.String)),
-    externalOastDomain: optional(Schema.NullOr(Schema.String)),
-    oastHitCount: optional(Schema.Number),
-    caFingerprintSha256: optional(Schema.String),
-    caSpkiSha256Base64: optional(Schema.String),
-    caCertPath: optional(Schema.NullOr(Schema.String)),
-    caCertPem: optional(Schema.String),
-    availableBrowsers: optional(Schema.Array(ProxyBrowserInfo)),
-    capturedCount: Schema.Number,
-  })
-
-  export const ProxyHistoryEntryInfo = Schema.Struct({
-    entryId: Schema.String,
-    timestamp: Schema.String,
-    protocol: optional(Schema.Literals(["http", "https", "ws", "wss", "connect_tunnel"])),
-    method: Schema.String,
-    url: Schema.String,
-    host: Schema.String,
-    path: Schema.String,
-    statusCode: Schema.Number,
-    mimeType: optional(Schema.String),
-    elapsedMs: Schema.Number,
-    requestHeaders: Schema.Record(Schema.String, Schema.String),
-    requestBody: Schema.String,
-    responseHeaders: Schema.Record(Schema.String, Schema.String),
-    responseBody: Schema.String,
-    responseBytes: Schema.Number,
-    blockedByScope: Schema.Boolean,
-    blockReason: optional(Schema.String),
-    modifiedByRuleOrIntercept: optional(Schema.Boolean),
-    passiveAlertCount: optional(Schema.Number),
-    persistedEvidenceId: optional(Schema.String),
-  })
-
-  export const ProxyInterceptItemInfo = Schema.Struct({
-    interceptId: Schema.String,
-    phase: Schema.Literals(["request", "response"]),
-    createdAt: Schema.String,
-    protocol: Schema.Literals(["http", "https"]),
-    method: Schema.String,
-    url: Schema.String,
-    host: Schema.String,
-    path: Schema.String,
-    headers: Schema.Record(Schema.String, Schema.String),
-    body: Schema.String,
-    statusCode: optional(Schema.Number),
-  })
-
-  export const ProxyMatchReplaceRuleInfo = Schema.Struct({
-    ruleId: Schema.String,
-    enabled: Schema.Boolean,
-    location: Schema.Literals(["url", "request_header", "request_body", "response_header", "response_body"]),
-    headerName: optional(Schema.String),
-    matchPattern: Schema.String,
-    replaceWith: Schema.String,
-    isRegex: Schema.Boolean,
-    comment: optional(Schema.String),
-  })
-
-  export const ProxySiteMapEndpointInfo = Schema.Struct({
-    path: Schema.String,
-    methods: Schema.Array(Schema.String),
-    statusCodes: Schema.Array(Schema.Number),
-    mimeTypes: Schema.Array(Schema.String),
-    paramNames: Schema.Array(Schema.String),
-    hitCount: Schema.Number,
-    lastSeenAt: Schema.String,
-    sampleEntryId: Schema.String,
-  })
-
-  export const ProxySiteMapHostInfo = Schema.Struct({
-    host: Schema.String,
-    scheme: Schema.Literals(["http", "https", "ws", "wss"]),
-    inScope: Schema.Boolean,
-    requestCount: Schema.Number,
-    passiveAlertCount: Schema.Number,
-    endpoints: Schema.Array(ProxySiteMapEndpointInfo),
-  })
-
-  export const PassiveProxyAlertInfo = Schema.Struct({
-    alertId: Schema.String,
-    timestamp: Schema.String,
-    severity: Schema.Literals(["info", "low", "medium", "high"]),
-    category: Schema.String,
+  export const ArsenalCategoryInfo = Schema.Struct({
+    id: Schema.String,
     title: Schema.String,
-    host: Schema.String,
-    url: Schema.String,
-    evidenceSnippet: Schema.String,
-    entryId: Schema.String,
+    subtitle: Schema.String,
   })
 
-  export const OastCallbackHitInfo = Schema.Struct({
-    hitId: Schema.String,
-    timestamp: Schema.String,
-    method: Schema.String,
-    path: Schema.String,
-    query: Schema.String,
-    remoteAddress: Schema.String,
-    headers: Schema.Record(Schema.String, Schema.String),
-    bodyPreview: Schema.String,
+  export const ArsenalPresetCommandInfo = Schema.Struct({
+    id: Schema.String,
+    label: Schema.String,
+    description: Schema.String,
+    argsTemplate: Schema.String,
   })
 
-  export const GlobalHttpTrafficEntryInfo = Schema.Struct({
-    logId: Schema.String,
-    timestamp: Schema.String,
-    projectId: Schema.String,
-    sourceTool: Schema.String,
-    method: Schema.String,
-    url: Schema.String,
-    host: Schema.String,
-    statusCode: Schema.Number,
-    elapsedMs: Schema.Number,
-    responseBytes: Schema.Number,
-    notes: optional(Schema.String),
+  export const ArsenalSlotOverrideInfo = Schema.Struct({
+    customExecutablePath: optional(Schema.String),
+    customEmbedUrl: optional(Schema.String),
+    preferredRuntime: optional(Schema.Literals(["auto", "windows", "wsl", "linux_mac"])),
+    defaultArgs: optional(Schema.String),
+    companionProxyPort: optional(Schema.Number),
   })
 
-  export const ProxyOverview = Schema.Struct({
-    status: ProxyStatusInfo,
-    history: Schema.Array(ProxyHistoryEntryInfo),
-    interceptQueue: optional(Schema.Array(ProxyInterceptItemInfo)),
-    matchReplaceRules: optional(Schema.Array(ProxyMatchReplaceRuleInfo)),
-    siteMap: optional(
-      Schema.Struct({
-        hosts: Schema.Array(ProxySiteMapHostInfo),
-        passiveAlerts: Schema.Array(PassiveProxyAlertInfo),
-      }),
-    ),
-    oastHits: optional(Schema.Array(OastCallbackHitInfo)),
-    httpLogger: optional(Schema.Array(GlobalHttpTrafficEntryInfo)),
-    browserLaunchResult: optional(ProxyBrowserLaunchResult),
+  export const ArsenalSlotStatusInfo = Schema.Struct({
+    slotId: Schema.String,
+    name: Schema.String,
+    shortLabel: Schema.String,
+    category: Schema.String,
+    kind: Schema.Literals(["web_embed", "desktop_gui", "cli_runner"]),
+    tagline: Schema.String,
+    description: Schema.String,
+    upstreamUrl: Schema.String,
+    licenseNote: Schema.String,
+    isCustom: Schema.Boolean,
+    installed: Schema.Boolean,
+    availableRuntimes: Schema.Array(Schema.Literals(["windows", "wsl", "linux_mac", "web"])),
+    activeRuntime: Schema.Literals(["windows", "wsl", "linux_mac", "web", "none"]),
+    resolvedPath: Schema.NullOr(Schema.String),
+    windowsPath: Schema.NullOr(Schema.String),
+    wslPath: Schema.NullOr(Schema.String),
+    posixPath: Schema.NullOr(Schema.String),
+    embedUrl: Schema.NullOr(Schema.String),
+    daemonRunning: Schema.Boolean,
+    companionProxyPort: Schema.NullOr(Schema.Number),
+    installPowerShell: Schema.String,
+    installKaliWsl: Schema.String,
+    presets: Schema.Array(ArsenalPresetCommandInfo),
+    override: ArsenalSlotOverrideInfo,
   })
 
-  export const ProxyControlInput = Schema.Struct({
-    action: Schema.Literals([
-      "start",
-      "stop",
-      "clear",
-      "set_scope_only",
-      "set_https_mode",
-      "launch_browser",
-      "configure_intercept",
-      "resolve_intercept",
-      "forward_all_intercepts",
-      "drop_all_intercepts",
-      "upsert_match_replace",
-      "remove_match_replace",
-      "start_oast",
-      "stop_oast",
-      "clear_oast",
-      "clear_http_logger",
-    ]),
-    port: optional(Schema.Number),
-    scopeOnly: optional(Schema.Boolean),
-    httpsMode: optional(Schema.Literals(["tls_intercept", "tunnel_passthrough"])),
-    allowSelfSignedUpstream: optional(Schema.Boolean),
+  export const ArsenalLiveRunInfo = Schema.Struct({
+    runId: Schema.String,
+    slotId: Schema.String,
+    slotName: Schema.String,
+    runtime: Schema.Literals(["windows", "wsl", "linux_mac", "installer"]),
+    commandPreview: Schema.String,
+    status: Schema.Literals(["running", "succeeded", "failed", "stopped"]),
+    exitCode: Schema.NullOr(Schema.Number),
+    startedAt: Schema.String,
+    finishedAt: Schema.NullOr(Schema.String),
+    outputLogPath: Schema.NullOr(Schema.String),
+    outputTail: Schema.String,
+    lineCount: Schema.Number,
+  })
+
+  export const ArsenalEnvironmentSummaryInfo = Schema.Struct({
+    hostPlatform: Schema.String,
+    toolsRootDir: Schema.String,
+    wslAvailable: Schema.Boolean,
+    wslDistros: Schema.Array(Schema.String),
+    preferredWslDistro: Schema.String,
+    enforceScopeOnCliRuns: Schema.Boolean,
+    lastProbedAt: Schema.NullOr(Schema.String),
+  })
+
+  export const ArsenalOverview = Schema.Struct({
+    environment: ArsenalEnvironmentSummaryInfo,
+    categories: Schema.Array(ArsenalCategoryInfo),
+    slots: Schema.Array(ArsenalSlotStatusInfo),
+    runs: Schema.Array(ArsenalLiveRunInfo),
+    availableBrowsers: optional(Schema.Array(ProxyBrowserInfo)),
+  })
+
+  export const ArsenalConfigPatchInput = Schema.Struct({
+    toolsRootDir: optional(Schema.String),
+    preferredWslDistro: optional(Schema.String),
+    enforceScopeOnCliRuns: optional(Schema.Boolean),
+    slotId: optional(Schema.String),
+    slotOverride: optional(ArsenalSlotOverrideInfo),
+  })
+
+  export const ArsenalCustomSlotInput = Schema.Struct({
+    slotId: optional(Schema.String),
+    name: Schema.String,
+    shortLabel: optional(Schema.String),
+    kind: Schema.Literals(["web_embed", "desktop_gui", "cli_runner"]),
+    tagline: optional(Schema.String),
+    description: optional(Schema.String),
+    executableOrUrl: Schema.String,
+    preferredRuntime: optional(Schema.Literals(["auto", "windows", "wsl", "linux_mac"])),
+    companionProxyPort: optional(Schema.Number),
+    defaultArgsTemplate: optional(Schema.String),
+  })
+
+  export const ArsenalCustomSlotRemoveInput = Schema.Struct({
+    slotId: Schema.String,
+  })
+
+  export const ArsenalLaunchInput = Schema.Struct({
+    slotId: Schema.String,
+    action: Schema.Literals(["run_cli", "launch_desktop", "start_web", "stop_web", "install_tool"]),
+    target: optional(Schema.String),
+    rawArgs: optional(Schema.String),
+    runtimeOverride: optional(Schema.Literals(["windows", "wsl", "linux_mac"])),
+  })
+
+  export const ArsenalLaunchResult = Schema.Struct({
+    ok: Schema.Boolean,
+    message: Schema.String,
+    embedUrl: optional(Schema.String),
+    run: optional(ArsenalLiveRunInfo),
+    overview: ArsenalOverview,
+  })
+
+  export const ArsenalStopRunInput = Schema.Struct({
+    runId: Schema.String,
+  })
+
+  export const ArsenalProxyBrowserInput = Schema.Struct({
+    proxyPort: optional(Schema.Number),
     startUrl: optional(Schema.String),
     preferredBrowserId: optional(Schema.String),
-    interceptEnabled: optional(Schema.Boolean),
-    interceptResponses: optional(Schema.Boolean),
-    interceptInScopeOnly: optional(Schema.Boolean),
-    skipStaticAssets: optional(Schema.Boolean),
-    interceptId: optional(Schema.String),
-    decision: optional(Schema.Literals(["forward", "drop"])),
-    method: optional(Schema.String),
-    url: optional(Schema.String),
-    headers: optional(Schema.Record(Schema.String, Schema.String)),
-    body: optional(Schema.String),
-    statusCode: optional(Schema.Number),
-    matchReplaceRule: optional(
-      Schema.Struct({
-        ruleId: optional(Schema.String),
-        enabled: Schema.Boolean,
-        location: Schema.Literals(["url", "request_header", "request_body", "response_header", "response_body"]),
-        headerName: optional(Schema.String),
-        matchPattern: Schema.String,
-        replaceWith: Schema.String,
-        isRegex: Schema.Boolean,
-        comment: optional(Schema.String),
-      }),
-    ),
-    ruleId: optional(Schema.String),
-    oastPort: optional(Schema.Number),
-    externalOastDomain: optional(Schema.String),
   })
 
-  export const ProxyReplayInput = Schema.Struct({
-    entryId: Schema.String,
+  export const ArsenalPersistOutputInput = Schema.Struct({
+    title: Schema.String,
+    content: Schema.String,
+    slotId: optional(Schema.String),
   })
 
-  export const ProxyReplayOutput = Schema.Struct({
-    entryId: Schema.String,
-    method: Schema.String,
-    url: Schema.String,
-    headers: Schema.Record(Schema.String, Schema.String),
-    body: Schema.String,
-    responseStatusCode: Schema.Number,
-    responseHeaders: Schema.Record(Schema.String, Schema.String),
-    responseBody: Schema.String,
-    rawHttpRequest: Schema.String,
-    curlCommand: Schema.String,
-  })
-
-  export const ProxyPersistInput = Schema.Struct({
-    entryId: Schema.String,
-  })
-
-  export const ProxyPersistOutput = Schema.Struct({
+  export const ArsenalPersistOutputResult = Schema.Struct({
     evidenceId: Schema.String,
     sha256: Schema.String,
+  })
+
+  export const WorkspaceFileEntryInfo = Schema.Struct({
+    name: Schema.String,
+    relativePath: Schema.String,
+    kind: Schema.Literals(["file", "directory"]),
+    sizeBytes: Schema.Number,
+    modifiedAt: Schema.String,
+  })
+
+  export const WorkspaceFilesListInput = Schema.Struct({
+    subpath: optional(Schema.String),
+  })
+
+  export const WorkspaceFilesListOutput = Schema.Struct({
+    currentDir: Schema.String,
+    entries: Schema.Array(WorkspaceFileEntryInfo),
+  })
+
+  export const WorkspaceFilePreviewInput = Schema.Struct({
+    relativePath: Schema.String,
+  })
+
+  export const WorkspaceFilePreviewOutput = Schema.Struct({
+    relativePath: Schema.String,
+    sizeBytes: Schema.Number,
+    truncated: Schema.Boolean,
+    content: Schema.String,
   })
 
   export const CdiInitiateModeSchema = Schema.Literals([

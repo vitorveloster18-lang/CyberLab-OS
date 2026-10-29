@@ -91,13 +91,13 @@ describe("Interactive CyberLab OS Training Laboratories (5 Built-In Labs)", () =
       expect(kh.running).toBe(true)
       const khWs = await manager.forProject(kh.projectId, kh.workspaceRoot, true)
       const khExec = await khWs.submitExecution({
-        capabilityId: "code-analysis.key-hunter",
+        capabilityId: "code-analysis.workspace-audit",
         input: { subpath: "." },
         mode: "manual",
       })
       expect(khExec.status).toBe("succeeded")
 
-      // 4. DFIR & SOC Incident Lab (NDJSON/Nginx logs + Sigma rule engine)
+      // 4. DFIR & SOC Incident Lab (NDJSON/Nginx logs)
       const dfir = await manager.startTrainingLab({
         labId: "lab-dfir-soc-incident",
         startedBy: "cdi:salem",
@@ -112,13 +112,7 @@ describe("Interactive CyberLab OS Training Laboratories (5 Built-In Labs)", () =
         startedBy: "cdi:naia",
       })
       expect(rev.provisioned).toBe(true)
-      const revWs = await manager.forProject(rev.projectId, rev.workspaceRoot, true)
-      const pcapExec = await revWs.submitExecution({
-        capabilityId: "network-assessment.pcap-analyzer",
-        input: { pcapPath: "captures/lab-traffic.pcap" },
-        mode: "manual",
-      })
-      expect(pcapExec.status).toBe("succeeded")
+      expect(existsSync(path.join(rev.workspaceRoot, "captures", "lab-traffic.pcap"))).toBe(true)
 
       const stoppedBola = await manager.stopTrainingLab("lab-owasp-api-bola")
       expect(stoppedBola.running).toBe(false)

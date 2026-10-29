@@ -17,8 +17,15 @@ import type {
 import { createDefaultEngagementProfile } from "./contracts/policy.js"
 import { EvidenceStore, type IntegrityCheckResult } from "./evidence/store.js"
 import { CyberLabExecutionDispatcher } from "./execution/dispatcher.js"
-import { EngagementRuntime, type GlobalHttpTrafficEntry } from "./http/engagement-runtime.js"
 import { TrainingLabManager, type TrainingLabStatus } from "./labs/training-labs.js"
+import {
+  ArsenalSlotManager,
+  type ArsenalLiveRun,
+  type ArsenalOverview,
+  type SlotUserOverride,
+  type WorkspaceFileEntry,
+} from "./arsenal/slot-manager.js"
+import type { ArsenalRuntimePreference, ArsenalSlotKind } from "./arsenal/catalog.js"
 import { PartnerAuthenticator } from "./partners/authentication.js"
 import { PartnerBridge, type PartnerDispatchOutcome } from "./partners/bridge.js"
 import {
@@ -76,19 +83,10 @@ import {
   type IngestExternalActionResult,
 } from "./external/control-plane.js"
 import {
-  CyberLabHttpProxy,
-  type MatchReplaceLocation,
-  type OastCallbackHit,
-  type PassiveProxyAlert,
-  type ProxyHistoryEntry,
-  type ProxyHttpsMode,
-  type ProxyInterceptItem,
-  type ProxyMatchReplaceRule,
-  type ProxyReplayBundle,
-  type ProxyStatus,
-  type SiteMapHostNode,
-} from "./proxy/http-proxy.js"
-import type { LaunchProxyBrowserResult } from "./proxy/browser-launcher.js"
+  detectInstalledProxyBrowsers,
+  launchPreconfiguredProxyBrowser,
+  type LaunchProxyBrowserResult,
+} from "./proxy/browser-launcher.js"
 import { ApprovalManager } from "./policy/approval.js"
 import { PolicyEngine } from "./policy/authorize.js"
 import { ScopeController, parseBugBountyScopeImport } from "./policy/scope.js"
@@ -102,126 +100,6 @@ import {
   WorkspaceAuditExecutor,
   WorkspaceAuditInputSchema,
 } from "../integrations/code-analysis/workspace-audit-executor.js"
-import {
-  HTTP_SECURITY_INSPECTOR_INPUT_SCHEMA_ID,
-  HttpSecurityInspectorCapability,
-  HttpSecurityInspectorInputSchema,
-  WebHttpSecurityInspectorExecutor,
-} from "../integrations/web-security/http-security-inspector.js"
-import {
-  HTTP_REPEATER_INPUT_SCHEMA_ID,
-  HttpRepeaterCapability,
-  HttpRepeaterComparerExecutor,
-  HttpRepeaterInputSchema,
-} from "../integrations/web-security/http-repeater-comparer.js"
-import {
-  DECODER_SEQUENCER_INPUT_SCHEMA_ID,
-  DecoderSequencerCapability,
-  DecoderSequencerExecutor,
-  DecoderSequencerInputSchema,
-} from "../integrations/web-security/decoder-sequencer.js"
-import {
-  WEB_SURFACE_DISCOVERY_INPUT_SCHEMA_ID,
-  WebSurfaceDiscoveryCapability,
-  WebSurfaceDiscoveryExecutor,
-  WebSurfaceDiscoveryInputSchema,
-} from "../integrations/web-security/surface-discovery.js"
-import {
-  TCP_SURFACE_PROBE_INPUT_SCHEMA_ID,
-  TcpSurfaceInspectorExecutor,
-  TcpSurfaceProbeCapability,
-  TcpSurfaceProbeInputSchema,
-} from "../integrations/network-observation/tcp-banner-inspector.js"
-import {
-  TLS_INSPECTOR_INPUT_SCHEMA_ID,
-  TlsCertificateInspectorExecutor,
-  TlsInspectorCapability,
-  TlsInspectorInputSchema,
-} from "../integrations/network-observation/tls-certificate-inspector.js"
-import {
-  PCAP_ANALYZER_INPUT_SCHEMA_ID,
-  PcapAnalyzerCapability,
-  PcapAnalyzerInputSchema,
-  PcapPacketAnalyzerExecutor,
-} from "../integrations/network-observation/pcap-packet-analyzer.js"
-import {
-  BINARY_TRIAGE_INPUT_SCHEMA_ID,
-  BinaryStaticTriageCapability,
-  BinaryStaticTriageExecutor,
-  BinaryStaticTriageInputSchema,
-} from "../integrations/reverse-forensics/binary-static-triage.js"
-import {
-  MOBILE_TRIAGE_INPUT_SCHEMA_ID,
-  MobileArtifactTriageCapability,
-  MobileArtifactTriageExecutor,
-  MobileArtifactTriageInputSchema,
-} from "../integrations/reverse-forensics/mobile-artifact-triage.js"
-import {
-  HTTP_INTRUDER_INPUT_SCHEMA_ID,
-  HttpIntruderCapability,
-  HttpIntruderInputSchema,
-  HttpIntruderMatrixExecutor,
-} from "../integrations/web-security/http-intruder-matrix.js"
-import {
-  WEB_PARAM_AUDIT_INPUT_SCHEMA_ID,
-  DifferentialParamAuditorExecutor,
-  WebParamAuditCapability,
-  WebParamAuditInputSchema,
-} from "../integrations/web-security/differential-param-auditor.js"
-import {
-  DNS_RECON_INPUT_SCHEMA_ID,
-  DnsReconCapability,
-  DnsReconInputSchema,
-  DnsSurfaceReconExecutor,
-} from "../integrations/network-observation/dns-surface-recon.js"
-import {
-  BINARY_DISASM_INPUT_SCHEMA_ID,
-  BinaryDisasmCapability,
-  BinaryDisasmInputSchema,
-  BinaryDisassemblerExecutor,
-} from "../integrations/reverse-forensics/binary-disassembler.js"
-import {
-  YARA_SCAN_INPUT_SCHEMA_ID,
-  YaraRuleScannerExecutor,
-  YaraScanCapability,
-  YaraScanInputSchema,
-} from "../integrations/reverse-forensics/yara-rule-scanner.js"
-import {
-  API_SECURITY_LAB_INPUT_SCHEMA_ID,
-  ApiGraphqlOauthCapability,
-  ApiGraphqlOauthInputSchema,
-  ApiGraphqlOauthLabExecutor,
-} from "../integrations/web-security/api-graphql-oauth-lab.js"
-import {
-  SCA_SBOM_IAC_INPUT_SCHEMA_ID,
-  ScaSbomIacAuditorExecutor,
-  ScaSbomIacCapability,
-  ScaSbomIacInputSchema,
-} from "../integrations/code-analysis/sca-sbom-iac-auditor.js"
-import {
-  DFIR_SIGMA_INPUT_SCHEMA_ID,
-  DfirSigmaAnalyzerExecutor,
-  DfirSigmaCapability,
-  DfirSigmaInputSchema,
-} from "../integrations/reverse-forensics/dfir-sigma-analyzer.js"
-import {
-  AD_SMB_LDAP_INPUT_SCHEMA_ID,
-  AdSmbLdapCapability,
-  AdSmbLdapInputSchema,
-  AdSmbLdapInspectorExecutor,
-} from "../integrations/network-observation/ad-smb-ldap-inspector.js"
-import {
-  ENTROPY_RECIPE_INPUT_SCHEMA_ID,
-  EntropyRecipeCapability,
-  EntropyRecipeInputSchema,
-  EntropyRecipeStudioExecutor,
-} from "../integrations/reverse-forensics/entropy-recipe-studio.js"
-import {
-  KEY_HUNTER_INPUT_SCHEMA_ID,
-  KeyHunterCapability,
-  KeyHunterExecutor,
-  KeyHunterInputSchema,
-} from "../integrations/code-analysis/key-hunter.js"
 
 const repoSkillsDir = fileURLToPath(new URL("../skills", import.meta.url))
 
@@ -262,7 +140,7 @@ export class CyberLabWorkspace {
   readonly partnerBridge: PartnerBridge
   readonly cdiHub: CdiPartnerHub
   readonly externalControl: ExternalControlPlane
-  readonly httpProxy: CyberLabHttpProxy
+  readonly arsenal: ArsenalSlotManager
   private readonly scopePersistencePath: string | null
   private readonly ownedManager?: CyberLabWorkspaceManager
   private initialized = false
@@ -315,11 +193,11 @@ export class CyberLabWorkspace {
       scopes: this.scopes,
       evidenceStore: this.evidenceStore,
     })
-    this.httpProxy = new CyberLabHttpProxy({
+    this.arsenal = new ArsenalSlotManager({
       projectId: this.projectId,
+      workspaceRoot: this.workspaceRoot,
       scopes: this.scopes,
-      evidenceStore: this.evidenceStore,
-      ...(options.inMemoryDb ? {} : { workspaceRoot: this.workspaceRoot }),
+      ...(options.inMemoryDb ? { globalConfigDir: path.join(this.workspaceRoot, ".cyberlab") } : {}),
     })
 
     let envBridge = options.environmentBridge
@@ -384,11 +262,9 @@ export class CyberLabWorkspace {
     this.initialized = true
 
     const restoredScope = this.tryLoadScopeFromDisk()
-    if (restoredScope) {
-      EngagementRuntime.setProfile(this.projectId, restoredScope.engagement)
-    } else {
+    if (!restoredScope) {
       // Default safe local scope (external network disabled by default until operator configures scope)
-      const defaultScope = this.scopes.setProjectScope({
+      this.scopes.setProjectScope({
         scopeId: `scope-${this.projectId}`,
         projectId: this.projectId,
         name: "Default Isolated Lab & Workspace Scope",
@@ -405,94 +281,12 @@ export class CyberLabWorkspace {
         active: true,
         updatedAt: new Date().toISOString(),
       })
-      EngagementRuntime.setProfile(this.projectId, defaultScope.engagement)
     }
 
     // Register built-in read-only workspace audit executor & capability
     this.schemas.registerEffectSchema(WORKSPACE_AUDIT_INPUT_SCHEMA_ID, WorkspaceAuditInputSchema)
     this.executors.registerExecutor(new WorkspaceAuditExecutor())
     await this.capabilities.register(WorkspaceAuditCapability)
-
-    // Register license-approved passive web & lab network assessment capabilities
-    this.schemas.registerEffectSchema(HTTP_SECURITY_INSPECTOR_INPUT_SCHEMA_ID, HttpSecurityInspectorInputSchema)
-    this.executors.registerExecutor(new WebHttpSecurityInspectorExecutor())
-    await this.capabilities.register(HttpSecurityInspectorCapability)
-
-    this.schemas.registerEffectSchema(HTTP_REPEATER_INPUT_SCHEMA_ID, HttpRepeaterInputSchema)
-    this.executors.registerExecutor(new HttpRepeaterComparerExecutor())
-    await this.capabilities.register(HttpRepeaterCapability)
-
-    this.schemas.registerEffectSchema(DECODER_SEQUENCER_INPUT_SCHEMA_ID, DecoderSequencerInputSchema)
-    this.executors.registerExecutor(new DecoderSequencerExecutor())
-    await this.capabilities.register(DecoderSequencerCapability)
-
-    this.schemas.registerEffectSchema(WEB_SURFACE_DISCOVERY_INPUT_SCHEMA_ID, WebSurfaceDiscoveryInputSchema)
-    this.executors.registerExecutor(new WebSurfaceDiscoveryExecutor())
-    await this.capabilities.register(WebSurfaceDiscoveryCapability)
-
-    this.schemas.registerEffectSchema(TCP_SURFACE_PROBE_INPUT_SCHEMA_ID, TcpSurfaceProbeInputSchema)
-    this.executors.registerExecutor(new TcpSurfaceInspectorExecutor())
-    await this.capabilities.register(TcpSurfaceProbeCapability)
-
-    this.schemas.registerEffectSchema(TLS_INSPECTOR_INPUT_SCHEMA_ID, TlsInspectorInputSchema)
-    this.executors.registerExecutor(new TlsCertificateInspectorExecutor())
-    await this.capabilities.register(TlsInspectorCapability)
-
-    this.schemas.registerEffectSchema(PCAP_ANALYZER_INPUT_SCHEMA_ID, PcapAnalyzerInputSchema)
-    this.executors.registerExecutor(new PcapPacketAnalyzerExecutor())
-    await this.capabilities.register(PcapAnalyzerCapability)
-
-    this.schemas.registerEffectSchema(BINARY_TRIAGE_INPUT_SCHEMA_ID, BinaryStaticTriageInputSchema)
-    this.executors.registerExecutor(new BinaryStaticTriageExecutor())
-    await this.capabilities.register(BinaryStaticTriageCapability)
-
-    this.schemas.registerEffectSchema(MOBILE_TRIAGE_INPUT_SCHEMA_ID, MobileArtifactTriageInputSchema)
-    this.executors.registerExecutor(new MobileArtifactTriageExecutor())
-    await this.capabilities.register(MobileArtifactTriageCapability)
-
-    this.schemas.registerEffectSchema(HTTP_INTRUDER_INPUT_SCHEMA_ID, HttpIntruderInputSchema)
-    this.executors.registerExecutor(new HttpIntruderMatrixExecutor())
-    await this.capabilities.register(HttpIntruderCapability)
-
-    this.schemas.registerEffectSchema(WEB_PARAM_AUDIT_INPUT_SCHEMA_ID, WebParamAuditInputSchema)
-    this.executors.registerExecutor(new DifferentialParamAuditorExecutor())
-    await this.capabilities.register(WebParamAuditCapability)
-
-    this.schemas.registerEffectSchema(DNS_RECON_INPUT_SCHEMA_ID, DnsReconInputSchema)
-    this.executors.registerExecutor(new DnsSurfaceReconExecutor())
-    await this.capabilities.register(DnsReconCapability)
-
-    this.schemas.registerEffectSchema(BINARY_DISASM_INPUT_SCHEMA_ID, BinaryDisasmInputSchema)
-    this.executors.registerExecutor(new BinaryDisassemblerExecutor())
-    await this.capabilities.register(BinaryDisasmCapability)
-
-    this.schemas.registerEffectSchema(YARA_SCAN_INPUT_SCHEMA_ID, YaraScanInputSchema)
-    this.executors.registerExecutor(new YaraRuleScannerExecutor())
-    await this.capabilities.register(YaraScanCapability)
-
-    this.schemas.registerEffectSchema(API_SECURITY_LAB_INPUT_SCHEMA_ID, ApiGraphqlOauthInputSchema)
-    this.executors.registerExecutor(new ApiGraphqlOauthLabExecutor())
-    await this.capabilities.register(ApiGraphqlOauthCapability)
-
-    this.schemas.registerEffectSchema(SCA_SBOM_IAC_INPUT_SCHEMA_ID, ScaSbomIacInputSchema)
-    this.executors.registerExecutor(new ScaSbomIacAuditorExecutor())
-    await this.capabilities.register(ScaSbomIacCapability)
-
-    this.schemas.registerEffectSchema(DFIR_SIGMA_INPUT_SCHEMA_ID, DfirSigmaInputSchema)
-    this.executors.registerExecutor(new DfirSigmaAnalyzerExecutor())
-    await this.capabilities.register(DfirSigmaCapability)
-
-    this.schemas.registerEffectSchema(AD_SMB_LDAP_INPUT_SCHEMA_ID, AdSmbLdapInputSchema)
-    this.executors.registerExecutor(new AdSmbLdapInspectorExecutor())
-    await this.capabilities.register(AdSmbLdapCapability)
-
-    this.schemas.registerEffectSchema(ENTROPY_RECIPE_INPUT_SCHEMA_ID, EntropyRecipeInputSchema)
-    this.executors.registerExecutor(new EntropyRecipeStudioExecutor())
-    await this.capabilities.register(EntropyRecipeCapability)
-
-    this.schemas.registerEffectSchema(KEY_HUNTER_INPUT_SCHEMA_ID, KeyHunterInputSchema)
-    this.executors.registerExecutor(new KeyHunterExecutor())
-    await this.capabilities.register(KeyHunterCapability)
 
     // Register governed External Tool Control Plane bridges (Nmap, Nuclei, ffuf, tshark, dalfox, ghidra, jadx, yarax, trivy, keyhunter)
     this.schemas.registerEffectSchema(EXTERNAL_NMAP_INPUT_SCHEMA_ID, ExternalNmapInputSchema)
@@ -611,7 +405,6 @@ export class CyberLabWorkspace {
       active: patch.active ?? current?.active ?? true,
       updatedAt: new Date().toISOString(),
     })
-    EngagementRuntime.setProfile(this.projectId, updated.engagement)
     this.persistScopeToDisk(updated)
     return updated
   }
@@ -840,168 +633,128 @@ export class CyberLabWorkspace {
     }
   }
 
-  async getProxyOverview(): Promise<{
-    status: ProxyStatus
-    history: ProxyHistoryEntry[]
-    interceptQueue: ProxyInterceptItem[]
-    matchReplaceRules: ProxyMatchReplaceRule[]
-    siteMap: { hosts: SiteMapHostNode[]; passiveAlerts: PassiveProxyAlert[] }
-    oastHits: OastCallbackHit[]
-    httpLogger: GlobalHttpTrafficEntry[]
-    browserLaunchResult?: LaunchProxyBrowserResult
-  }> {
+  async getArsenalOverview(forceRefresh = false): Promise<ArsenalOverview> {
     await this.ensureInitialized()
-    return {
-      status: this.httpProxy.getStatus(),
-      history: this.httpProxy.listHistory(),
-      interceptQueue: this.httpProxy.listInterceptQueue(),
-      matchReplaceRules: this.httpProxy.listMatchReplaceRules(),
-      siteMap: this.httpProxy.getSiteMap(),
-      oastHits: this.httpProxy.listOastHits(),
-      httpLogger: EngagementRuntime.listTraffic(this.projectId, 250),
-    }
+    return this.arsenal.getOverview(forceRefresh)
   }
 
-  async controlProxy(params: {
-    action:
-      | "start"
-      | "stop"
-      | "clear"
-      | "set_scope_only"
-      | "set_https_mode"
-      | "launch_browser"
-      | "configure_intercept"
-      | "resolve_intercept"
-      | "forward_all_intercepts"
-      | "drop_all_intercepts"
-      | "upsert_match_replace"
-      | "remove_match_replace"
-      | "start_oast"
-      | "stop_oast"
-      | "clear_oast"
-      | "clear_http_logger"
-    port?: number
-    scopeOnly?: boolean
-    httpsMode?: ProxyHttpsMode
-    allowSelfSignedUpstream?: boolean
+  async configureArsenal(params: {
+    toolsRootDir?: string
+    preferredWslDistro?: string
+    enforceScopeOnCliRuns?: boolean
+    slotId?: string
+    slotOverride?: SlotUserOverride
+  }): Promise<ArsenalOverview> {
+    await this.ensureInitialized()
+    return this.arsenal.configureSettings(params)
+  }
+
+  async upsertCustomArsenalSlot(params: {
+    slotId?: string
+    name: string
+    shortLabel?: string
+    kind: ArsenalSlotKind
+    tagline?: string
+    description?: string
+    executableOrUrl: string
+    preferredRuntime?: ArsenalRuntimePreference
+    companionProxyPort?: number
+    defaultArgsTemplate?: string
+  }): Promise<ArsenalOverview> {
+    await this.ensureInitialized()
+    return this.arsenal.upsertCustomSlot(params)
+  }
+
+  async removeCustomArsenalSlot(slotId: string): Promise<ArsenalOverview> {
+    await this.ensureInitialized()
+    return this.arsenal.removeCustomSlot(slotId)
+  }
+
+  async launchArsenalSlot(params: {
+    slotId: string
+    action: "run_cli" | "launch_desktop" | "start_web" | "stop_web" | "install_tool"
+    target?: string
+    rawArgs?: string
+    runtimeOverride?: "windows" | "wsl" | "linux_mac"
+  }): Promise<{
+    ok: boolean
+    message: string
+    embedUrl?: string
+    run?: ArsenalLiveRun
+    overview: ArsenalOverview
+  }> {
+    await this.ensureInitialized()
+    return this.arsenal.launchSlot(params)
+  }
+
+  async stopArsenalRun(runId: string): Promise<ArsenalLiveRun | null> {
+    await this.ensureInitialized()
+    return this.arsenal.stopRun(runId)
+  }
+
+  async launchCompanionProxyBrowser(params: {
+    proxyPort?: number
     startUrl?: string
     preferredBrowserId?: string
-    interceptEnabled?: boolean
-    interceptResponses?: boolean
-    interceptInScopeOnly?: boolean
-    skipStaticAssets?: boolean
-    interceptId?: string
-    decision?: "forward" | "drop"
-    method?: string
-    url?: string
-    headers?: Record<string, string>
-    body?: string
-    statusCode?: number
-    matchReplaceRule?: {
-      ruleId?: string
-      enabled: boolean
-      location: MatchReplaceLocation
-      headerName?: string
-      matchPattern: string
-      replaceWith: string
-      isRegex: boolean
-      comment?: string
-    }
-    ruleId?: string
-    oastPort?: number
-    externalOastDomain?: string
-  }): Promise<{
-    status: ProxyStatus
-    history: ProxyHistoryEntry[]
-    interceptQueue: ProxyInterceptItem[]
-    matchReplaceRules: ProxyMatchReplaceRule[]
-    siteMap: { hosts: SiteMapHostNode[]; passiveAlerts: PassiveProxyAlert[] }
-    oastHits: OastCallbackHit[]
-    httpLogger: GlobalHttpTrafficEntry[]
-    browserLaunchResult?: LaunchProxyBrowserResult
+  }): Promise<LaunchProxyBrowserResult> {
+    await this.ensureInitialized()
+    return launchPreconfiguredProxyBrowser({
+      proxyPort: params.proxyPort ?? 8080,
+      workspaceRoot: this.workspaceRoot,
+      ...(params.startUrl ? { startUrl: params.startUrl } : {}),
+      ...(params.preferredBrowserId ? { preferredBrowserId: params.preferredBrowserId } : {}),
+    })
+  }
+
+  async listAvailableBrowsers() {
+    await this.ensureInitialized()
+    return detectInstalledProxyBrowsers()
+  }
+
+  async listWorkspaceFiles(relativeDir = "."): Promise<{
+    currentDir: string
+    entries: WorkspaceFileEntry[]
   }> {
     await this.ensureInitialized()
-    let browserLaunchResult: LaunchProxyBrowserResult | undefined
-
-    if (params.action === "start") {
-      await this.httpProxy.start({
-        ...(params.port !== undefined ? { port: params.port } : {}),
-        ...(params.scopeOnly !== undefined ? { scopeOnly: params.scopeOnly } : {}),
-        ...(params.httpsMode !== undefined ? { httpsMode: params.httpsMode } : {}),
-        ...(params.allowSelfSignedUpstream !== undefined
-          ? { allowSelfSignedUpstream: params.allowSelfSignedUpstream }
-          : {}),
-      })
-    } else if (params.action === "stop") {
-      await this.httpProxy.stop()
-    } else if (params.action === "clear") {
-      this.httpProxy.clearHistory()
-    } else if (params.action === "set_scope_only") {
-      this.httpProxy.setScopeOnly(params.scopeOnly ?? true)
-    } else if (params.action === "set_https_mode") {
-      this.httpProxy.setHttpsMode(params.httpsMode ?? "tls_intercept", params.allowSelfSignedUpstream)
-    } else if (params.action === "launch_browser") {
-      browserLaunchResult = await this.httpProxy.launchBrowser({
-        ...(params.startUrl ? { startUrl: params.startUrl } : {}),
-        ...(params.preferredBrowserId ? { preferredBrowserId: params.preferredBrowserId } : {}),
-        ...(params.port !== undefined ? { defaultPort: params.port } : {}),
-      })
-    } else if (params.action === "configure_intercept") {
-      this.httpProxy.configureIntercept({
-        ...(params.interceptEnabled !== undefined ? { enabled: params.interceptEnabled } : {}),
-        ...(params.interceptResponses !== undefined ? { interceptResponses: params.interceptResponses } : {}),
-        ...(params.interceptInScopeOnly !== undefined ? { inScopeOnly: params.interceptInScopeOnly } : {}),
-        ...(params.skipStaticAssets !== undefined ? { skipStaticAssets: params.skipStaticAssets } : {}),
-      })
-    } else if (params.action === "resolve_intercept") {
-      if (params.interceptId && params.decision) {
-        this.httpProxy.resolveIntercept({
-          interceptId: params.interceptId,
-          decision: params.decision,
-          ...(params.method ? { method: params.method } : {}),
-          ...(params.url ? { url: params.url } : {}),
-          ...(params.headers ? { headers: params.headers } : {}),
-          ...(params.body !== undefined ? { body: params.body } : {}),
-          ...(params.statusCode !== undefined ? { statusCode: params.statusCode } : {}),
-        })
-      }
-    } else if (params.action === "forward_all_intercepts") {
-      this.httpProxy.forwardAllIntercepts()
-    } else if (params.action === "drop_all_intercepts") {
-      this.httpProxy.dropAllIntercepts()
-    } else if (params.action === "upsert_match_replace") {
-      if (params.matchReplaceRule) {
-        this.httpProxy.upsertMatchReplaceRule(params.matchReplaceRule)
-      }
-    } else if (params.action === "remove_match_replace") {
-      if (params.ruleId) {
-        this.httpProxy.removeMatchReplaceRule(params.ruleId)
-      }
-    } else if (params.action === "start_oast") {
-      await this.httpProxy.startOastListener(params.oastPort ?? 0, params.externalOastDomain)
-    } else if (params.action === "stop_oast") {
-      await this.httpProxy.stopOastListener()
-    } else if (params.action === "clear_oast") {
-      this.httpProxy.clearOastHits()
-    } else if (params.action === "clear_http_logger") {
-      EngagementRuntime.clearTraffic(this.projectId)
-    }
-
-    const overview = await this.getProxyOverview()
-    return {
-      ...overview,
-      ...(browserLaunchResult ? { browserLaunchResult } : {}),
-    }
+    return this.arsenal.listWorkspaceFiles(relativeDir)
   }
 
-  async exportProxyEntryForReplay(entryId: string): Promise<ProxyReplayBundle> {
+  async readWorkspaceFilePreview(relativeFilePath: string): Promise<{
+    relativePath: string
+    sizeBytes: number
+    truncated: boolean
+    content: string
+  }> {
     await this.ensureInitialized()
-    return this.httpProxy.exportEntryForReplay(entryId)
+    return this.arsenal.readWorkspaceFilePreview(relativeFilePath)
   }
 
-  async persistProxyEntry(entryId: string, actor?: string): Promise<{ evidenceId: string; sha256: string }> {
+  async persistArsenalOutputToEvidence(params: {
+    title: string
+    content: string
+    slotId?: string
+    actor?: string
+  }): Promise<{ evidenceId: string; sha256: string }> {
     await this.ensureInitialized()
-    return this.httpProxy.persistEntryToEvidence(entryId, actor)
+    const rec = this.evidenceStore.storeEvidence(
+      this.projectId,
+      {
+        kind: "stdout",
+        title: params.title,
+        source: {
+          toolId: params.slotId ?? "arsenal-slot",
+          executorId: "arsenal-slot-manager",
+          executionId: `ars-${crypto.randomUUID().slice(0, 8)}`,
+        },
+        content: {
+          mediaType: "text/plain",
+          inlineText: params.content,
+        },
+        observedAt: new Date().toISOString(),
+      },
+      { applyRedactionBeforeStore: true },
+    )
+    return { evidenceId: rec.evidenceId, sha256: rec.content.sha256 ?? "" }
   }
 
   async listFindings(): Promise<SecurityFinding[]> {
@@ -1148,7 +901,7 @@ export class CyberLabWorkspace {
   close(): void {
     if (this.closed) return
     this.closed = true
-    void this.httpProxy.stop()
+    this.arsenal.close()
     if (this.ownedManager) {
       this.ownedManager.closeAll()
     }

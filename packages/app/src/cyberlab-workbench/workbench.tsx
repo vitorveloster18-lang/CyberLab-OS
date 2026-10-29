@@ -1,831 +1,1617 @@
 import { createMemo, createSignal, For, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Icon } from "@opencode/ui/icon"
-import { getSuiteAllToolIds, getSuiteMeta, getToolMeta } from "./catalog"
-import { VerticalSuitesPickerDialog } from "./composer-bar"
-import { useCyberLabWorkbench } from "./state"
-import { ManualToolConfigForm } from "./tool-forms"
-import type { ManualToolId, ToolHistoryEntry, ToolSuiteFunctionTab } from "./types"
+import { useCyberLabWorkbench, type CyberLabWorkbenchService } from "./state"
+import type { ArsenalRuntimePrefDto, ArsenalSlotKindDto, ArsenalSlotStatusDto, CenterViewMode } from "./types"
 
-const EXTERNAL_BINARY_TOOLS = new Set<ManualToolId>([
-  "nuclei",
-  "ffuf",
-  "nmap",
-  "tshark",
-  "dalfox",
-  "ghidra",
-  "jadx",
-  "yarax",
-  "trivy",
-  "keyhunter-cli",
-])
-
-interface EntropyBlockDto {
-  offsetHex: string
-  entropy: number
-  classification: "null_padding" | "plaintext_or_code" | "structured_binary" | "compressed_or_encrypted"
-}
-
-function StructuredResultVisualizer(props: { outputText: string }) {
-  const parsed = createMemo<Record<string, unknown> | null>(() => {
-    const txt = props.outputText?.trim()
-    if (!txt || !txt.startsWith("{")) return null
-    try {
-      const obj = JSON.parse(txt) as unknown
-      return obj && typeof obj === "object" && !Array.isArray(obj) ? (obj as Record<string, unknown>) : null
-    } catch {
-      return null
-    }
-  })
-
-  const entropyBlocks = createMemo<EntropyBlockDto[]>(() => {
-    const obj = parsed()
-    const prof = obj?.entropyProfile as Record<string, unknown> | undefined
-    const blocks = prof?.buckets
-    return Array.isArray(blocks) ? (blocks as EntropyBlockDto[]) : []
-  })
-
-  const tlsDeepAudit = createMemo<Record<string, unknown> | null>(() => {
-    const obj = parsed()
-    const da = obj?.deepAudit
-    return da && typeof da === "object" ? (da as Record<string, unknown>) : null
-  })
-
-  const dfirTimeline = createMemo<Array<Record<string, unknown>>>(() => {
-    const obj = parsed()
-    const tl = obj?.incidentTimeline
-    return Array.isArray(tl) ? (tl as Array<Record<string, unknown>>) : []
-  })
-
-  const keyHunterMatches = createMemo<Array<Record<string, unknown>>>(() => {
-    const obj = parsed()
-    if (obj?.tool !== "CyberLab Key Hunter") return []
-    const m = obj?.matches
-    return Array.isArray(m) ? (m as Array<Record<string, unknown>>) : []
-  })
-
-  const barColor = (cls: EntropyBlockDto["classification"]) => {
-    switch (cls) {
-      case "compressed_or_encrypted":
-        return "bg-rose-500"
-      case "structured_binary":
-        return "bg-amber-500"
-      case "plaintext_or_code":
-        return "bg-sky-500"
-      default:
-        return "bg-emerald-500"
-    }
+function copyText(wb: CyberLabWorkbenchService, text: string, label = "Comando") {
+  if (typeof navigator !== "undefined" && navigator.clipboard) {
+    void navigator.clipboard.writeText(text)
+    wb.setNotice(`${label} copiado para a área de transferência!`)
   }
-
-  return (
-    <>
-      <Show when={entropyBlocks().length > 0}>
-        <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-base p-2.5 flex flex-col gap-1.5">
-          <div class="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-            <strong class="text-v2-text-text-strong">
-              Espectro Visual de Entropia de Shannon (Byte 0 → EOF · {entropyBlocks().length} faixas)
-            </strong>
-            <div class="flex flex-wrap items-center gap-2 text-[10px] text-v2-text-text-muted">
-              <span class="inline-flex items-center gap-1"><span class="size-2 rounded-full bg-emerald-500" /> Padding/Zeros</span>
-              <span class="inline-flex items-center gap-1"><span class="size-2 rounded-full bg-sky-500" /> Texto/Código</span>
-              <span class="inline-flex items-center gap-1"><span class="size-2 rounded-full bg-amber-500" /> Binário Estruturado</span>
-              <span class="inline-flex items-center gap-1"><span class="size-2 rounded-full bg-rose-500" /> Cifrado/Comprimido (&ge;7.2)</span>
-            </div>
-          </div>
-          <div class="flex h-16 items-end gap-[1px] rounded bg-v2-background-bg-deep/70 p-1.5 overflow-hidden">
-            <For each={entropyBlocks()}>
-              {(blk) => (
-                <div
-                  title={`${blk.offsetHex} · Entropia ${blk.entropy.toFixed(2)}/8.00 (${blk.classification})`}
-                  class={`flex-1 min-w-[2px] rounded-t-[1px] transition-opacity hover:opacity-80 ${barColor(blk.classification)}`}
-                  style={{ height: `${Math.max(8, Math.round((blk.entropy / 8) * 100))}%` }}
-                />
-              )}
-            </For>
-          </div>
-        </div>
-      </Show>
-
-      <Show when={tlsDeepAudit()}>
-        {(() => {
-          const da = () => tlsDeepAudit() ?? {}
-          const grade = () => String(da().securityGrade ?? "?")
-          const matrix = () =>
-            Array.isArray(da().protocolSupportMatrix)
-              ? (da().protocolSupportMatrix as Array<Record<string, unknown>>)
-              : []
-          return (
-            <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-base p-2.5 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-              <div class="flex items-center gap-2">
-                <span class="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-2 py-0.5 font-mono text-[13px] font-bold text-emerald-400">
-                  Nota TLS: {grade()}
-                </span>
-                <span class="text-v2-text-text-muted">
-                  Forward Secrecy: {da().forwardSecrecy ? "Sim (ECDHE/TLS1.3)" : "Ausente"} · AEAD:{" "}
-                  {da().aeadAuthenticated ? "Sim" : "CBC/Stream"}
-                </span>
-              </div>
-              <div class="flex flex-wrap items-center gap-1">
-                <For each={matrix()}>
-                  {(m) => (
-                    <span
-                      class={`rounded border px-1.5 py-0.5 font-mono text-[10px] ${
-                        m.supported
-                          ? String(m.version) === "TLSv1" || String(m.version) === "TLSv1.1"
-                            ? "border-red-500/40 bg-red-500/15 text-red-400"
-                            : "border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
-                          : "border-v2-border-border-base bg-v2-background-bg-deep text-v2-text-text-muted"
-                      }`}
-                    >
-                      {String(m.version)}: {m.supported ? "ON" : "OFF"}
-                    </span>
-                  )}
-                </For>
-              </div>
-            </div>
-          )
-        })()}
-      </Show>
-
-      <Show when={dfirTimeline().length > 0}>
-        <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-base p-2.5 flex flex-col gap-1">
-          <div class="text-[11px] font-medium text-v2-text-text-strong">
-            Timeline Forense de Incidente ({dfirTimeline().length} alerta(s) correlacionado(s))
-          </div>
-          <div class="max-h-32 overflow-y-auto flex flex-col gap-1" data-scrollable>
-            <For each={dfirTimeline().slice(0, 12)}>
-              {(ev) => (
-                <div class="flex items-center justify-between gap-2 rounded bg-v2-background-bg-deep/50 px-2 py-1 text-[11px]">
-                  <span class="truncate text-v2-text-text-strong">
-                    <strong class="uppercase text-amber-400">[{String(ev.level ?? ev.severity ?? "alert")}]</strong>{" "}
-                    {String(ev.ruleTitle)} — {String(ev.rawLine ?? ev.summary ?? "")}
-                  </span>
-                  <span class="shrink-0 font-mono text-[10px] text-v2-text-text-muted">
-                    #{String(ev.lineNumber ?? "")}
-                  </span>
-                </div>
-              )}
-            </For>
-          </div>
-        </div>
-      </Show>
-
-      <Show when={keyHunterMatches().length > 0}>
-        <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-base p-2.5 flex flex-col gap-1.5">
-          <div class="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-            <strong class="text-v2-text-text-strong">
-              Key Hunter — {keyHunterMatches().length} Segredo(s) / Chave(s) Identificada(s) (Mascarados + SHA-256)
-            </strong>
-            <span class="text-[10px] text-v2-text-text-muted">
-              Custódia automática: segredos ofuscados no log com receita KeyHacks somente-leitura
-            </span>
-          </div>
-          <div class="max-h-44 overflow-y-auto flex flex-col gap-1.5" data-scrollable>
-            <For each={keyHunterMatches().slice(0, 25)}>
-              {(m) => (
-                <div class="rounded border border-v2-border-border-base bg-v2-background-bg-deep/50 p-2 flex flex-col gap-1 text-[11px]">
-                  <div class="flex flex-wrap items-center justify-between gap-1.5">
-                    <div class="flex items-center gap-1.5 min-w-0">
-                      <span
-                        class={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
-                          String(m.severity) === "critical"
-                            ? "bg-red-500/20 text-red-400 border border-red-500/40"
-                            : String(m.severity) === "high"
-                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                              : "bg-sky-500/20 text-sky-300 border border-sky-500/40"
-                        }`}
-                      >
-                        {String(m.severity ?? "high")}
-                      </span>
-                      <strong class="text-v2-text-text-strong truncate">{String(m.provider)}</strong>
-                      <span class="text-v2-text-text-muted truncate">— {String(m.description)}</span>
-                    </div>
-                    <span class="font-mono text-[10px] text-v2-text-text-muted">
-                      {String(m.location)}:{String(m.line)} · H={String(m.shannonEntropy)}
-                    </span>
-                  </div>
-                  <div class="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px]">
-                    <span class="text-emerald-400">
-                      Key: {String(m.maskedSecret)} <span class="text-v2-text-text-muted">(fp:{String(m.fingerprintSha256)})</span>
-                    </span>
-                    <Show when={String(m.verificationStatus) !== "not_checked"}>
-                      <span
-                        class={`rounded px-1.5 py-0.5 ${
-                          String(m.verificationStatus) === "active_confirmed"
-                            ? "bg-red-500/25 text-red-300 font-semibold"
-                            : "bg-v2-background-bg-base text-v2-text-text-muted"
-                        }`}
-                      >
-                        {String(m.verificationStatus)}
-                      </span>
-                    </Show>
-                  </div>
-                  <div class="font-mono text-[10px] text-v2-text-text-muted truncate" title={String(m.verificationRecipe ?? "")}>
-                    KeyHacks: {String(m.verificationRecipe ?? "")}
-                  </div>
-                </div>
-              )}
-            </For>
-          </div>
-        </div>
-      </Show>
-    </>
-  )
 }
 
-export function CyberLabWorkbenchSurface() {
+function runtimeBadgeLabel(rt: ArsenalSlotStatusDto["activeRuntime"]) {
+  if (rt === "windows") return "Win Nativo"
+  if (rt === "wsl") return "WSL2 Kali"
+  if (rt === "linux_mac") return "Linux/Host"
+  if (rt === "web") return "Web Local"
+  return "Não instalado"
+}
+
+function kindBadgeLabel(kind: ArsenalSlotKindDto) {
+  if (kind === "web_embed") return "WEB UI EMBUTIDA"
+  if (kind === "desktop_gui") return "DESKTOP / WSLg"
+  return "CLI AO VIVO"
+}
+
+/**
+ * COLUNA ESQUERDA (ESTILO ANTIGRAVITY):
+ * Pastas/Arquivos do Projeto + Outputs (.cyberlab/outputs) + Slots do Arsenal Real + Custom Slots.
+ * Recolhe para uma barra vertical estreita de 38px quando não usada!
+ */
+export function CyberLabLeftExplorer() {
   const wb = useCyberLabWorkbench()
+  const [showCustomModal, setShowCustomModal] = createSignal(false)
+  const [customDraft, setCustomDraft] = createStore<{
+    name: string
+    shortLabel: string
+    kind: ArsenalSlotKindDto
+    executableOrUrl: string
+    preferredRuntime: ArsenalRuntimePrefDto
+    defaultArgsTemplate: string
+    companionProxyPort: string
+    tagline: string
+  }>({
+    name: "",
+    shortLabel: "",
+    kind: "cli_runner",
+    executableOrUrl: "",
+    preferredRuntime: "auto",
+    defaultArgsTemplate: "{target}",
+    companionProxyPort: "",
+    tagline: "",
+  })
+
   if (!wb) return null
 
-  const [suitePickerOpen, setSuitePickerOpen] = createSignal(false)
-
-  const activeSuite = createMemo(() => getSuiteMeta(wb.ui.activeSuiteId))
-  const activeFunction = createMemo<ToolSuiteFunctionTab>(() => {
-    const fnId = wb.ui.activeFunctionBySuite[wb.ui.activeSuiteId]
-    return activeSuite().functions.find((f) => f.id === fnId) ?? activeSuite().functions[0]!
-  })
-  const activeMeta = createMemo(() => getToolMeta(wb.ui.activeToolId))
-
-  const functionHistoryCount = (fn: ToolSuiteFunctionTab): number => {
-    const uniqueIds = Array.from(new Set<ManualToolId>(fn.engines.map((e) => e.toolId)))
-    return uniqueIds.reduce((acc, tid) => acc + (wb.histories[tid]?.length ?? 0), 0)
-  }
-
-  const functionDynamicBadge = (fn: ToolSuiteFunctionTab): string | undefined => {
-    if (fn.governanceSubTab === "approvals" && wb.backend.approvals.length > 0) {
-      return String(wb.backend.approvals.length)
-    }
-    if (fn.governanceSubTab === "evidence" && wb.backend.evidence.length > 0) {
-      return String(wb.backend.evidence.length)
-    }
-    if (fn.governanceSubTab === "findings" && wb.backend.findings.length > 0) {
-      return String(wb.backend.findings.length)
-    }
-    const hCount = functionHistoryCount(fn)
-    return hCount > 0 ? String(hCount) : undefined
-  }
-
-  const suiteToolIdList = createMemo<ManualToolId[]>(() => getSuiteAllToolIds(activeSuite().id))
-
-  const visibleHistory = createMemo<ToolHistoryEntry[]>(() => {
-    if (wb.ui.historyScope === "suite") {
-      const merged = suiteToolIdList().flatMap((tid) => wb.histories[tid] ?? [])
-      return merged.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-    }
-    return wb.histories[wb.ui.activeToolId] ?? []
+  const filteredSlots = createMemo(() => {
+    const slots = wb.backend.arsenal?.slots ?? []
+    const q = wb.ui.slotSearch.trim().toLowerCase()
+    const cat = wb.ui.categoryFilter
+    return slots.filter((s) => {
+      if (cat !== "all" && s.category !== cat) return false
+      if (!q) return true
+      return (
+        s.name.toLowerCase().includes(q) ||
+        s.shortLabel.toLowerCase().includes(q) ||
+        s.tagline.toLowerCase().includes(q) ||
+        s.slotId.toLowerCase().includes(q)
+      )
+    })
   })
 
-  const selectedEntry = createMemo<ToolHistoryEntry | undefined>(() => {
-    const toolList = wb.histories[wb.ui.activeToolId] ?? []
-    const id = wb.ui.selectedHistoryByTool[wb.ui.activeToolId]
-    const direct = toolList.find((item) => item.id === id) ?? toolList[0]
-    if (direct) return direct
-    return visibleHistory()[0]
+  const groupedSlots = createMemo(() => {
+    const cats = wb.backend.arsenal?.categories ?? []
+    const list = filteredSlots()
+    const groups: Array<{ id: string; title: string; items: ArsenalSlotStatusDto[] }> = []
+    for (const c of cats) {
+      const items = list.filter((s) => s.category === c.id)
+      if (items.length > 0) groups.push({ id: c.id, title: c.title, items })
+    }
+    const customItems = list.filter((s) => s.category === "custom")
+    if (customItems.length > 0 && !groups.some((g) => g.id === "custom")) {
+      groups.push({ id: "custom", title: "Meus Slots Personalizados", items: customItems })
+    }
+    return groups
   })
-
-  const matchingPendingApproval = createMemo(() => {
-    const entry = selectedEntry()
-    if (!entry) return undefined
-    if (entry.approvalId) {
-      const found = wb.backend.approvals.find((a) => a.approvalId === entry.approvalId)
-      if (found) return found
-    }
-    if (entry.executionId) {
-      return wb.backend.approvals.find((a) => a.executionId === entry.executionId)
-    }
-    return undefined
-  })
-
-  const isExternalToolInstalled = (toolId: ManualToolId): boolean => {
-    if (!EXTERNAL_BINARY_TOOLS.has(toolId)) return true
-    const backendId = toolId === "ghidra" ? "ghidra-headless" : toolId
-    const list = wb.backend.external?.tools ?? []
-    const found = list.find((t) => t.toolId === backendId)
-    return Boolean(found?.available)
-  }
-
-  const statusBadgeClass = (status: ToolHistoryEntry["status"]) => {
-    switch (status) {
-      case "succeeded":
-        return "bg-emerald-500/15 text-emerald-500 border-emerald-500/40"
-      case "queued":
-        return "bg-amber-500/15 text-amber-500 border-amber-500/40"
-      case "running":
-        return "bg-sky-500/15 text-sky-400 border-sky-500/40"
-      default:
-        return "bg-red-500/15 text-red-500 border-red-500/40"
-    }
-  }
 
   return (
-    <>
-      <section
-        data-slot="cyberlab-manual-workbench"
-        class="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-v2-border-border-base bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)] select-text"
+    <Show
+      when={wb.ui.leftSidebarOpen}
+      fallback={
+        <aside
+          data-slot="cyberlab-left-rail-collapsed"
+          class="flex h-full w-[38px] shrink-0 flex-col items-center justify-between border-r border-v2-border-border-base bg-v2-background-bg-deep/80 py-2 select-none"
+        >
+          <div class="flex flex-col items-center gap-2">
+            <button
+              type="button"
+              title="Expandir Pastas & Arsenal (Esquerda)"
+              class="inline-flex size-7 items-center justify-center rounded-md border border-v2-border-border-base bg-v2-background-bg-base text-emerald-500 hover:border-emerald-500 cursor-pointer"
+              onClick={() => wb.toggleLeftSidebar(true)}
+            >
+              <Icon name="chevron-right" class="size-3.5" />
+            </button>
+            <button
+              type="button"
+              title="Abrir Slots do Arsenal Real"
+              class="inline-flex size-7 items-center justify-center rounded-md text-v2-text-text-muted hover:bg-v2-background-bg-base hover:text-emerald-500 cursor-pointer"
+              onClick={() => wb.setLeftSidebarTab("slots")}
+            >
+              <Icon name="shield" class="size-3.5" />
+            </button>
+            <button
+              type="button"
+              title="Abrir Pastas, Outputs e Imports"
+              class="inline-flex size-7 items-center justify-center rounded-md text-v2-text-text-muted hover:bg-v2-background-bg-base hover:text-emerald-500 cursor-pointer"
+              onClick={() => wb.setLeftSidebarTab("files")}
+            >
+              <Icon name="folder" class="size-3.5" />
+            </button>
+          </div>
+          <div class="text-[9px] font-medium tracking-widest text-v2-text-text-muted [writing-mode:vertical-rl] rotate-180">
+            PASTAS & ARSENAL
+          </div>
+        </aside>
+      }
+    >
+      <aside
+        data-slot="cyberlab-left-explorer"
+        style={{ width: `${wb.ui.leftSidebarWidth}px` }}
+        class="flex h-full min-h-0 shrink-0 flex-col border-r border-v2-border-border-base bg-v2-background-bg-deep/55 select-text"
       >
-        {/* Top Bar: Single Suite Switcher Button + Scope & Layout Controls */}
-        <header class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-v2-border-border-base bg-v2-background-bg-deep/60 px-3.5 py-2">
-          <div class="flex flex-wrap items-center gap-2 min-w-0">
+        {/* Cabeçalho Compacto c/ Abas Slots | Pastas + Botão Recolher */}
+        <div class="flex items-center justify-between gap-1 border-b border-v2-border-border-base px-2.5 py-2">
+          <div class="flex items-center gap-1 rounded-lg bg-v2-background-bg-base p-0.5 border border-v2-border-border-base">
             <button
               type="button"
-              title="Trocar para outra suíte de ferramentas (lista vertical)"
-              class="inline-flex items-center gap-2 rounded-lg border border-emerald-600/50 bg-emerald-600/15 px-2.5 py-1 text-[13px] font-medium text-v2-text-text-strong hover:bg-emerald-600/25 cursor-pointer transition-colors"
-              onClick={() => setSuitePickerOpen(true)}
-            >
-              <Icon name={activeSuite().icon} class="size-4 text-emerald-500 shrink-0" />
-              <span class="truncate">{activeSuite().title}</span>
-              <Icon name="chevron-down" class="size-3.5 text-v2-text-text-muted shrink-0" />
-            </button>
-
-            <button
-              type="button"
-              title="Ajustar escopo de alvos autorizados"
-              class={`rounded-full border px-2 py-0.5 text-[11px] font-medium cursor-pointer ${
-                wb.backend.status?.activeScope?.allowExternalTargets
-                  ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-500"
-                  : "border-v2-border-border-base bg-v2-background-bg-base text-v2-text-text-muted"
+              class={`rounded-md px-2.5 py-1 text-[11px] font-medium cursor-pointer transition-colors ${
+                wb.ui.leftSidebarTab === "slots"
+                  ? "bg-emerald-600 text-white"
+                  : "text-v2-text-text-muted hover:text-v2-text-text-strong"
               }`}
-              onClick={() => wb.selectSuite("governance-suite", "scope")}
+              onClick={() => wb.setLeftSidebarTab("slots")}
             >
-              {wb.backend.status?.activeScope?.allowExternalTargets
-                ? "Escopo: Externo Liberado"
-                : "Escopo: Localhost / Projeto"}
+              Arsenal ({wb.backend.arsenal?.slots.length ?? 0})
             </button>
+            <button
+              type="button"
+              class={`rounded-md px-2.5 py-1 text-[11px] font-medium cursor-pointer transition-colors ${
+                wb.ui.leftSidebarTab === "files"
+                  ? "bg-emerald-600 text-white"
+                  : "text-v2-text-text-muted hover:text-v2-text-text-strong"
+              }`}
+              onClick={() => {
+                wb.setLeftSidebarTab("files")
+                void wb.browseFiles(wb.ui.currentFilesDir)
+              }}
+            >
+              Pastas & Outputs
+            </button>
+          </div>
 
-            <Show when={wb.backend.approvals.length > 0}>
+          <button
+            type="button"
+            title="Recolher barra esquerda"
+            class="inline-flex size-6 items-center justify-center rounded-md text-v2-text-text-muted hover:bg-v2-background-bg-base hover:text-v2-text-text-strong cursor-pointer"
+            onClick={() => wb.toggleLeftSidebar(false)}
+          >
+            <Icon name="chevron-left" class="size-3.5" />
+          </button>
+        </div>
+
+        {/* ABA 1: SLOTS DO ARSENAL REAL + CUSTOM SLOTS */}
+        <Show when={wb.ui.leftSidebarTab === "slots"}>
+          <div class="flex flex-col gap-1.5 border-b border-v2-border-border-base p-2">
+            <div class="flex items-center gap-1">
+              <input
+                type="text"
+                value={wb.ui.slotSearch}
+                placeholder="Buscar (Burp, OpenTRAP, Nuclei, CyberChef, Kali)..."
+                class="min-w-0 flex-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-base px-2.5 py-1 text-[11px] text-v2-text-text-strong outline-none focus:border-emerald-500"
+                onInput={(e) => wb.setUi("slotSearch", e.currentTarget.value)}
+              />
               <button
                 type="button"
-                class="rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-500 cursor-pointer"
-                onClick={() => wb.selectSuite("governance-suite", "approvals")}
+                title="Re-escanear PowerShell + WSL2 Kali agora"
+                class="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-v2-border-border-base bg-v2-background-bg-base text-v2-text-text-muted hover:border-emerald-500 hover:text-emerald-500 cursor-pointer"
+                onClick={() => void wb.refreshArsenalOnly(true)}
               >
-                {wb.backend.approvals.length} Aprovação(ões)
+                <Icon name="refresh" class="size-3.5" />
               </button>
-            </Show>
-          </div>
-
-          <div class="flex items-center gap-1">
-            <button
-              type="button"
-              title="Mostrar ou ocultar a coluna de histórico persistente"
-              class={`rounded-md border px-2 py-1 text-[11px] font-medium cursor-pointer ${
-                wb.ui.showHistoryColumn
-                  ? "border-emerald-600/50 bg-emerald-600/15 text-v2-text-text-strong"
-                  : "border-v2-border-border-base bg-v2-background-bg-base text-v2-text-text-muted"
-              }`}
-              onClick={() => wb.setShowHistoryColumn(!wb.ui.showHistoryColumn)}
-            >
-              Histórico ({visibleHistory().length})
-            </button>
-
-            <Show when={wb.ui.layoutMode === "split"}>
-              <div class="hidden xl:flex items-center rounded-md border border-v2-border-border-base bg-v2-background-bg-base p-0.5 text-[11px]">
-                <For each={[45, 55, 65]}>
-                  {(pct) => (
-                    <button
-                      type="button"
-                      class={`rounded px-1.5 py-0.5 cursor-pointer ${
-                        Math.abs(wb.ui.splitWidthPct - pct) <= 4
-                          ? "bg-v2-background-bg-deep font-medium text-v2-text-text-strong"
-                          : "text-v2-text-text-muted"
-                      }`}
-                      onClick={() => wb.setSplitWidthPct(pct)}
-                    >
-                      {pct}%
-                    </button>
-                  )}
-                </For>
-              </div>
-            </Show>
-
-            <button
-              type="button"
-              title={
-                wb.ui.layoutMode === "fullscreen"
-                  ? "Dividir tela: Chat + Ferramenta lado a lado"
-                  : "Expandir ferramenta em tela cheia"
-              }
-              class="inline-flex items-center gap-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-base px-2 py-1 text-[11px] font-medium text-v2-text-text-strong hover:bg-v2-background-bg-deep cursor-pointer"
-              onClick={() =>
-                wb.setLayoutMode(wb.ui.layoutMode === "fullscreen" ? "split" : "fullscreen")
-              }
-            >
-              <Icon name={wb.ui.layoutMode === "fullscreen" ? "split" : "expand"} class="size-3.5" />
-              <span>{wb.ui.layoutMode === "fullscreen" ? "Dividir c/ Chat" : "Tela Cheia"}</span>
-            </button>
-
-            <button
-              type="button"
-              title="Fechar bancada manual e voltar somente ao chat"
-              class="inline-flex items-center justify-center rounded-md border border-v2-border-border-base bg-v2-background-bg-base p-1 text-v2-text-text-muted hover:text-v2-text-text-strong cursor-pointer"
-              onClick={() => wb.toggleWorkbench(false)}
-            >
-              <Icon name="close" class="size-3.5" />
-            </button>
-          </div>
-        </header>
-
-        {/* Burp-Suite-Style Internal Function Tabs (flex-wrap, zero horizontal scroll!) */}
-        <Show when={activeSuite().functions.length > 1}>
-          <nav
-            aria-label="Funções internas da suíte"
-            class="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-v2-border-border-base bg-v2-background-bg-deep/30 px-3.5 py-2"
-          >
-            <For each={activeSuite().functions}>
-              {(fn) => {
-                const isSelected = () => activeFunction().id === fn.id
-                const badge = () => functionDynamicBadge(fn)
-                return (
-                  <button
-                    type="button"
-                    title={fn.description}
-                    class={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[12px] cursor-pointer transition-colors ${
-                      isSelected()
-                        ? "border-emerald-600 bg-emerald-600 text-white font-medium shadow-xs"
-                        : "border-v2-border-border-base bg-v2-background-bg-base text-v2-text-text-base hover:bg-v2-background-bg-deep hover:text-v2-text-text-strong"
-                    }`}
-                    onClick={() => wb.selectSuiteFunction(fn.id)}
-                  >
-                    <span>{fn.label}</span>
-                    <Show when={badge()}>
-                      {(b) => (
-                        <span
-                          class={`rounded-full px-1.5 text-[10px] ${
-                            isSelected()
-                              ? "bg-white/20 text-white"
-                              : "bg-v2-background-bg-deep text-v2-text-text-muted"
-                          }`}
-                        >
-                          {b()}
-                        </span>
-                      )}
-                    </Show>
-                  </button>
-                )
-              }}
-            </For>
-          </nav>
-        </Show>
-
-        {/* Notices / Errors */}
-        <Show when={wb.ui.notice || wb.ui.error}>
-          <div
-            class={`shrink-0 border-b px-3.5 py-1.5 text-[12px] flex items-center justify-between gap-2 ${
-              wb.ui.error
-                ? "border-red-500/40 bg-red-500/10 text-red-500"
-                : "border-emerald-500/40 bg-emerald-500/10 text-emerald-500"
-            }`}
-          >
-            <span class="truncate">{wb.ui.error || wb.ui.notice}</span>
-            <button
-              type="button"
-              class="text-[11px] underline cursor-pointer shrink-0"
-              onClick={() => {
-                wb.setError("")
-                wb.setNotice("")
-              }}
-            >
-              Fechar
-            </button>
-          </div>
-        </Show>
-
-        {/* Main Body: Function Config + Output Inspector + Persistent History */}
-        <div class="flex min-h-0 flex-1 flex-col lg:flex-row overflow-hidden">
-          <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-3.5 gap-4" data-scrollable>
-            {/* Active Function Header + Segmented Engine Switcher (when multiple engines exist) */}
-            <div class="flex flex-col gap-2.5 border-b border-v2-border-border-base pb-3">
-              <div class="flex flex-wrap items-start justify-between gap-2">
-                <div class="min-w-0">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <h2 class="text-[15px] font-medium leading-[var(--line-height-base)] text-v2-text-text-strong">
-                      {activeFunction().label}
-                    </h2>
-                    <span class="rounded border border-v2-border-border-base bg-v2-background-bg-deep px-2 py-0.5 text-[11px] text-v2-text-text-muted">
-                      {activeMeta().badge}
-                    </span>
-                    <span class="rounded border border-v2-border-border-base bg-v2-background-bg-deep px-2 py-0.5 text-[11px] text-v2-text-text-muted">
-                      {activeMeta().riskLabel}
-                    </span>
-                  </div>
-                  <p class="mt-0.5 text-[12px] leading-[var(--line-height-base)] text-v2-text-text-muted">
-                    {activeMeta().subtitle}
-                  </p>
-                </div>
-
-                <Show when={wb.ui.runningExecutionId}>
-                  {(execId) => (
-                    <button
-                      type="button"
-                      class="rounded-md bg-red-600 px-2.5 py-1 text-[12px] font-medium text-white hover:bg-red-500 cursor-pointer"
-                      onClick={() => void wb.cancelExecution(execId())}
-                    >
-                      Cancelar Execução (Kill)
-                    </button>
-                  )}
-                </Show>
-              </div>
-
-              {/* Segmented Engine Selector inside the same function */}
-              <Show when={activeFunction().engines.length > 1}>
-                <div class="flex flex-wrap items-center gap-2 rounded-lg border border-v2-border-border-base bg-v2-background-bg-deep/50 p-2">
-                  <span class="px-1 text-[11px] font-medium uppercase tracking-wide text-v2-text-text-muted">
-                    Motor de Execução:
-                  </span>
-                  <div class="flex flex-wrap items-center gap-1.5">
-                    <For each={activeFunction().engines}>
-                      {(eng) => {
-                        const selected = () => wb.ui.activeToolId === eng.toolId
-                        const isExt = () => EXTERNAL_BINARY_TOOLS.has(eng.toolId)
-                        const ready = () => isExternalToolInstalled(eng.toolId)
-                        return (
-                          <button
-                            type="button"
-                            title={eng.description}
-                            class={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[12px] cursor-pointer transition-colors ${
-                              selected()
-                                ? "border-emerald-600 bg-v2-background-bg-base font-medium text-v2-text-text-strong shadow-xs"
-                                : "border-transparent text-v2-text-text-muted hover:bg-v2-background-bg-base/60 hover:text-v2-text-text-strong"
-                            }`}
-                            onClick={() => wb.selectSuiteEngine(eng.toolId)}
-                          >
-                            <span>{eng.label}</span>
-                            <span
-                              class={`rounded px-1.5 py-0.2 text-[10px] ${
-                                !isExt()
-                                  ? "bg-emerald-500/15 text-emerald-500"
-                                  : ready()
-                                    ? "bg-emerald-500/15 text-emerald-500"
-                                    : "bg-amber-500/15 text-amber-500"
-                              }`}
-                            >
-                              {!isExt() ? "Integrado" : ready() ? "Instalado" : "Externo"}
-                            </span>
-                          </button>
-                        )
-                      }}
-                    </For>
-                  </div>
-                </div>
-              </Show>
             </div>
 
-            {/* Dedicated Full Configuration Form for Active Function/Engine */}
-            <ManualToolConfigForm wb={wb} />
+            <div class="flex items-center justify-between gap-1">
+              <select
+                value={wb.ui.categoryFilter}
+                class="min-w-0 flex-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-base px-2 py-1 text-[10.5px] text-v2-text-text-base outline-none"
+                onChange={(e) => wb.setUi("categoryFilter", e.currentTarget.value)}
+              >
+                <option value="all">Todas as Categorias</option>
+                <For each={wb.backend.arsenal?.categories ?? []}>
+                  {(cat) => <option value={cat.id}>{cat.title}</option>}
+                </For>
+              </select>
 
-            {/* Active / Selected Execution Output Inspector */}
-            <Show when={selectedEntry()}>
-              {(entry) => {
-                const entryMeta = () => getToolMeta(entry().toolId)
-                return (
-                  <div class="rounded-lg border border-v2-border-border-base bg-v2-background-bg-deep/50 p-3 flex flex-col gap-2.5">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                      <div class="flex flex-wrap items-center gap-2 min-w-0">
-                        <span
-                          class={`rounded border px-2 py-0.5 text-[11px] font-medium uppercase ${statusBadgeClass(
-                            entry().status,
-                          )}`}
-                        >
-                          {entry().status}
-                        </span>
-                        <span class="rounded bg-v2-background-bg-base px-1.5 py-0.5 text-[11px] text-v2-text-text-muted">
-                          {entryMeta().shortTitle}
-                        </span>
-                        <span class="font-mono text-[12px] font-medium text-v2-text-text-strong truncate">
-                          {entry().targetSummary}
-                        </span>
-                        <Show when={entry().durationMs !== undefined}>
-                          <span class="text-[11px] text-v2-text-text-muted">
-                            ({entry().durationMs} ms)
-                          </span>
-                        </Show>
-                      </div>
+              <button
+                type="button"
+                class="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-600/50 bg-emerald-600/15 px-2 py-1 text-[10.5px] font-medium text-emerald-500 hover:bg-emerald-600/25 cursor-pointer"
+                onClick={() => setShowCustomModal((v) => !v)}
+              >
+                <Icon name="plus" class="size-3" />
+                <span>Slot</span>
+              </button>
+            </div>
 
-                      <div class="flex flex-wrap items-center gap-1.5">
-                        <Show when={matchingPendingApproval()}>
-                          {(ticket) => (
-                            <button
-                              type="button"
-                              class="rounded-md bg-amber-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-amber-500 cursor-pointer"
-                              onClick={() =>
-                                void wb.approvePendingExecution(ticket().approvalId, entry())
-                              }
-                            >
-                              Aprovar & Executar Agora
-                            </button>
-                          )}
-                        </Show>
-                        <button
-                          type="button"
-                          class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-2 py-1 text-[11px] text-v2-text-text-strong hover:bg-v2-background-bg-deep cursor-pointer"
-                          onClick={() => wb.restoreHistoryDraft(entry())}
-                        >
-                          Restaurar Configs
-                        </button>
-                        <Show when={entry().evidenceIds[0]}>
-                          {(evId) => (
-                            <button
-                              type="button"
-                              class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-2 py-1 text-[11px] text-v2-text-text-strong hover:bg-v2-background-bg-deep cursor-pointer"
-                              onClick={() => void wb.verifyEvidenceCustody(evId())}
-                            >
-                              Verificar SHA-256
-                            </button>
-                          )}
-                        </Show>
-                        <Show when={entry().outputText}>
-                          <button
-                            type="button"
-                            class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-2 py-1 text-[11px] text-v2-text-text-strong hover:bg-v2-background-bg-deep cursor-pointer"
-                            onClick={() => wb.sendTextToDecoder(entry().outputText)}
-                          >
-                            → Decoder
-                          </button>
-                          <button
-                            type="button"
-                            class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-2 py-1 text-[11px] text-v2-text-text-strong hover:bg-v2-background-bg-deep cursor-pointer"
-                            onClick={() => {
-                              if (navigator.clipboard) {
-                                void navigator.clipboard.writeText(entry().outputText)
-                                wb.setNotice("Saída copiada para a área de transferência.")
-                              }
-                            }}
-                          >
-                            Copiar Saída
-                          </button>
-                          <button
-                            type="button"
-                            class="rounded border border-emerald-600/50 bg-emerald-600/15 px-2 py-1 text-[11px] font-medium text-emerald-500 hover:bg-emerald-600/25 cursor-pointer"
-                            onClick={() =>
-                              wb.attachToComposer(
-                                `${entryMeta().shortTitle} — ${entry().targetSummary}`,
-                                `Suíte: ${activeSuite().title}\nFunção: ${entryMeta().title}\nAlvo: ${entry().targetSummary}\nData: ${entry().timestamp}${
-                                  entry().sha256 ? `\nSHA-256: ${entry().sha256}` : ""
-                                }\n\n${entry().outputText}`,
-                                `${entry().toolId}-resultado.txt`,
-                              )
-                            }
-                          >
-                            Anexar na Caixa de Diálogo
-                          </button>
-                        </Show>
-                      </div>
-                    </div>
-
-                    <Show when={entry().sha256}>
-                      <div class="font-mono text-[11px] text-v2-text-text-muted break-all">
-                        Custódia Criptográfica SHA-256: {entry().sha256}
-                      </div>
-                    </Show>
-
-                    <StructuredResultVisualizer outputText={entry().outputText} />
-
-                    <pre
-                      class="max-h-72 overflow-auto rounded-md border border-v2-border-border-base bg-v2-background-bg-base p-2.5 font-mono text-[11px] leading-[var(--line-height-compact)] text-v2-text-text-strong select-text"
-                      data-scrollable
-                    >
-                      {entry().outputText || entry().summaryText}
-                    </pre>
-                  </div>
-                )
-              }}
+            {/* Formulário Rápido p/ Criar Novo Slot Custom */}
+            <Show when={showCustomModal()}>
+              <div class="mt-1 flex flex-col gap-1.5 rounded-lg border border-emerald-600/40 bg-v2-background-bg-base p-2.5 text-[11px]">
+                <div class="font-medium text-emerald-500">Novo Slot Personalizado</div>
+                <input
+                  type="text"
+                  placeholder="Nome (ex.: Feroxbuster / BloodHound)"
+                  value={customDraft.name}
+                  class="rounded border border-v2-border-border-base bg-v2-background-bg-deep px-2 py-1 text-[11px] text-v2-text-text-strong"
+                  onInput={(e) => setCustomDraft("name", e.currentTarget.value)}
+                />
+                <div class="grid grid-cols-2 gap-1">
+                  <select
+                    value={customDraft.kind}
+                    class="rounded border border-v2-border-border-base bg-v2-background-bg-deep px-1.5 py-1 text-[10.5px] text-v2-text-text-strong"
+                    onChange={(e) => setCustomDraft("kind", e.currentTarget.value as ArsenalSlotKindDto)}
+                  >
+                    <option value="cli_runner">CLI Runner</option>
+                    <option value="web_embed">Web UI (iframe)</option>
+                    <option value="desktop_gui">Desktop / WSLg</option>
+                  </select>
+                  <select
+                    value={customDraft.preferredRuntime}
+                    class="rounded border border-v2-border-border-base bg-v2-background-bg-deep px-1.5 py-1 text-[10.5px] text-v2-text-text-strong"
+                    onChange={(e) =>
+                      setCustomDraft("preferredRuntime", e.currentTarget.value as ArsenalRuntimePrefDto)
+                    }
+                  >
+                    <option value="auto">Auto (Win/WSL2)</option>
+                    <option value="windows">Windows Nativo</option>
+                    <option value="wsl">WSL2 Kali Linux</option>
+                  </select>
+                </div>
+                <input
+                  type="text"
+                  placeholder={
+                    customDraft.kind === "web_embed"
+                      ? "URL Local (ex.: http://127.0.0.1:8085)"
+                      : "Binário ou caminho (ex.: feroxbuster ou C:\\Tools\\app.exe)"
+                  }
+                  value={customDraft.executableOrUrl}
+                  class="rounded border border-v2-border-border-base bg-v2-background-bg-deep px-2 py-1 text-[11px] text-v2-text-text-strong"
+                  onInput={(e) => setCustomDraft("executableOrUrl", e.currentTarget.value)}
+                />
+                <Show when={customDraft.kind === "cli_runner"}>
+                  <input
+                    type="text"
+                    placeholder="Args padrão (ex.: -u {target} -w wordlist.txt)"
+                    value={customDraft.defaultArgsTemplate}
+                    class="rounded border border-v2-border-border-base bg-v2-background-bg-deep px-2 py-1 text-[11px] text-v2-text-text-strong"
+                    onInput={(e) => setCustomDraft("defaultArgsTemplate", e.currentTarget.value)}
+                  />
+                </Show>
+                <div class="flex items-center justify-end gap-1.5 pt-1">
+                  <button
+                    type="button"
+                    class="rounded px-2 py-0.5 text-[10.5px] text-v2-text-text-muted hover:text-v2-text-text-strong cursor-pointer"
+                    onClick={() => setShowCustomModal(false)}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded bg-emerald-600 px-2.5 py-1 text-[10.5px] font-medium text-white hover:bg-emerald-500 cursor-pointer"
+                    onClick={() => {
+                      if (!customDraft.name.trim() || !customDraft.executableOrUrl.trim()) return
+                      const portNum = Number.parseInt(customDraft.companionProxyPort, 10)
+                      void wb.upsertCustomSlot({
+                        name: customDraft.name.trim(),
+                        shortLabel: customDraft.shortLabel.trim() || customDraft.name.trim().slice(0, 14),
+                        kind: customDraft.kind,
+                        executableOrUrl: customDraft.executableOrUrl.trim(),
+                        preferredRuntime: customDraft.preferredRuntime,
+                        defaultArgsTemplate: customDraft.defaultArgsTemplate,
+                        ...(Number.isFinite(portNum) && portNum > 0 ? { companionProxyPort: portNum } : {}),
+                        ...(customDraft.tagline.trim() ? { tagline: customDraft.tagline.trim() } : {}),
+                      })
+                      setShowCustomModal(false)
+                    }}
+                  >
+                    Salvar Slot
+                  </button>
+                </div>
+              </div>
             </Show>
           </div>
 
-          {/* Right Column: Persistent History (Current Function OR Entire Suite) */}
-          <Show when={wb.ui.showHistoryColumn}>
-            <aside class="flex w-full shrink-0 flex-col border-t border-v2-border-border-base bg-v2-background-bg-deep/30 lg:w-[280px] lg:border-l lg:border-t-0 max-h-60 lg:max-h-none">
-              <div class="flex flex-col gap-1.5 border-b border-v2-border-border-base px-3 py-2">
-                <div class="flex items-center justify-between gap-1">
-                  <span class="text-[11px] font-medium uppercase tracking-wide text-v2-text-text-muted">
-                    Histórico ({visibleHistory().length})
-                  </span>
-                  <Show when={wb.ui.historyScope === "function" && visibleHistory().length > 0}>
-                    <button
-                      type="button"
-                      class="text-[11px] text-v2-text-text-muted hover:text-red-500 cursor-pointer"
-                      onClick={() => wb.clearToolHistory(wb.ui.activeToolId)}
-                    >
-                      Limpar
-                    </button>
-                  </Show>
-                </div>
-
-                <Show when={suiteToolIdList().length > 1}>
-                  <div class="grid grid-cols-2 rounded-md border border-v2-border-border-base bg-v2-background-bg-base p-0.5 text-[11px]">
-                    <button
-                      type="button"
-                      class={`rounded py-0.5 cursor-pointer ${
-                        wb.ui.historyScope === "function"
-                          ? "bg-v2-background-bg-deep font-medium text-v2-text-text-strong"
-                          : "text-v2-text-text-muted"
-                      }`}
-                      onClick={() => wb.setHistoryScope("function")}
-                    >
-                      Desta função
-                    </button>
-                    <button
-                      type="button"
-                      class={`rounded py-0.5 cursor-pointer ${
-                        wb.ui.historyScope === "suite"
-                          ? "bg-v2-background-bg-deep font-medium text-v2-text-text-strong"
-                          : "text-v2-text-text-muted"
-                      }`}
-                      onClick={() => wb.setHistoryScope("suite")}
-                    >
-                      Toda a suíte
-                    </button>
+          <div class="min-h-0 flex-1 overflow-y-auto p-2 flex flex-col gap-3" data-scrollable>
+            <For each={groupedSlots()}>
+              {(group) => (
+                <div class="flex flex-col gap-1">
+                  <div class="px-1.5 text-[10px] font-semibold uppercase tracking-wider text-v2-text-text-muted">
+                    {group.title}
                   </div>
-                </Show>
-              </div>
+                  <For each={group.items}>
+                    {(slot) => {
+                      const selected = () =>
+                        wb.ui.centerView === "tool" && wb.activeSlot()?.slotId === slot.slotId
+                      const runningHere = () =>
+                        wb.backend.arsenal?.runs.some(
+                          (r) => r.slotId === slot.slotId && r.status === "running",
+                        )
 
-              <div class="min-h-0 flex-1 overflow-y-auto p-2 flex flex-col gap-1.5" data-scrollable>
-                <Show
-                  when={visibleHistory().length > 0}
-                  fallback={
-                    <div class="p-3 text-center text-[12px] leading-[var(--line-height-base)] text-v2-text-text-muted">
-                      Nenhuma execução salva aqui ainda. Cada uso manual fica persistido automaticamente para você alternar de suíte ou função sem perder nada.
-                    </div>
-                  }
-                >
-                  <For each={visibleHistory()}>
-                    {(item) => {
-                      const active = () => selectedEntry()?.id === item.id
-                      const itemMeta = () => getToolMeta(item.toolId)
                       return (
-                        <div
-                          class={`group rounded-md border p-2 text-[12px] cursor-pointer transition-colors ${
-                            active()
-                              ? "border-emerald-600/60 bg-v2-background-bg-base"
-                              : "border-v2-border-border-base bg-v2-background-bg-deep/40 hover:bg-v2-background-bg-base"
+                        <button
+                          type="button"
+                          class={`flex w-full flex-col gap-0.5 rounded-lg border px-2.5 py-1.5 text-left transition-colors cursor-pointer ${
+                            selected()
+                              ? "border-emerald-500 bg-emerald-600/15"
+                              : "border-transparent hover:border-v2-border-border-base hover:bg-v2-background-bg-base/75"
                           }`}
-                          onClick={() => {
-                            wb.selectTool(item.toolId)
-                            wb.selectHistoryItem(item.toolId, item.id)
-                          }}
+                          onClick={() => wb.selectSlot(slot.slotId)}
                         >
-                          <div class="flex items-center justify-between gap-1">
-                            <div class="flex items-center gap-1 min-w-0">
-                              <span
-                                class={`rounded border px-1.5 py-0.2 text-[10px] uppercase shrink-0 ${statusBadgeClass(
-                                  item.status,
-                                )}`}
-                              >
-                                {item.status}
-                              </span>
-                              <Show when={wb.ui.historyScope === "suite"}>
-                                <span class="truncate text-[10px] text-v2-text-text-muted">
-                                  {itemMeta().shortTitle}
-                                </span>
-                              </Show>
-                            </div>
-                            <span class="text-[10px] text-v2-text-text-muted shrink-0">
-                              {new Date(item.timestamp).toLocaleTimeString()}
+                          <div class="flex items-center justify-between gap-1.5">
+                            <span class="truncate text-[12px] font-medium text-v2-text-text-strong">
+                              {slot.shortLabel}
                             </span>
+                            <div class="flex items-center gap-1 shrink-0">
+                              <Show when={runningHere()}>
+                                <span class="size-2 rounded-full bg-amber-400 animate-pulse" />
+                              </Show>
+                              <span
+                                class={`rounded px-1.5 py-0.2 text-[9.5px] font-medium ${
+                                  slot.installed
+                                    ? "bg-emerald-600/20 text-emerald-500"
+                                    : "bg-zinc-500/15 text-v2-text-text-muted"
+                                }`}
+                              >
+                                {runtimeBadgeLabel(slot.activeRuntime)}
+                              </span>
+                            </div>
                           </div>
-                          <div class="mt-1 truncate font-mono text-[11px] font-medium text-v2-text-text-strong">
-                            {item.targetSummary}
-                          </div>
-                          <div class="mt-0.5 truncate text-[11px] text-v2-text-text-muted">
-                            {item.summaryText}
-                          </div>
-                          <div class="mt-1.5 flex items-center justify-between gap-1">
-                            <button
-                              type="button"
-                              class="rounded border border-v2-border-border-base px-1.5 py-0.5 text-[10px] text-v2-text-text-base hover:bg-v2-background-bg-deep cursor-pointer"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                wb.restoreHistoryDraft(item)
-                              }}
-                            >
-                              Carregar Configs
-                            </button>
-                            <button
-                              type="button"
-                              title="Remover do histórico"
-                              class="rounded p-0.5 text-v2-text-text-muted hover:text-red-500 cursor-pointer"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                wb.deleteHistoryEntry(item.toolId, item.id)
-                              }}
-                            >
-                              <Icon name="trash" class="size-3" />
-                            </button>
-                          </div>
-                        </div>
+                          <div class="truncate text-[10.5px] text-v2-text-text-muted">{slot.tagline}</div>
+                        </button>
                       )
                     }}
                   </For>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
+
+        {/* ABA 2: PASTAS, ARQUIVOS DO PROJETO, .cyberlab/outputs E UPLOAD */}
+        <Show when={wb.ui.leftSidebarTab === "files"}>
+          <div class="flex flex-col gap-1.5 border-b border-v2-border-border-base p-2">
+            <div class="flex flex-wrap items-center gap-1">
+              <button
+                type="button"
+                class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-2 py-0.5 text-[10px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                onClick={() => void wb.browseFiles(".")}
+              >
+                Raiz (.)
+              </button>
+              <button
+                type="button"
+                class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-2 py-0.5 text-[10px] text-emerald-500 hover:border-emerald-500 cursor-pointer"
+                onClick={() => void wb.browseFiles(".cyberlab/outputs")}
+              >
+                Outputs
+              </button>
+              <button
+                type="button"
+                class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-2 py-0.5 text-[10px] text-sky-400 hover:border-sky-400 cursor-pointer"
+                onClick={() => void wb.browseFiles(".cyberlab/imports")}
+              >
+                Imports
+              </button>
+              <Show when={wb.ui.currentFilesDir !== "."}>
+                <button
+                  type="button"
+                  class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-2 py-0.5 text-[10px] text-v2-text-text-muted hover:text-v2-text-text-strong cursor-pointer"
+                  onClick={() => {
+                    const parts = wb.ui.currentFilesDir.split("/").filter(Boolean)
+                    parts.pop()
+                    void wb.browseFiles(parts.length ? parts.join("/") : ".")
+                  }}
+                >
+                  ↑ Subir
+                </button>
+              </Show>
+            </div>
+
+            <div class="flex items-center justify-between gap-1 text-[10.5px] text-v2-text-text-muted">
+              <span class="truncate font-mono">{wb.ui.currentFilesDir}</span>
+              <label class="inline-flex shrink-0 items-center gap-1 rounded border border-emerald-600/50 bg-emerald-600/15 px-2 py-0.5 text-[10px] font-medium text-emerald-500 hover:bg-emerald-600/25 cursor-pointer">
+                <span>+ Importar PC</span>
+                <input
+                  type="file"
+                  class="hidden"
+                  onChange={(e) => {
+                    const f = e.currentTarget.files?.[0]
+                    if (f) void wb.uploadExternalFile(f)
+                    e.currentTarget.value = ""
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div class="min-h-0 flex-1 overflow-y-auto p-2 flex flex-col gap-1" data-scrollable>
+            <For
+              each={wb.backend.files}
+              fallback={
+                <div class="p-3 text-center text-[11px] text-v2-text-text-muted">Pasta vazia.</div>
+              }
+            >
+              {(entry) => (
+                <div class="flex items-center justify-between gap-1 rounded-md px-2 py-1 hover:bg-v2-background-bg-base">
+                  <button
+                    type="button"
+                    class="flex min-w-0 flex-1 items-center gap-1.5 text-left cursor-pointer"
+                    onClick={() => {
+                      if (entry.kind === "directory") {
+                        void wb.browseFiles(entry.relativePath)
+                      } else {
+                        void wb.previewFile(entry.relativePath)
+                      }
+                    }}
+                  >
+                    <Icon
+                      name={entry.kind === "directory" ? "folder" : "code"}
+                      class={`size-3.5 shrink-0 ${entry.kind === "directory" ? "text-amber-400" : "text-v2-text-text-muted"}`}
+                    />
+                    <span class="truncate text-[11.5px] text-v2-text-text-strong">{entry.name}</span>
+                  </button>
+                  <Show when={entry.kind === "file"}>
+                    <button
+                      type="button"
+                      title="Usar este arquivo como {target} na ferramenta ativa"
+                      class="rounded border border-v2-border-border-base px-1.5 py-0.2 text-[9.5px] text-emerald-500 hover:border-emerald-500 cursor-pointer"
+                      onClick={() => {
+                        const slot = wb.activeSlot()
+                        if (slot) {
+                          wb.setUi("cliTargetBySlot", slot.slotId, entry.relativePath)
+                          wb.setCenterView("tool")
+                          wb.setNotice(`Alvo definido: ${entry.relativePath}`)
+                        }
+                      }}
+                    >
+                      Usar
+                    </button>
+                  </Show>
+                </div>
+              )}
+            </For>
+
+            {/* Preview rápido do arquivo selecionado */}
+            <Show when={wb.backend.filePreview}>
+              {(prev) => (
+                <div class="mt-2 flex flex-col gap-1.5 rounded-lg border border-v2-border-border-base bg-v2-background-bg-base p-2">
+                  <div class="flex items-center justify-between gap-1">
+                    <span class="truncate font-mono text-[10.5px] font-medium text-emerald-500">
+                      {prev().relativePath}
+                    </span>
+                    <button
+                      type="button"
+                      class="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[9.5px] font-medium text-emerald-500 hover:bg-emerald-600/30 cursor-pointer"
+                      onClick={() =>
+                        wb.sendToAgent(
+                          `Arquivo ${prev().relativePath}`,
+                          prev().content,
+                          prev().relativePath.split("/").pop() || "arquivo.txt",
+                        )
+                      }
+                    >
+                      Enviar p/ Agente →
+                    </button>
+                  </div>
+                  <pre class="max-h-48 overflow-auto rounded bg-zinc-950 p-2 font-mono text-[10px] text-zinc-200 whitespace-pre-wrap">
+                    {prev().content}
+                  </pre>
+                </div>
+              )}
+            </Show>
+          </div>
+        </Show>
+
+        {/* Rodapé da barra esquerda: Pasta Raiz Externa & WSL2 */}
+        <div class="border-t border-v2-border-border-base bg-v2-background-bg-base/60 px-2.5 py-1.5 text-[10px] text-v2-text-text-muted flex items-center justify-between gap-2">
+          <span class="truncate" title={wb.backend.arsenal?.environment.toolsRootDir}>
+            Tools: {wb.backend.arsenal?.environment.toolsRootDir ?? "C:\\CyberLab-Tools"}
+          </span>
+          <span class="shrink-0 text-emerald-500 font-medium">
+            {wb.backend.arsenal?.environment.wslAvailable
+              ? `WSL2: ${wb.backend.arsenal.environment.preferredWslDistro}`
+              : "Host Nativo"}
+          </span>
+        </div>
+      </aside>
+    </Show>
+  )
+}
+
+/**
+ * COLUNA CENTRAL (PALCO PRINCIPAL TELA CHEIA ESTILO ANTIGRAVITY):
+ * Ocupa 100% do centro com a Ferramenta Real (Web Embed iframe / Console CLI ao vivo / Bridge Desktop+Browser)
+ * ou as visões rápidas de Governança (Escopo Bug Bounty, 5 Labs, 4 CDIs, Custódia SHA-256, Guia PowerShell+WSL2).
+ */
+export function CyberLabCenterStage() {
+  const wb = useCyberLabWorkbench()
+  const [scopeRawText, setScopeRawText] = createSignal("")
+  const [scopeHandle, setScopeHandle] = createSignal("")
+  const [scopeHeaderName, setScopeHeaderName] = createSignal("X-Bug-Bounty")
+  const [scopeHeaderVal, setScopeHeaderVal] = createSignal("")
+  const [cdiObjective, setCdiObjective] = createSignal("")
+  const [cdiCustomSecret, setCdiCustomSecret] = createSignal("")
+  const [selectedCdis, setSelectedCdis] = createSignal<string[]>(["kairos", "naia", "salem", "nova"])
+  const [findingTitle, setFindingTitle] = createSignal("")
+  const [findingDesc, setFindingDesc] = createSignal("")
+  const [findingSev, setFindingSev] = createSignal<"info" | "low" | "medium" | "high" | "critical">("high")
+  const [desktopIngestText, setDesktopIngestText] = createSignal("")
+  const [showSlotSettings, setShowSlotSettings] = createSignal(false)
+  const [customPathInput, setCustomPathInput] = createSignal("")
+  const [customUrlInput, setCustomUrlInput] = createSignal("")
+  const [toolsRootInput, setToolsRootInput] = createSignal("")
+
+  if (!wb) return null
+
+  const navItems: Array<{ id: CenterViewMode; label: string }> = [
+    { id: "tool", label: "Ferramenta Ativa" },
+    { id: "scope", label: "Escopo Bug Bounty" },
+    { id: "labs", label: "5 Labs de Treino" },
+    { id: "cdi", label: "4 CDIs Autônomos" },
+    { id: "custody", label: "Custódia SHA-256" },
+    { id: "guide", label: "Guia PowerShell + WSL2" },
+  ]
+
+  return (
+    <section
+      data-slot="cyberlab-center-stage"
+      class="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-v2-background-bg-base select-text overflow-hidden"
+    >
+      {/* BARRA SUPERIOR ULTRA-COMPACTA DO PALCO CENTRAL */}
+      <header class="flex flex-wrap items-center justify-between gap-2 border-b border-v2-border-border-base bg-v2-background-bg-deep/75 px-3 py-1.5 shrink-0">
+        <div class="flex items-center gap-1.5 overflow-x-auto">
+          <Show when={!wb.ui.leftSidebarOpen}>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-base px-2 py-1 text-[11px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+              onClick={() => wb.toggleLeftSidebar(true)}
+            >
+              <Icon name="chevron-right" class="size-3 text-emerald-500" />
+              <span>Pastas & Slots</span>
+            </button>
+          </Show>
+
+          <For each={navItems}>
+            {(item) => (
+              <button
+                type="button"
+                class={`rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                  wb.ui.centerView === item.id
+                    ? "bg-emerald-600 text-white"
+                    : "text-v2-text-text-muted hover:bg-v2-background-bg-base hover:text-v2-text-text-strong"
+                }`}
+                onClick={() => wb.setCenterView(item.id)}
+              >
+                {item.label}
+              </button>
+            )}
+          </For>
+        </div>
+
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            title={
+              wb.ui.rightAgentOpen
+                ? "Recolher painel estreito do Agente OpenCode à direita"
+                : "Abrir painel estreito do Agente OpenCode à direita"
+            }
+            class={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-medium cursor-pointer ${
+              wb.ui.rightAgentOpen
+                ? "border-emerald-600/50 bg-emerald-600/15 text-emerald-500"
+                : "border-v2-border-border-base bg-v2-background-bg-base text-v2-text-text-base hover:border-emerald-500"
+            }`}
+            onClick={() => wb.toggleRightAgent()}
+          >
+            <span>{wb.ui.rightAgentOpen ? "Agente IA »" : "« Agente IA"}</span>
+          </button>
+
+          <button
+            type="button"
+            title="Fechar modo Antigravity e voltar ao chat tela cheia"
+            class="inline-flex size-6 items-center justify-center rounded-md border border-v2-border-border-base bg-v2-background-bg-base text-v2-text-text-muted hover:text-v2-text-text-strong cursor-pointer"
+            onClick={() => wb.toggleWorkbench(false)}
+          >
+            <Icon name="close" class="size-3.5" />
+          </button>
+        </div>
+      </header>
+
+      {/* Banner discreto de feedback */}
+      <Show when={wb.ui.notice || wb.ui.error}>
+        <div
+          class={`flex items-center justify-between gap-2 border-b px-3 py-1 text-[11px] shrink-0 ${
+            wb.ui.error
+              ? "border-red-500/40 bg-red-500/15 text-red-400"
+              : "border-emerald-500/40 bg-emerald-500/15 text-emerald-400"
+          }`}
+        >
+          <span class="truncate">{wb.ui.error || wb.ui.notice}</span>
+          <button
+            type="button"
+            class="text-[10px] underline cursor-pointer shrink-0"
+            onClick={() => {
+              wb.setUi("error", "")
+              wb.setUi("notice", "")
+            }}
+          >
+            ocultar
+          </button>
+        </div>
+      </Show>
+
+      {/* ===================================================================== */}
+      {/* VISÃO 1: FERRAMENTA REAL ATIVA OCUPANDO O CENTRO INTEIRO              */}
+      {/* ===================================================================== */}
+      <Show when={wb.ui.centerView === "tool" && wb.activeSlot()}>
+        {(slot) => (
+          <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {/* Sub-barra da ferramenta ativa */}
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-v2-border-border-base bg-v2-background-bg-deep/40 px-3 py-2 shrink-0">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="rounded bg-emerald-600/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-500">
+                  {kindBadgeLabel(slot().kind)}
+                </span>
+                <h2 class="truncate text-[13.5px] font-semibold text-v2-text-text-strong">
+                  {slot().name}
+                </h2>
+                <span
+                  class={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    slot().installed
+                      ? "bg-emerald-600/20 text-emerald-400"
+                      : "bg-amber-500/20 text-amber-400"
+                  }`}
+                >
+                  {slot().installed
+                    ? `Pronto (${runtimeBadgeLabel(slot().activeRuntime)})`
+                    : "Aguardando instalação externa"}
+                </span>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-1.5">
+                <Show when={slot().companionProxyPort}>
+                  {(proxyPort) => (
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-sky-500 cursor-pointer"
+                      onClick={() =>
+                        void wb.launchProxyBrowser({
+                          proxyPort: proxyPort(),
+                          startUrl: "https://example.com",
+                        })
+                      }
+                    >
+                      <span>🌐 Navegador Proxy (:{proxyPort()})</span>
+                    </button>
+                  )}
+                </Show>
+
+                <button
+                  type="button"
+                  class="rounded-md border border-v2-border-border-base bg-v2-background-bg-base px-2.5 py-1 text-[11px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                  onClick={() => {
+                    setCustomPathInput(slot().override.customExecutablePath ?? slot().resolvedPath ?? "")
+                    setCustomUrlInput(slot().override.customEmbedUrl ?? slot().embedUrl ?? "")
+                    setToolsRootInput(wb.backend.arsenal?.environment.toolsRootDir ?? "C:\\CyberLab-Tools")
+                    setShowSlotSettings((v) => !v)
+                  }}
+                >
+                  ⚙ Configurar / Instalar
+                </button>
+
+                <Show when={slot().isCustom}>
+                  <button
+                    type="button"
+                    class="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-[11px] text-red-400 hover:bg-red-500/20 cursor-pointer"
+                    onClick={() => void wb.removeCustomSlot(slot().slotId)}
+                  >
+                    Remover Slot
+                  </button>
                 </Show>
               </div>
-            </aside>
+            </div>
+
+            {/* Painel retrátil de Configuração / Instalação Rápida (PowerShell + WSL2 Kali) */}
+            <Show when={showSlotSettings() || !slot().installed}>
+              <div class="border-b border-v2-border-border-base bg-v2-background-bg-deep/65 px-3.5 py-2.5 text-[11.5px] shrink-0">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0 flex-1 space-y-2">
+                    <p class="text-v2-text-text-base">{slot().description}</p>
+                    <div class="grid grid-cols-1 gap-2 lg:grid-cols-2">
+                      {/* Comando PowerShell */}
+                      <div class="rounded-lg border border-v2-border-border-base bg-zinc-950 p-2">
+                        <div class="mb-1 flex items-center justify-between text-[10.5px] text-sky-400 font-medium">
+                          <span>Windows PowerShell</span>
+                          <button
+                            type="button"
+                            class="rounded bg-sky-500/20 px-2 py-0.5 text-[10px] hover:bg-sky-500/30 cursor-pointer"
+                            onClick={() => copyText(wb, slot().installPowerShell, "Comando PowerShell")}
+                          >
+                            Copiar PowerShell
+                          </button>
+                        </div>
+                        <pre class="overflow-x-auto font-mono text-[10.5px] text-zinc-200 whitespace-pre-wrap">
+                          {slot().installPowerShell}
+                        </pre>
+                      </div>
+
+                      {/* Comando WSL2 Kali Linux */}
+                      <div class="rounded-lg border border-v2-border-border-base bg-zinc-950 p-2">
+                        <div class="mb-1 flex items-center justify-between text-[10.5px] text-emerald-400 font-medium">
+                          <span>WSL2 Kali Linux (`wsl -d kali-linux`)</span>
+                          <div class="flex items-center gap-1">
+                            <button
+                              type="button"
+                              class="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] hover:bg-emerald-500/30 cursor-pointer"
+                              onClick={() => copyText(wb, slot().installKaliWsl, "Comando WSL2 Kali")}
+                            >
+                              Copiar Kali
+                            </button>
+                            <button
+                              type="button"
+                              class="rounded bg-emerald-600 px-2 py-0.5 text-[10px] text-white hover:bg-emerald-500 cursor-pointer"
+                              onClick={() =>
+                                void wb.launchSlot({
+                                  slotId: slot().slotId,
+                                  action: "install_tool",
+                                })
+                              }
+                            >
+                              Auto-Instalar Agora
+                            </button>
+                          </div>
+                        </div>
+                        <pre class="overflow-x-auto font-mono text-[10.5px] text-zinc-200 whitespace-pre-wrap">
+                          {slot().installKaliWsl}
+                        </pre>
+                      </div>
+                    </div>
+
+                    {/* Override manual de caminho/URL ou pasta C:\CyberLab-Tools */}
+                    <div class="flex flex-wrap items-center gap-2 pt-1">
+                      <input
+                        type="text"
+                        placeholder="Caminho customizado do executável (opcional)"
+                        value={customPathInput()}
+                        class="min-w-[220px] flex-1 rounded border border-v2-border-border-base bg-v2-background-bg-base px-2.5 py-1 text-[11px] text-v2-text-text-strong"
+                        onInput={(e) => setCustomPathInput(e.currentTarget.value)}
+                      />
+                      <Show when={slot().kind === "web_embed"}>
+                        <input
+                          type="text"
+                          placeholder="URL Web Embed (ex.: http://127.0.0.1:8081)"
+                          value={customUrlInput()}
+                          class="min-w-[210px] flex-1 rounded border border-v2-border-border-base bg-v2-background-bg-base px-2.5 py-1 text-[11px] text-v2-text-text-strong"
+                          onInput={(e) => setCustomUrlInput(e.currentTarget.value)}
+                        />
+                      </Show>
+                      <input
+                        type="text"
+                        placeholder="Pasta global (ex.: C:\CyberLab-Tools)"
+                        value={toolsRootInput()}
+                        class="w-[190px] rounded border border-v2-border-border-base bg-v2-background-bg-base px-2.5 py-1 text-[11px] text-v2-text-text-strong"
+                        onInput={(e) => setToolsRootInput(e.currentTarget.value)}
+                      />
+                      <button
+                        type="button"
+                        class="rounded bg-emerald-600 px-3 py-1 text-[11px] font-medium text-white hover:bg-emerald-500 cursor-pointer"
+                        onClick={() => {
+                          void wb.configureArsenal({
+                            ...(toolsRootInput().trim() ? { toolsRootDir: toolsRootInput().trim() } : {}),
+                            slotId: slot().slotId,
+                            slotOverride: {
+                              ...(customPathInput().trim()
+                                ? { customExecutablePath: customPathInput().trim() }
+                                : {}),
+                              ...(customUrlInput().trim() ? { customEmbedUrl: customUrlInput().trim() } : {}),
+                            },
+                          })
+                          setShowSlotSettings(false)
+                        }}
+                      >
+                        Salvar Caminho/URL
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Show>
+
+            {/* MODO A: WEB TOOL EMBUTIDA EM TELA CHEIA NO CENTRO (CyberChef, mitmweb, Caido, ZAP, Kali Win-KeX/noVNC) */}
+            <Show when={slot().kind === "web_embed"}>
+              <div class="flex min-h-0 flex-1 flex-col">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-v2-border-border-base bg-v2-background-bg-base px-3 py-1.5 text-[11px] shrink-0">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span class="font-mono text-v2-text-text-muted truncate">
+                      {slot().embedUrl || "Servidor local ainda não iniciado"}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      class="rounded bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-500 cursor-pointer"
+                      onClick={() =>
+                        void wb.launchSlot({ slotId: slot().slotId, action: "start_web" })
+                      }
+                    >
+                      ▶ Iniciar / Hospedar Web UI
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded border border-v2-border-border-base px-2 py-1 text-[11px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                      onClick={() => wb.setUi("iframeReloadNonce", (n) => n + 1)}
+                    >
+                      ↻ Recarregar Frame
+                    </button>
+                    <Show when={slot().embedUrl}>
+                      {(url) => (
+                        <a
+                          href={url()}
+                          target="_blank"
+                          rel="noreferrer"
+                          class="rounded border border-v2-border-border-base px-2 py-1 text-[11px] text-emerald-500 hover:border-emerald-500"
+                        >
+                          ↗ Nova Aba
+                        </a>
+                      )}
+                    </Show>
+                  </div>
+                </div>
+
+                <Show
+                  when={slot().embedUrl}
+                  fallback={
+                    <div class="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+                      <div class="text-[14px] font-semibold text-v2-text-text-strong">
+                        {slot().name} pronto para abrir no palco central
+                      </div>
+                      <p class="max-w-lg text-[12px] text-v2-text-text-muted">
+                        Clique em <strong>"▶ Iniciar / Hospedar Web UI"</strong> acima para iniciar a interface web local e carregá-la em tela cheia aqui no centro, mantendo suas pastas à esquerda e o Agente OpenCode à direita.
+                      </p>
+                    </div>
+                  }
+                >
+                  {(url) => (
+                    <iframe
+                      data-slot="cyberlab-real-tool-iframe"
+                      src={`${url()}${url().includes("?") ? "&" : "?"}_cb=${wb.ui.iframeReloadNonce}`}
+                      title={slot().name}
+                      class="h-full w-full flex-1 border-0 bg-zinc-950"
+                      allow="clipboard-read; clipboard-write"
+                    />
+                  )}
+                </Show>
+              </div>
+            </Show>
+
+            {/* MODO B: CLI RUNNER AO VIVO (Nuclei, ffuf, Katana, httpx, Dalfox, sqlmap, Nmap, KeyHunter, Semgrep, Trivy...) */}
+            <Show when={slot().kind === "cli_runner"}>
+              <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {/* Barra de presets + Target + Argumentos + Executar */}
+                <div class="flex flex-col gap-2 border-b border-v2-border-border-base bg-v2-background-bg-base p-3 shrink-0">
+                  <Show when={slot().presets.length > 0}>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <span class="text-[10.5px] font-medium text-v2-text-text-muted">Presets rápidos:</span>
+                      <For each={slot().presets}>
+                        {(preset) => (
+                          <button
+                            type="button"
+                            title={preset.description}
+                            class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 hover:text-emerald-400 cursor-pointer"
+                            onClick={() => wb.setUi("cliArgsBySlot", slot().slotId, preset.argsTemplate)}
+                          >
+                            {preset.label}
+                          </button>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+
+                  <div class="flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Alvo {target} (URL em escopo, IP/domínio ou caminho de arquivo do workspace)"
+                      value={wb.ui.cliTargetBySlot[slot().slotId] ?? ""}
+                      class="min-w-[220px] flex-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-2.5 py-1.5 font-mono text-[11.5px] text-v2-text-text-strong outline-none focus:border-emerald-500"
+                      onInput={(e) => wb.setUi("cliTargetBySlot", slot().slotId, e.currentTarget.value)}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Argumentos da ferramenta real (usa {target} e {workspace})"
+                      value={wb.ui.cliArgsBySlot[slot().slotId] ?? ""}
+                      class="min-w-[260px] flex-[1.4] rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-2.5 py-1.5 font-mono text-[11.5px] text-v2-text-text-strong outline-none focus:border-emerald-500"
+                      onInput={(e) => wb.setUi("cliArgsBySlot", slot().slotId, e.currentTarget.value)}
+                    />
+                    <select
+                      value={wb.ui.cliRuntimeBySlot[slot().slotId] ?? "auto"}
+                      class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-2 py-1.5 text-[11px] text-v2-text-text-strong"
+                      onChange={(e) =>
+                        wb.setUi(
+                          "cliRuntimeBySlot",
+                          slot().slotId,
+                          e.currentTarget.value as "auto" | "windows" | "wsl" | "linux_mac",
+                        )
+                      }
+                    >
+                      <option value="auto">Auto (Win / WSL2)</option>
+                      <option value="windows">Windows PowerShell</option>
+                      <option value="wsl">WSL2 Kali Linux</option>
+                    </select>
+                    <button
+                      type="button"
+                      disabled={wb.ui.busy}
+                      class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3.5 py-1.5 text-[12px] font-semibold text-white hover:bg-emerald-500 disabled:opacity-50 cursor-pointer"
+                      onClick={() => {
+                        const rt = wb.ui.cliRuntimeBySlot[slot().slotId]
+                        void wb.launchSlot({
+                          slotId: slot().slotId,
+                          action: "run_cli",
+                          target: wb.ui.cliTargetBySlot[slot().slotId] ?? "",
+                          rawArgs: wb.ui.cliArgsBySlot[slot().slotId] ?? "",
+                          ...(rt && rt !== "auto" ? { runtimeOverride: rt } : {}),
+                        })
+                      }}
+                    >
+                      <span>▶ Executar Ferramenta Real</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Console de Saída em Tempo Real ocupando todo o centro */}
+                <div class="flex min-h-0 flex-1 flex-col bg-zinc-950 text-zinc-100">
+                  <div class="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 px-3 py-1.5 text-[11px]">
+                    <div class="flex items-center gap-2 overflow-x-auto">
+                      <For each={wb.activeSlotRuns()}>
+                        {(run) => (
+                          <button
+                            type="button"
+                            class={`rounded px-2 py-0.5 font-mono text-[10.5px] cursor-pointer ${
+                              wb.selectedRunForActiveSlot()?.runId === run.runId
+                                ? "bg-emerald-600 text-white"
+                                : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                            }`}
+                            onClick={() => wb.setUi("selectedRunIdBySlot", slot().slotId, run.runId)}
+                          >
+                            {run.status === "running" ? "● " : ""}
+                            {run.runId.slice(0, 10)} ({run.status})
+                          </button>
+                        )}
+                      </For>
+                    </div>
+
+                    <Show when={wb.selectedRunForActiveSlot()}>
+                      {(run) => (
+                        <div class="flex items-center gap-1.5">
+                          <Show when={run().status === "running"}>
+                            <button
+                              type="button"
+                              class="rounded bg-red-600 px-2.5 py-0.5 text-[10.5px] font-medium text-white hover:bg-red-500 cursor-pointer"
+                              onClick={() => void wb.stopRun(run().runId)}
+                            >
+                              ■ Parar Processo
+                            </button>
+                          </Show>
+                          <button
+                            type="button"
+                            class="rounded bg-sky-600/25 px-2.5 py-0.5 text-[10.5px] font-medium text-sky-300 hover:bg-sky-600/40 cursor-pointer"
+                            onClick={() =>
+                              void wb.persistOutputToEvidence(
+                                `${slot().name} (${run().commandPreview})`,
+                                run().outputTail,
+                                slot().slotId,
+                              )
+                            }
+                          >
+                            🔒 Salvar SHA-256
+                          </button>
+                          <button
+                            type="button"
+                            class="rounded bg-emerald-600/25 px-2.5 py-0.5 text-[10.5px] font-medium text-emerald-300 hover:bg-emerald-600/40 cursor-pointer"
+                            onClick={() =>
+                              wb.sendToAgent(
+                                `Saída Real: ${slot().name}\nComando: ${run().commandPreview}`,
+                                run().outputTail,
+                                `${slot().slotId}-output.txt`,
+                              )
+                            }
+                          >
+                            🤖 Enviar p/ Agente OpenCode →
+                          </button>
+                        </div>
+                      )}
+                    </Show>
+                  </div>
+
+                  <pre class="min-h-0 flex-1 overflow-auto p-3.5 font-mono text-[11.5px] leading-relaxed text-emerald-100/95 whitespace-pre-wrap">
+                    {wb.selectedRunForActiveSlot()
+                      ? `$ ${wb.selectedRunForActiveSlot()!.commandPreview}\n` +
+                        `[runtime=${wb.selectedRunForActiveSlot()!.runtime} | status=${wb.selectedRunForActiveSlot()!.status}${
+                          wb.selectedRunForActiveSlot()!.outputLogPath
+                            ? ` | arquivo=${wb.selectedRunForActiveSlot()!.outputLogPath}`
+                            : ""
+                        }]\n\n` +
+                        (wb.selectedRunForActiveSlot()!.outputTail || "(aguardando saída do processo...)")
+                      : `Pronto para executar ${slot().name}.\n` +
+                        `• Todas as saídas são salvas automaticamente em .cyberlab/outputs/ (acessível na barra esquerda).\n` +
+                        `• No Windows, binários instalados no Kali WSL2 são executados automaticamente com tradução C:\\ -> /mnt/c/!`}
+                  </pre>
+                </div>
+              </div>
+            </Show>
+
+            {/* MODO C: DESKTOP GUI / WSLg BRIDGE (Burp Suite, OpenTRAP, Ghidra, Wireshark, JADX-GUI, Cutter) */}
+            <Show when={slot().kind === "desktop_gui"}>
+              <div class="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
+                <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div class="rounded-xl border border-v2-border-border-base bg-v2-background-bg-deep/55 p-4 space-y-3">
+                    <div class="text-[14px] font-semibold text-v2-text-text-strong">
+                      Lançador Direto — {slot().name}
+                    </div>
+                    <p class="text-[12px] text-v2-text-text-muted">{slot().description}</p>
+                    <div class="flex flex-wrap gap-2 pt-1">
+                      <button
+                        type="button"
+                        class="rounded-lg bg-emerald-600 px-4 py-2 text-[12px] font-semibold text-white hover:bg-emerald-500 cursor-pointer"
+                        onClick={() =>
+                          void wb.launchSlot({
+                            slotId: slot().slotId,
+                            action: "launch_desktop",
+                            target: wb.ui.cliTargetBySlot[slot().slotId] ?? "",
+                          })
+                        }
+                      >
+                        🚀 Abrir Janela Nativa ({slot().shortLabel})
+                      </button>
+
+                      <Show when={slot().companionProxyPort}>
+                        {(port) => (
+                          <button
+                            type="button"
+                            class="rounded-lg bg-sky-600 px-4 py-2 text-[12px] font-semibold text-white hover:bg-sky-500 cursor-pointer"
+                            onClick={() =>
+                              void wb.launchProxyBrowser({
+                                proxyPort: port(),
+                                startUrl: "https://example.com",
+                              })
+                            }
+                          >
+                            🌐 Abrir Chrome/Edge Isolado no Proxy (:{port()})
+                          </button>
+                        )}
+                      </Show>
+                    </div>
+                    <Show when={slot().resolvedPath}>
+                      <div class="font-mono text-[10.5px] text-emerald-400">
+                        Detectado em: {slot().resolvedPath}
+                      </div>
+                    </Show>
+                  </div>
+
+                  {/* Card Especial de Sinergia Burp Suite + OpenTRAP */}
+                  <Show when={slot().slotId === "burp-suite" || slot().slotId === "opentrap"}>
+                    <div class="rounded-xl border border-emerald-600/35 bg-emerald-950/20 p-4 space-y-2">
+                      <div class="text-[13px] font-semibold text-emerald-400">
+                        ⚡ Sinergia Real: Burp Suite Community + OpenTRAP
+                      </div>
+                      <ul class="list-disc pl-4 space-y-1 text-[11.5px] text-v2-text-text-base">
+                        <li>
+                          <strong>Burp Suite Community (Windows Nativo `:8080`)</strong>: Melhor ergonomia do mercado para Proxy Manual, Repeater multi-abas, Decoder, Comparer e ecossistema BApp Store (Autorize, Turbo Intruder, Param Miner).
+                        </li>
+                        <li>
+                          <strong>OpenTRAP (WSL2 Kali Linux GUI)</strong>: Desbloqueia sem custo de licença os 3 recursos que a edição Community do Burp bloqueia ou limita — <strong>Intruder sem throttling artificial</strong>, <strong>Scanner Ativo integrado (motor OWASP ZAP headless)</strong> e <strong>Collaborator OAST nativo (Interactsh)</strong>!
+                        </li>
+                        <li>
+                          <strong>Dica Pro</strong>: Você pode usar o Burp na `:8080` e configurar o OpenTRAP na `:8082` (ou encadear Upstream Proxy <code>Burp → OpenTRAP</code>) com o Navegador Isolado de 1 clique acima!
+                        </li>
+                      </ul>
+                    </div>
+                  </Show>
+                </div>
+
+                {/* Ingestão de Exportações / Requests / Achados da GUI Externa direto em SHA-256 + Agente IA */}
+                <div class="rounded-xl border border-v2-border-border-base bg-v2-background-bg-deep/40 p-4 space-y-2.5">
+                  <div class="text-[12.5px] font-semibold text-v2-text-text-strong">
+                    Ponte Rápida: Colar Request HTTP / Descompilação / Log da GUI para Custódia SHA-256 ou Agente OpenCode
+                  </div>
+                  <textarea
+                    rows={6}
+                    placeholder={`Cole aqui um request/response do ${slot().shortLabel}, código descompilado do Ghidra/JADX ou alerta do Scanner para gravar com hash SHA-256 ou analisar com o Agente IA à direita...`}
+                    value={desktopIngestText()}
+                    class="w-full rounded-lg border border-v2-border-border-base bg-zinc-950 p-2.5 font-mono text-[11.5px] text-zinc-100 outline-none focus:border-emerald-500"
+                    onInput={(e) => setDesktopIngestText(e.currentTarget.value)}
+                  />
+                  <div class="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      class="rounded-md bg-sky-600 px-3 py-1.5 text-[11.5px] font-medium text-white hover:bg-sky-500 cursor-pointer"
+                      onClick={() => {
+                        void wb.persistOutputToEvidence(
+                          `Captura Manual — ${slot().name}`,
+                          desktopIngestText(),
+                          slot().slotId,
+                        )
+                      }}
+                    >
+                      🔒 Gravar em Custódia SHA-256
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-md bg-emerald-600 px-3 py-1.5 text-[11.5px] font-medium text-white hover:bg-emerald-500 cursor-pointer"
+                      onClick={() =>
+                        wb.sendToAgent(
+                          `Artefato de ${slot().name}`,
+                          desktopIngestText(),
+                          `${slot().slotId}-capture.txt`,
+                        )
+                      }
+                    >
+                      🤖 Enviar p/ Agente OpenCode →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Show>
+          </div>
+        )}
+      </Show>
+
+      {/* ===================================================================== */}
+      {/* VISÃO 2: ESCOPO BUG BOUNTY & REGRAS DE ENGAJAMENTO                    */}
+      {/* ===================================================================== */}
+      <Show when={wb.ui.centerView === "scope"}>
+        <div class="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
+          <div class="rounded-xl border border-v2-border-border-base bg-v2-background-bg-deep/50 p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-[14px] font-semibold text-v2-text-text-strong">
+                  Importador de Escopo Real (HackerOne / Bugcrowd / Wildcards)
+                </h3>
+                <p class="text-[11.5px] text-v2-text-text-muted">
+                  Trava automaticamente execuções CLI fora de escopo para proteger sua conta de pesquisador.
+                </p>
+              </div>
+              <label class="inline-flex items-center gap-2 text-[11.5px] text-v2-text-text-strong cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={wb.backend.arsenal?.environment.enforceScopeOnCliRuns !== false}
+                  onChange={(e) =>
+                    void wb.configureArsenal({ enforceScopeOnCliRuns: e.currentTarget.checked })
+                  }
+                />
+                <span>Bloquear alvos fora de escopo nos Slots CLI</span>
+              </label>
+            </div>
+
+            <textarea
+              rows={5}
+              placeholder={"Cole JSON do HackerOne/Bugcrowd ou linhas de escopo:\n*.alvo-autorizado.com\nhttps://api.alvo-autorizado.com\n!pagamentos.alvo-autorizado.com"}
+              value={scopeRawText()}
+              class="w-full rounded-lg border border-v2-border-border-base bg-zinc-950 p-2.5 font-mono text-[11.5px] text-zinc-100"
+              onInput={(e) => setScopeRawText(e.currentTarget.value)}
+            />
+
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <input
+                type="text"
+                placeholder="Seu Handle (ex.: vitor)"
+                value={scopeHandle()}
+                class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-2.5 py-1.5 text-[11.5px] text-v2-text-text-strong"
+                onInput={(e) => setScopeHandle(e.currentTarget.value)}
+              />
+              <input
+                type="text"
+                placeholder="Header (ex.: X-Bug-Bounty)"
+                value={scopeHeaderName()}
+                class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-2.5 py-1.5 text-[11.5px] text-v2-text-text-strong"
+                onInput={(e) => setScopeHeaderName(e.currentTarget.value)}
+              />
+              <input
+                type="text"
+                placeholder="Valor do Header (ex.: HackerOne-vitor)"
+                value={scopeHeaderVal()}
+                class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-2.5 py-1.5 text-[11.5px] text-v2-text-text-strong"
+                onInput={(e) => setScopeHeaderVal(e.currentTarget.value)}
+              />
+            </div>
+
+            <button
+              type="button"
+              class="rounded-lg bg-emerald-600 px-4 py-1.5 text-[12px] font-semibold text-white hover:bg-emerald-500 cursor-pointer"
+              onClick={() =>
+                void wb.importScope({
+                  rawInput: scopeRawText(),
+                  ...(scopeHandle().trim() ? { researcherHandle: scopeHandle().trim() } : {}),
+                  ...(scopeHeaderName().trim() ? { headerName: scopeHeaderName().trim() } : {}),
+                  ...(scopeHeaderVal().trim() ? { headerValue: scopeHeaderVal().trim() } : {}),
+                })
+              }
+            >
+              Importar & Ativar Escopo
+            </button>
+          </div>
+
+          <Show when={wb.backend.status?.activeScope}>
+            {(sc) => (
+              <div class="rounded-xl border border-v2-border-border-base bg-v2-background-bg-deep/35 p-4 space-y-2 text-[11.5px]">
+                <div class="font-semibold text-v2-text-text-strong">
+                  Escopo Ativo: {sc().name} ({sc().allowExternalTargets ? "Alvos Externos Liberados" : "Apenas Loopback/Lab"})
+                </div>
+                <div class="text-emerald-400">
+                  Em Escopo ({sc().allowedTargets.length}):{" "}
+                  {sc().allowedTargets.map((r) => `${r.kind}:${r.value}`).join(", ")}
+                </div>
+                <Show when={sc().blockedTargets.length > 0}>
+                  <div class="text-red-400">
+                    Fora de Escopo ({sc().blockedTargets.length}):{" "}
+                    {sc().blockedTargets.map((r) => `${r.kind}:${r.value}`).join(", ")}
+                  </div>
+                </Show>
+              </div>
+            )}
           </Show>
         </div>
-      </section>
+      </Show>
 
-      <VerticalSuitesPickerDialog
-        open={suitePickerOpen()}
-        onClose={() => setSuitePickerOpen(false)}
-        wb={wb}
-      />
-    </>
+      {/* ===================================================================== */}
+      {/* VISÃO 3: 5 LABORATÓRIOS INTERATIVOS DE TREINAMENTO MANTIDOS           */}
+      {/* ===================================================================== */}
+      <Show when={wb.ui.centerView === "labs"}>
+        <div class="min-h-0 flex-1 overflow-y-auto p-4 space-y-3">
+          <div class="text-[14px] font-semibold text-v2-text-text-strong">
+            5 Laboratórios Locais Interativos de Treinamento (Alvos Seguros p/ Testar o Arsenal Real)
+          </div>
+          <For each={wb.backend.projectsAndLabs?.labs ?? []}>
+            {(lab) => (
+              <div class="rounded-xl border border-v2-border-border-base bg-v2-background-bg-deep/45 p-4 space-y-2">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span class="text-[13px] font-semibold text-v2-text-text-strong">{lab.title}</span>
+                    <span class="ml-2 rounded bg-emerald-600/20 px-2 py-0.5 text-[10px] text-emerald-400">
+                      {lab.difficulty}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      class="rounded bg-emerald-600 px-3 py-1 text-[11px] font-medium text-white hover:bg-emerald-500 cursor-pointer"
+                      onClick={() => void wb.controlTrainingLab("start", lab.labId)}
+                    >
+                      {lab.running ? "Selecionar Lab" : "▶ Iniciar Lab"}
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded border border-v2-border-border-base px-2.5 py-1 text-[11px] text-v2-text-text-base hover:border-amber-500 cursor-pointer"
+                      onClick={() => void wb.controlTrainingLab("reset", lab.labId)}
+                    >
+                      Resetar
+                    </button>
+                    <Show when={lab.running}>
+                      <button
+                        type="button"
+                        class="rounded border border-red-500/40 px-2.5 py-1 text-[11px] text-red-400 cursor-pointer"
+                        onClick={() => void wb.controlTrainingLab("stop", lab.labId)}
+                      >
+                        Parar
+                      </button>
+                    </Show>
+                  </div>
+                </div>
+                <p class="text-[11.5px] text-v2-text-text-muted">{lab.summary}</p>
+                <Show when={lab.baseUrl}>
+                  <div class="flex items-center gap-2 font-mono text-[11px] text-emerald-400">
+                    <span>URL ao vivo: {lab.baseUrl}</span>
+                    <button
+                      type="button"
+                      class="rounded bg-emerald-600/20 px-2 py-0.5 text-[10px] hover:bg-emerald-600/35 cursor-pointer"
+                      onClick={() => copyText(wb, lab.baseUrl!, "URL do Lab")}
+                    >
+                      Copiar URL p/ Burp/OpenTRAP/Nuclei
+                    </button>
+                  </div>
+                </Show>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+
+      {/* ===================================================================== */}
+      {/* VISÃO 4: 4 CDIs AUTÔNOMOS HORIZONTAIS (Kairós, Naia, Salem, Nova)     */}
+      {/* ===================================================================== */}
+      <Show when={wb.ui.centerView === "cdi"}>
+        <div class="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
+          <div class="rounded-xl border border-v2-border-border-base bg-v2-background-bg-deep/50 p-4 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 class="text-[14px] font-semibold text-v2-text-text-strong">
+                  Hub de Parceria Horizontal — 4 CDIs Autônomos (`HMAC-SHA256`)
+                </h3>
+                <p class="text-[11.5px] text-v2-text-text-muted">
+                  Kairós (:8788) · Naia (:8789) · Salem (:8790) · Nova (:8791) — Gateway:{" "}
+                  <code class="text-emerald-400">{wb.backend.partners?.cyberlabCallbackUrl}</code>
+                </p>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  class="rounded bg-emerald-600 px-3 py-1 text-[11px] font-medium text-white hover:bg-emerald-500 cursor-pointer"
+                  onClick={() => void wb.manageCdiPreset4()}
+                >
+                  Carregar Preset 4 CDIs
+                </button>
+                <button
+                  type="button"
+                  class="rounded border border-v2-border-border-base px-2.5 py-1 text-[11px] text-v2-text-text-base cursor-pointer"
+                  onClick={() => void wb.manageCdiSecret("reveal")}
+                >
+                  Revelar Segredo
+                </button>
+                <button
+                  type="button"
+                  class="rounded border border-v2-border-border-base px-2.5 py-1 text-[11px] text-v2-text-text-base cursor-pointer"
+                  onClick={() => void wb.manageCdiSecret("generate")}
+                >
+                  Gerar Novo Segredo
+                </button>
+              </div>
+            </div>
+
+            <Show when={wb.backend.revealedSecret}>
+              <div class="rounded bg-zinc-950 p-2 font-mono text-[11px] text-amber-300">
+                CYBERLAB_PARTNER_SECRET={wb.backend.revealedSecret}
+              </div>
+            </Show>
+
+            <div class="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Ou defina seu próprio CYBERLAB_PARTNER_SECRET (>= 16 caracteres)"
+                value={cdiCustomSecret()}
+                class="flex-1 rounded border border-v2-border-border-base bg-v2-background-bg-base px-2.5 py-1 text-[11px] text-v2-text-text-strong"
+                onInput={(e) => setCdiCustomSecret(e.currentTarget.value)}
+              />
+              <button
+                type="button"
+                class="rounded border border-emerald-600/50 px-3 py-1 text-[11px] text-emerald-400 cursor-pointer"
+                onClick={() => void wb.manageCdiSecret("custom", cdiCustomSecret())}
+              >
+                Salvar Segredo
+              </button>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-v2-border-border-base bg-v2-background-bg-deep/40 p-4 space-y-2.5">
+            <div class="text-[12.5px] font-semibold text-v2-text-text-strong">
+              Disparo Simultâneo / Individual aos CDIs
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <For each={wb.backend.partners?.partners ?? []}>
+                {(p) => (
+                  <label class="inline-flex items-center gap-1.5 rounded border border-v2-border-border-base bg-v2-background-bg-base px-2.5 py-1 text-[11px] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedCdis().includes(p.partnerId)}
+                      onChange={(e) => {
+                        setSelectedCdis((prev) =>
+                          e.currentTarget.checked
+                            ? [...prev, p.partnerId]
+                            : prev.filter((id) => id !== p.partnerId),
+                        )
+                      }}
+                    />
+                    <span class="font-medium text-v2-text-text-strong">{p.displayName}</span>
+                    <span class="text-v2-text-text-muted">({p.endpointUrl})</span>
+                  </label>
+                )}
+              </For>
+            </div>
+            <textarea
+              rows={3}
+              placeholder="Objetivo compartilhado para investigação paralela dos CDIs..."
+              value={cdiObjective()}
+              class="w-full rounded border border-v2-border-border-base bg-zinc-950 p-2 text-[11.5px] text-zinc-100"
+              onInput={(e) => setCdiObjective(e.currentTarget.value)}
+            />
+            <button
+              type="button"
+              class="rounded bg-emerald-600 px-4 py-1.5 text-[11.5px] font-semibold text-white hover:bg-emerald-500 cursor-pointer"
+              onClick={() =>
+                void wb.dispatchToCdis({
+                  partnerIds: selectedCdis(),
+                  objective: cdiObjective(),
+                })
+              }
+            >
+              Disparar em Paralelo
+            </button>
+            <Show when={wb.backend.lastCdiDispatchSummary}>
+              <pre class="rounded bg-zinc-950 p-2.5 font-mono text-[11px] text-emerald-200 whitespace-pre-wrap">
+                {wb.backend.lastCdiDispatchSummary}
+              </pre>
+            </Show>
+          </div>
+        </div>
+      </Show>
+
+      {/* ===================================================================== */}
+      {/* VISÃO 5: CUSTÓDIA SHA-256, FINDINGS & RELATÓRIO MARKDOWN              */}
+      {/* ===================================================================== */}
+      <Show when={wb.ui.centerView === "custody"}>
+        <div class="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-[14px] font-semibold text-v2-text-text-strong">
+              Cofre de Evidências SHA-256 ({wb.backend.evidence.length}) & Findings ({wb.backend.findings.length})
+            </h3>
+            <button
+              type="button"
+              class="rounded bg-emerald-600 px-3.5 py-1.5 text-[11.5px] font-semibold text-white hover:bg-emerald-500 cursor-pointer"
+              onClick={() => void wb.generateReport()}
+            >
+              📄 Gerar Relatório Bug Bounty / Pentest (Markdown)
+            </button>
+          </div>
+
+          <Show when={wb.backend.reportMarkdown}>
+            <div class="rounded-xl border border-emerald-600/40 bg-zinc-950 p-3 space-y-2">
+              <div class="flex items-center justify-between text-[11px] text-emerald-400">
+                <span>Relatório Técnico Gerado</span>
+                <button
+                  type="button"
+                  class="rounded bg-emerald-600/25 px-2 py-0.5 cursor-pointer"
+                  onClick={() => copyText(wb, wb.backend.reportMarkdown, "Relatório Markdown")}
+                >
+                  Copiar Markdown
+                </button>
+              </div>
+              <pre class="max-h-56 overflow-auto font-mono text-[11px] text-zinc-200 whitespace-pre-wrap">
+                {wb.backend.reportMarkdown}
+              </pre>
+            </div>
+          </Show>
+
+          {/* Registro Rápido de Finding */}
+          <div class="rounded-xl border border-v2-border-border-base bg-v2-background-bg-deep/45 p-3.5 space-y-2">
+            <div class="text-[12px] font-semibold text-v2-text-text-strong">Novo Finding Estruturado</div>
+            <div class="flex flex-wrap gap-2">
+              <input
+                type="text"
+                placeholder="Título (ex.: IDOR em /api/v2/invoices/{id})"
+                value={findingTitle()}
+                class="flex-1 rounded border border-v2-border-border-base bg-v2-background-bg-base px-2.5 py-1 text-[11.5px] text-v2-text-text-strong"
+                onInput={(e) => setFindingTitle(e.currentTarget.value)}
+              />
+              <select
+                value={findingSev()}
+                class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-2.5 py-1 text-[11.5px] text-v2-text-text-strong"
+                onChange={(e) => setFindingSev(e.currentTarget.value as never)}
+              >
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+                <option value="info">Info</option>
+              </select>
+            </div>
+            <textarea
+              rows={2}
+              placeholder="Descrição técnica e impacto reproduzível..."
+              value={findingDesc()}
+              class="w-full rounded border border-v2-border-border-base bg-v2-background-bg-base p-2 text-[11.5px] text-v2-text-text-strong"
+              onInput={(e) => setFindingDesc(e.currentTarget.value)}
+            />
+            <button
+              type="button"
+              class="rounded bg-emerald-600 px-3 py-1 text-[11.5px] font-medium text-white cursor-pointer"
+              onClick={() => {
+                if (!findingTitle().trim()) return
+                void wb.createFinding({
+                  title: findingTitle().trim(),
+                  description: findingDesc().trim() || findingTitle().trim(),
+                  severity: findingSev(),
+                  evidenceIds: wb.backend.evidence.slice(0, 1).map((e) => e.evidenceId),
+                  affectedAssets: [],
+                })
+                setFindingTitle("")
+                setFindingDesc("")
+              }}
+            >
+              Salvar Finding
+            </button>
+          </div>
+
+          {/* Lista de Evidências */}
+          <div class="space-y-1.5">
+            <For each={wb.backend.evidence}>
+              {(ev) => (
+                <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-v2-border-border-base bg-v2-background-bg-deep/35 px-3 py-2 text-[11.5px]">
+                  <div class="min-w-0 flex-1">
+                    <div class="font-medium text-v2-text-text-strong truncate">{ev.title}</div>
+                    <div class="font-mono text-[10px] text-v2-text-text-muted">
+                      {ev.evidenceId} · SHA-256: {ev.sha256.slice(0, 20)}… · {ev.redactionStatus}
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base cursor-pointer"
+                      onClick={() => void wb.readEvidence(ev.evidenceId)}
+                    >
+                      Inspecionar
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded border border-emerald-600/50 px-2 py-0.5 text-[10.5px] text-emerald-400 cursor-pointer"
+                      onClick={() => void wb.verifyEvidence(ev.evidenceId)}
+                    >
+                      Verificar SHA-256
+                    </button>
+                  </div>
+                </div>
+              )}
+            </For>
+          </div>
+
+          <Show when={wb.backend.inspectedEvidence}>
+            {(ins) => (
+              <pre class="max-h-60 overflow-auto rounded-lg bg-zinc-950 p-3 font-mono text-[11px] text-zinc-200 whitespace-pre-wrap">
+                {ins().text}
+              </pre>
+            )}
+          </Show>
+        </div>
+      </Show>
+
+      {/* ===================================================================== */}
+      {/* VISÃO 6: GUIA RÁPIDO WINDOWS POWERSHELL + WSL2 KALI LINUX             */}
+      {/* ===================================================================== */}
+      <Show when={wb.ui.centerView === "guide"}>
+        <div class="min-h-0 flex-1 overflow-y-auto p-4 space-y-4 text-[12px]">
+          <div class="rounded-xl border border-v2-border-border-base bg-v2-background-bg-deep/55 p-4 space-y-3">
+            <h3 class="text-[14px] font-semibold text-v2-text-text-strong">
+              Setup Mestre — Windows PowerShell + WSL2 Kali Linux (`C:\CyberLab-Tools`)
+            </h3>
+            <p class="text-v2-text-text-muted">
+              Todas as ferramentas reais ficam instaladas fora do repositório para manter o CyberLab OS leve, rápido e 100% livre de conflitos de licença. Copie e cole no seu <strong>PowerShell (Administrador)</strong>:
+            </p>
+            <pre class="overflow-x-auto rounded-lg bg-zinc-950 p-3 font-mono text-[11px] text-sky-200 whitespace-pre-wrap">{`# 1. Criar pasta dedicada fora do repositório + instalar WSL2 Kali Linux
+New-Item -ItemType Directory -Force -Path C:\\CyberLab-Tools | Out-Null
+wsl --install -d kali-linux
+
+# 2. Instalar ferramentas nativas Windows via Winget (PowerShell)
+winget install --id PortSwigger.BurpSuite.Community -e
+winget install --id Caido.Caido -e
+winget install --id ZAP.ZAP -e
+winget install --id Insecure.Nmap -e
+winget install --id WiresharkFoundation.Wireshark -e
+winget install --id ProjectDiscovery.Nuclei -e
+winget install --id ProjectDiscovery.Subfinder -e
+winget install --id ProjectDiscovery.Httpx -e
+winget install --id ProjectDiscovery.Katana -e
+winget install --id ffuf.ffuf -e
+winget install --id Gitleaks.Gitleaks -e
+winget install --id AquaSecurity.Trivy -e
+winget install --id Skylot.Jadx -e
+
+# 3. Baixar CyberChef Oficial (GCHQ) para embutir em tela cheia no centro do CyberLab OS!
+Invoke-WebRequest -Uri "https://github.com/gchq/CyberChef/releases/latest/download/CyberChef_v10.19.4.zip" -OutFile "$env:TEMP\\cyberchef.zip"
+Expand-Archive -Force "$env:TEMP\\cyberchef.zip" "C:\\CyberLab-Tools\\CyberChef"`}</pre>
+
+            <p class="text-v2-text-text-muted pt-1">
+              E dentro do <strong>Kali Linux no WSL2</strong> (<code>wsl -d kali-linux</code>), instale todo o arsenal Linux + OpenTRAP + Win-KeX:
+            </p>
+            <pre class="overflow-x-auto rounded-lg bg-zinc-950 p-3 font-mono text-[11px] text-emerald-200 whitespace-pre-wrap">{`sudo apt update && sudo apt install -y \\
+  kali-win-kex mitmproxy sqlmap nmap wireshark tshark netexec \\
+  ghidra jadx rizin-cutter apktool python3-frida-tools \\
+  nuclei ffuf subfinder naabu dnsx interactsh-client \\
+  gitleaks trivy semgrep yara libfuse2 curl jq
+
+# Instalar KeyHunter (Rust CLI - fadidevv/keyhunter) + OpenTRAP AppImage em /opt/opentrap
+cargo install github-keyhunter
+sudo mkdir -p /opt/opentrap && cd /opt/opentrap
+# Baixe a última release Linux x86_64 AppImage de https://github.com/opentrap/opentrap/releases e marque chmod +x!`}</pre>
+          </div>
+        </div>
+      </Show>
+    </section>
+  )
+}
+
+/** Mantido para compatibilidade caso importado isoladamente */
+export function CyberLabWorkbenchSurface() {
+  return (
+    <div class="flex size-full min-h-0 min-w-0 flex-row overflow-hidden">
+      <CyberLabLeftExplorer />
+      <CyberLabCenterStage />
+    </div>
   )
 }

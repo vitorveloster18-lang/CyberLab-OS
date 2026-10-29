@@ -1,64 +1,53 @@
-import { batch, createContext, createEffect, createMemo, onCleanup, onMount, useContext, type ParentProps } from "solid-js"
+import {
+  batch,
+  createContext,
+  createEffect,
+  createMemo,
+  onCleanup,
+  onMount,
+  useContext,
+  type ParentProps,
+} from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import type { ComposerModel } from "@/composer/model"
-import { useServers, ServerConnection } from "@/runtime/server/registry"
-import { useTabs } from "@/shell/tabs/tabs"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useCurrentRoute } from "@/shell/state/layout"
+import { useTabs } from "@/shell/tabs/tabs"
 import { cyberlabFetch, type CyberLabServerTarget } from "./api"
-import {
-  buildCapabilityInput,
-  createDefaultToolDrafts,
-  DEFAULT_QUICK_TOOLS,
-  findSuiteAndFunctionForTool,
-  getSuiteMeta,
-  getToolMeta,
-  MANUAL_TOOLS,
-  TOOL_SUITES,
-} from "./catalog"
 import type {
   ApprovalDto,
-  DispatchPartnersResultDto,
-  EngagementProfileDto,
+  ArsenalLaunchResultDto,
+  ArsenalLiveRunDto,
+  ArsenalOverviewDto,
+  ArsenalRuntimePrefDto,
+  ArsenalSlotKindDto,
+  ArsenalSlotStatusDto,
+  CenterViewMode,
   EvidenceDto,
-  ExecutionDto,
-  ExternalToolsOverviewDto,
   FindingDto,
-  ImportedArtifactDto,
-  KeyValueHeaderRow,
-  ManualToolDraftMap,
-  ManualToolId,
+  LeftSidebarTab,
   PartnersOverviewDto,
   ProjectsAndLabsOverviewDto,
   ProxyBrowserLaunchResultDto,
-  ProxyHistoryEntryDto,
-  ProxyOverviewDto,
-  ProxyReplayBundleDto,
   ReadEvidenceDto,
-  RepeaterSavedTab,
-  ScopeRuleDto,
-  ToolHistoryEntry,
-  ToolSuiteId,
-  TrainingLabDto,
-  WorkbenchLayoutMode,
+  ScopeDto,
+  WorkspaceFileEntryDto,
+  WorkspaceFilePreviewDto,
+  WorkspaceFilesListDto,
   WorkspaceStatusDto,
 } from "./types"
 
-const UI_STORAGE_KEY = "cyberlab.manual.ui.v1"
-const DRAFTS_STORAGE_KEY = "cyberlab.manual.drafts.v1"
-const HISTORY_STORAGE_KEY = "cyberlab.manual.history.v1"
-const MAX_HISTORY_PER_TOOL = 40
+const UI_STORAGE_KEY = "cyberlab.v5.antigravity.ui"
 
-type StoredUiPrefs = {
+interface StoredUiPrefs {
   open: boolean
-  layoutMode: WorkbenchLayoutMode
-  splitWidthPct: number
-  activeSuiteId?: ToolSuiteId
-  activeFunctionBySuite?: Partial<Record<ToolSuiteId, string>>
-  activeEngineByFunction?: Record<string, ManualToolId>
-  historyScope?: "function" | "suite"
-  activeToolId: ManualToolId
-  quickToolIds: ManualToolId[]
-  showHistoryColumn: boolean
+  leftSidebarOpen: boolean
+  leftSidebarTab: LeftSidebarTab
+  leftSidebarWidth: number
+  rightAgentOpen: boolean
+  rightAgentWidth: number
+  centerView: CenterViewMode
+  activeSlotId: string
   directoryOverride: string
 }
 
@@ -82,204 +71,107 @@ function safeWriteJson(key: string, value: unknown): void {
   }
 }
 
-function createEmptyHistories(): Record<ManualToolId, ToolHistoryEntry[]> {
-  return {
-    "http-repeater": [],
-    "http-proxy": [],
-    "http-intruder": [],
-    "param-audit": [],
-    dalfox: [],
-    "api-security-lab": [],
-    "http-headers": [],
-    "web-surface": [],
-    nuclei: [],
-    ffuf: [],
-    "decoder-jwt": [],
-    "tls-inspector": [],
-    "tcp-probe": [],
-    nmap: [],
-    "dns-recon": [],
-    "ad-smb-ldap": [],
-    "pcap-analyzer": [],
-    tshark: [],
-    "workspace-audit": [],
-    "key-hunter": [],
-    "keyhunter-cli": [],
-    "sca-sbom-iac": [],
-    trivy: [],
-    "binary-triage": [],
-    "binary-disasm": [],
-    ghidra: [],
-    "entropy-recipe": [],
-    "mobile-triage": [],
-    jadx: [],
-    "yara-scan": [],
-    yarax: [],
-    "dfir-sigma": [],
-    "cdi-hub": [],
-    "external-ingest": [],
-    "scope-governance": [],
-  }
-}
-
-function isValidToolId(value: string): value is ManualToolId {
-  return MANUAL_TOOLS.some((t) => t.id === value)
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const res = String(reader.result ?? "")
+      const idx = res.indexOf(",")
+      resolve(idx >= 0 ? res.slice(idx + 1) : res)
+    }
+    reader.onerror = () => reject(reader.error ?? new Error("Falha ao ler arquivo"))
+    reader.readAsDataURL(file)
+  })
 }
 
 function createWorkbenchService() {
   const servers = useServers()
   const tabs = useTabs()
   const currentRoute = useCurrentRoute()
-
-  const savedUi = safeReadJson<Partial<StoredUiPrefs>>(UI_STORAGE_KEY, {})
-  const defaultDrafts = createDefaultToolDrafts()
-  const savedDrafts = safeReadJson<Partial<ManualToolDraftMap>>(DRAFTS_STORAGE_KEY, {})
-  const mergedDrafts: ManualToolDraftMap = {
-    "http-repeater": { ...defaultDrafts["http-repeater"], ...(savedDrafts["http-repeater"] ?? {}) },
-    "http-proxy": { ...defaultDrafts["http-proxy"], ...(savedDrafts["http-proxy"] ?? {}) },
-    "http-intruder": { ...defaultDrafts["http-intruder"], ...(savedDrafts["http-intruder"] ?? {}) },
-    "param-audit": { ...defaultDrafts["param-audit"], ...(savedDrafts["param-audit"] ?? {}) },
-    dalfox: { ...defaultDrafts.dalfox, ...(savedDrafts.dalfox ?? {}) },
-    "api-security-lab": { ...defaultDrafts["api-security-lab"], ...(savedDrafts["api-security-lab"] ?? {}) },
-    "http-headers": { ...defaultDrafts["http-headers"], ...(savedDrafts["http-headers"] ?? {}) },
-    "web-surface": { ...defaultDrafts["web-surface"], ...(savedDrafts["web-surface"] ?? {}) },
-    nuclei: { ...defaultDrafts.nuclei, ...(savedDrafts.nuclei ?? {}) },
-    ffuf: { ...defaultDrafts.ffuf, ...(savedDrafts.ffuf ?? {}) },
-    "decoder-jwt": { ...defaultDrafts["decoder-jwt"], ...(savedDrafts["decoder-jwt"] ?? {}) },
-    "tls-inspector": { ...defaultDrafts["tls-inspector"], ...(savedDrafts["tls-inspector"] ?? {}) },
-    "tcp-probe": { ...defaultDrafts["tcp-probe"], ...(savedDrafts["tcp-probe"] ?? {}) },
-    nmap: { ...defaultDrafts.nmap, ...(savedDrafts.nmap ?? {}) },
-    "dns-recon": { ...defaultDrafts["dns-recon"], ...(savedDrafts["dns-recon"] ?? {}) },
-    "ad-smb-ldap": { ...defaultDrafts["ad-smb-ldap"], ...(savedDrafts["ad-smb-ldap"] ?? {}) },
-    "pcap-analyzer": { ...defaultDrafts["pcap-analyzer"], ...(savedDrafts["pcap-analyzer"] ?? {}) },
-    tshark: { ...defaultDrafts.tshark, ...(savedDrafts.tshark ?? {}) },
-    "workspace-audit": { ...defaultDrafts["workspace-audit"], ...(savedDrafts["workspace-audit"] ?? {}) },
-    "key-hunter": { ...defaultDrafts["key-hunter"], ...(savedDrafts["key-hunter"] ?? {}) },
-    "keyhunter-cli": { ...defaultDrafts["keyhunter-cli"], ...(savedDrafts["keyhunter-cli"] ?? {}) },
-    "sca-sbom-iac": { ...defaultDrafts["sca-sbom-iac"], ...(savedDrafts["sca-sbom-iac"] ?? {}) },
-    trivy: { ...defaultDrafts.trivy, ...(savedDrafts.trivy ?? {}) },
-    "binary-triage": { ...defaultDrafts["binary-triage"], ...(savedDrafts["binary-triage"] ?? {}) },
-    "binary-disasm": { ...defaultDrafts["binary-disasm"], ...(savedDrafts["binary-disasm"] ?? {}) },
-    ghidra: { ...defaultDrafts.ghidra, ...(savedDrafts.ghidra ?? {}) },
-    "entropy-recipe": { ...defaultDrafts["entropy-recipe"], ...(savedDrafts["entropy-recipe"] ?? {}) },
-    "mobile-triage": { ...defaultDrafts["mobile-triage"], ...(savedDrafts["mobile-triage"] ?? {}) },
-    jadx: { ...defaultDrafts.jadx, ...(savedDrafts.jadx ?? {}) },
-    "yara-scan": { ...defaultDrafts["yara-scan"], ...(savedDrafts["yara-scan"] ?? {}) },
-    yarax: { ...defaultDrafts.yarax, ...(savedDrafts.yarax ?? {}) },
-    "dfir-sigma": { ...defaultDrafts["dfir-sigma"], ...(savedDrafts["dfir-sigma"] ?? {}) },
-    "cdi-hub": { ...defaultDrafts["cdi-hub"], ...(savedDrafts["cdi-hub"] ?? {}) },
-    "external-ingest": { ...defaultDrafts["external-ingest"], ...(savedDrafts["external-ingest"] ?? {}) },
-    "scope-governance": { ...defaultDrafts["scope-governance"], ...(savedDrafts["scope-governance"] ?? {}) },
-  }
-
-  const savedHistories = safeReadJson<Partial<Record<ManualToolId, ToolHistoryEntry[]>>>(HISTORY_STORAGE_KEY, {})
-  const initialHistories = createEmptyHistories()
-  for (const tool of MANUAL_TOOLS) {
-    const arr = savedHistories[tool.id]
-    if (Array.isArray(arr)) {
-      initialHistories[tool.id] = arr.slice(0, MAX_HISTORY_PER_TOOL)
-    }
-  }
-
-  const initialQuickTools = Array.isArray(savedUi.quickToolIds)
-    ? savedUi.quickToolIds.filter((id): id is ManualToolId => typeof id === "string" && isValidToolId(id))
-    : []
-
-  const initialToolId: ManualToolId =
-    typeof savedUi.activeToolId === "string" && isValidToolId(savedUi.activeToolId)
-      ? savedUi.activeToolId
-      : "http-repeater"
-
-  const inferredSuite = findSuiteAndFunctionForTool(initialToolId)
-  const initialSuiteId: ToolSuiteId =
-    savedUi.activeSuiteId && TOOL_SUITES.some((s) => s.id === savedUi.activeSuiteId)
-      ? savedUi.activeSuiteId
-      : inferredSuite.suiteId
-
-  const defaultFnBySuite: Record<ToolSuiteId, string> = {
-    "web-suite": "repeater",
-    "network-suite": "ports",
-    "packet-suite": "pcap",
-    "reversing-suite": "binary",
-    "dfir-suite": "sigma-triage",
-    "code-suite": "audit",
-    "cdi-suite": "dispatch",
-    "governance-suite": "scope",
-    ...(savedUi.activeFunctionBySuite ?? {}),
-  }
+  const saved = safeReadJson<Partial<StoredUiPrefs>>(UI_STORAGE_KEY, {})
 
   const [ui, setUi] = createStore<{
     open: boolean
-    layoutMode: WorkbenchLayoutMode
-    splitWidthPct: number
-    activeSuiteId: ToolSuiteId
-    activeFunctionBySuite: Record<ToolSuiteId, string>
-    activeEngineByFunction: Record<string, ManualToolId>
-    historyScope: "function" | "suite"
-    activeToolId: ManualToolId
-    quickToolIds: ManualToolId[]
-    showHistoryColumn: boolean
+    leftSidebarOpen: boolean
+    leftSidebarTab: LeftSidebarTab
+    leftSidebarWidth: number
+    rightAgentOpen: boolean
+    rightAgentWidth: number
+    centerView: CenterViewMode
+    activeSlotId: string
+    slotSearch: string
+    categoryFilter: string
+    cliTargetBySlot: Record<string, string>
+    cliArgsBySlot: Record<string, string>
+    cliRuntimeBySlot: Record<string, "auto" | "windows" | "wsl" | "linux_mac">
+    selectedRunIdBySlot: Record<string, string>
+    iframeReloadNonce: number
+    currentFilesDir: string
     directoryOverride: string
-    selectedHistoryByTool: Partial<Record<ManualToolId, string>>
-    runningToolId: ManualToolId | null
-    runningExecutionId: string | null
+    busy: boolean
     notice: string
     error: string
   }>({
-    open: Boolean(savedUi.open),
-    layoutMode: savedUi.layoutMode === "fullscreen" ? "fullscreen" : "split",
-    splitWidthPct:
-      typeof savedUi.splitWidthPct === "number" ? Math.min(72, Math.max(38, savedUi.splitWidthPct)) : 54,
-    activeSuiteId: initialSuiteId,
-    activeFunctionBySuite: defaultFnBySuite,
-    activeEngineByFunction: savedUi.activeEngineByFunction ?? {},
-    historyScope: savedUi.historyScope === "suite" ? "suite" : "function",
-    activeToolId: initialToolId,
-    quickToolIds: initialQuickTools.length > 0 ? initialQuickTools : [...DEFAULT_QUICK_TOOLS],
-    showHistoryColumn: savedUi.showHistoryColumn !== false,
-    directoryOverride: typeof savedUi.directoryOverride === "string" ? savedUi.directoryOverride : "",
-    selectedHistoryByTool: {},
-    runningToolId: null,
-    runningExecutionId: null,
+    open: Boolean(saved.open),
+    leftSidebarOpen: saved.leftSidebarOpen !== false,
+    leftSidebarTab: saved.leftSidebarTab === "files" ? "files" : "slots",
+    leftSidebarWidth:
+      typeof saved.leftSidebarWidth === "number"
+        ? Math.min(440, Math.max(210, saved.leftSidebarWidth))
+        : 278,
+    rightAgentOpen: saved.rightAgentOpen !== false,
+    rightAgentWidth:
+      typeof saved.rightAgentWidth === "number"
+        ? Math.min(620, Math.max(300, saved.rightAgentWidth))
+        : 388,
+    centerView: saved.centerView ?? "tool",
+    activeSlotId: saved.activeSlotId || "burp-suite",
+    slotSearch: "",
+    categoryFilter: "all",
+    cliTargetBySlot: {},
+    cliArgsBySlot: {},
+    cliRuntimeBySlot: {},
+    selectedRunIdBySlot: {},
+    iframeReloadNonce: 1,
+    currentFilesDir: ".",
+    directoryOverride: typeof saved.directoryOverride === "string" ? saved.directoryOverride : "",
+    busy: false,
     notice: "",
     error: "",
   })
 
-  const [drafts, setDrafts] = createStore<ManualToolDraftMap>(mergedDrafts)
-  const [histories, setHistories] = createStore<Record<ManualToolId, ToolHistoryEntry[]>>(initialHistories)
-
   const [backend, setBackend] = createStore<{
     loading: boolean
     status: WorkspaceStatusDto | null
+    arsenal: ArsenalOverviewDto | null
+    files: WorkspaceFileEntryDto[]
+    filePreview: WorkspaceFilePreviewDto | null
     approvals: ApprovalDto[]
-    executions: ExecutionDto[]
     evidence: EvidenceDto[]
-    findings: FindingDto[]
-    proxy: ProxyOverviewDto | null
-    partners: PartnersOverviewDto | null
-    external: ExternalToolsOverviewDto | null
-    projectsAndLabs: ProjectsAndLabsOverviewDto | null
-    importedArtifacts: ImportedArtifactDto[]
-    lastBrowserLaunch: ProxyBrowserLaunchResultDto | null
-    reportMarkdown: string
     inspectedEvidence: ReadEvidenceDto | null
+    findings: FindingDto[]
+    partners: PartnersOverviewDto | null
+    projectsAndLabs: ProjectsAndLabsOverviewDto | null
+    lastBrowserLaunch: ProxyBrowserLaunchResultDto | null
+    lastCdiDispatchSummary: string
     revealedSecret: string
+    reportMarkdown: string
   }>({
     loading: false,
     status: null,
+    arsenal: null,
+    files: [],
+    filePreview: null,
     approvals: [],
-    executions: [],
     evidence: [],
-    findings: [],
-    proxy: null,
-    partners: null,
-    external: null,
-    projectsAndLabs: null,
-    importedArtifacts: [],
-    lastBrowserLaunch: null,
-    reportMarkdown: "",
     inspectedEvidence: null,
+    findings: [],
+    partners: null,
+    projectsAndLabs: null,
+    lastBrowserLaunch: null,
+    lastCdiDispatchSummary: "",
     revealedSecret: "",
+    reportMarkdown: "",
   })
 
   let activeComposer: ComposerModel | undefined
@@ -294,32 +186,24 @@ function createWorkbenchService() {
   const persistUi = () => {
     safeWriteJson(UI_STORAGE_KEY, {
       open: ui.open,
-      layoutMode: ui.layoutMode,
-      splitWidthPct: ui.splitWidthPct,
-      activeSuiteId: ui.activeSuiteId,
-      activeFunctionBySuite: { ...ui.activeFunctionBySuite },
-      activeEngineByFunction: { ...ui.activeEngineByFunction },
-      historyScope: ui.historyScope,
-      activeToolId: ui.activeToolId,
-      quickToolIds: [...ui.quickToolIds],
-      showHistoryColumn: ui.showHistoryColumn,
+      leftSidebarOpen: ui.leftSidebarOpen,
+      leftSidebarTab: ui.leftSidebarTab,
+      leftSidebarWidth: ui.leftSidebarWidth,
+      rightAgentOpen: ui.rightAgentOpen,
+      rightAgentWidth: ui.rightAgentWidth,
+      centerView: ui.centerView,
+      activeSlotId: ui.activeSlotId,
       directoryOverride: ui.directoryOverride,
     } satisfies StoredUiPrefs)
-  }
-
-  const persistDrafts = () => {
-    safeWriteJson(DRAFTS_STORAGE_KEY, JSON.parse(JSON.stringify(drafts)))
-  }
-
-  const persistHistories = () => {
-    safeWriteJson(HISTORY_STORAGE_KEY, JSON.parse(JSON.stringify(histories)))
   }
 
   const resolvedDirectory = createMemo(() => {
     if (ui.directoryOverride.trim()) return ui.directoryOverride.trim()
     const route = currentRoute()
     if (route.type === "draft") {
-      const tab = tabs.store.find((t): t is Extract<typeof t, { type: "draft" }> => t.type === "draft" && t.draftID === route.draftID)
+      const tab = tabs.store.find(
+        (t): t is Extract<typeof t, { type: "draft" }> => t.type === "draft" && t.draftID === route.draftID,
+      )
       if (tab?.directory) return tab.directory
     }
     const anyDraft = tabs.store.find((t): t is Extract<typeof t, { type: "draft" }> => t.type === "draft")
@@ -355,1527 +239,691 @@ function createWorkbenchService() {
     })
   }
 
-  const applySuiteAndFunction = (suiteId: ToolSuiteId, functionId?: string, engineToolId?: ManualToolId) => {
-    const suite = getSuiteMeta(suiteId)
-    const fn =
-      suite.functions.find((f) => f.id === (functionId ?? ui.activeFunctionBySuite[suiteId])) ?? suite.functions[0]!
-    const fnKey = `${suiteId}:${fn.id}`
-    const rememberedEngine = ui.activeEngineByFunction[fnKey]
-    const resolvedEngine =
-      (engineToolId && fn.engines.some((e) => e.toolId === engineToolId) ? engineToolId : undefined) ??
-      (rememberedEngine && fn.engines.some((e) => e.toolId === rememberedEngine) ? rememberedEngine : undefined) ??
-      fn.engines[0]!.toolId
+  const activeSlot = createMemo<ArsenalSlotStatusDto | null>(() => {
+    const slots = backend.arsenal?.slots ?? []
+    return slots.find((s) => s.slotId === ui.activeSlotId) ?? slots[0] ?? null
+  })
 
-    batch(() => {
-      setUi("activeSuiteId", suiteId)
-      setUi("activeFunctionBySuite", suiteId, fn.id)
-      setUi("activeEngineByFunction", fnKey, resolvedEngine)
-      setUi("activeToolId", resolvedEngine)
-      setUi("open", true)
-      if (fn.governanceSubTab) {
-        setDrafts("scope-governance", "subTab", fn.governanceSubTab)
-      }
-      if (fn.cdiSubTab) {
-        setDrafts("cdi-hub", "cdiSubTab", fn.cdiSubTab)
-      }
-    })
-    persistUi()
-    persistDrafts()
-  }
+  const activeSlotRuns = createMemo<ArsenalLiveRunDto[]>(() => {
+    const slot = activeSlot()
+    if (!slot) return []
+    return (backend.arsenal?.runs ?? []).filter((r) => r.slotId === slot.slotId)
+  })
 
-  const selectSuite = (suiteId: ToolSuiteId, functionId?: string, engineToolId?: ManualToolId) => {
-    applySuiteAndFunction(suiteId, functionId, engineToolId)
-  }
+  const selectedRunForActiveSlot = createMemo<ArsenalLiveRunDto | null>(() => {
+    const slot = activeSlot()
+    const runs = activeSlotRuns()
+    if (!slot || runs.length === 0) return null
+    const chosenId = ui.selectedRunIdBySlot[slot.slotId]
+    return (chosenId ? runs.find((r) => r.runId === chosenId) : undefined) ?? runs[0] ?? null
+  })
 
-  const selectSuiteFunction = (functionId: string) => {
-    applySuiteAndFunction(ui.activeSuiteId, functionId)
-  }
+  const hasRunningJobs = createMemo(() =>
+    Boolean(backend.arsenal?.runs?.some((r) => r.status === "running")),
+  )
 
-  const selectSuiteEngine = (toolId: ManualToolId) => {
-    const fnId = ui.activeFunctionBySuite[ui.activeSuiteId]
-    applySuiteAndFunction(ui.activeSuiteId, fnId, toolId)
-  }
-
-  const setHistoryScope = (scope: "function" | "suite") => {
-    setUi("historyScope", scope)
-    persistUi()
-  }
-
-  const selectTool = (toolId: ManualToolId, opts?: { openWorkbench?: boolean }) => {
-    const loc = findSuiteAndFunctionForTool(toolId)
-    batch(() => {
-      setUi("activeSuiteId", loc.suiteId)
-      setUi("activeFunctionBySuite", loc.suiteId, loc.functionId)
-      setUi("activeEngineByFunction", `${loc.suiteId}:${loc.functionId}`, toolId)
-      setUi("activeToolId", toolId)
-      if (opts?.openWorkbench !== false) {
-        setUi("open", true)
-      }
-    })
-    persistUi()
-  }
-
-  const sendUrlAcrossWebSuite = (url: string, targetFunction: "headers" | "scanner" | "intruder" | "params") => {
-    const clean = url.trim()
-    if (!clean) return
-    if (targetFunction === "headers") {
-      updateDraft("http-headers", (p) => ({ ...p, url: clean }))
-      applySuiteAndFunction("web-suite", "headers", "http-headers")
-      setNotice(`URL enviada para Headers & Cookies (${clean}).`)
-      return
-    }
-    if (targetFunction === "intruder") {
-      const templated = clean.includes("§") ? clean : clean.includes("=") ? clean.replace(/=([^&]*)/, "=§$1§") : `${clean.replace(/\/$/, "")}/§payload§`
-      updateDraft("http-intruder", (p) => ({ ...p, url: templated, useRawJson: false }))
-      applySuiteAndFunction("web-suite", "intruder", "http-intruder")
-      setNotice(`URL enviada para HTTP Intruder (${templated}).`)
-      return
-    }
-    if (targetFunction === "params") {
-      updateDraft("param-audit", (p) => ({ ...p, url: clean, useRawJson: false }))
-      updateDraft("dalfox", (p) => ({ ...p, url: clean, useRawJson: false }))
-      applySuiteAndFunction("web-suite", "params")
-      setNotice(`URL enviada para Auditor de Parâmetros (${clean}).`)
-      return
-    }
+  async function refreshArsenalOnly(forceProbe = false): Promise<void> {
     try {
-      const parsed = new URL(clean)
-      const originUrl = parsed.origin
-      updateDraft("web-surface", (p) => ({ ...p, baseUrl: originUrl }))
-      updateDraft("nuclei", (p) => ({ ...p, url: clean }))
-      updateDraft("ffuf", (p) => ({ ...p, baseUrl: originUrl }))
-    } catch {
-      updateDraft("web-surface", (p) => ({ ...p, baseUrl: clean }))
-    }
-    applySuiteAndFunction("web-suite", "scanner")
-    setNotice(`URL enviada para Scanner & Fuzzer (${clean}).`)
-  }
-
-  const sendTextToDecoder = (value: string) => {
-    updateDraft("decoder-jwt", (p) => ({ ...p, value: value.slice(0, 65000) }))
-    applySuiteAndFunction("web-suite", "decoder", "decoder-jwt")
-    setNotice("Conteúdo enviado para o Decoder / JWT Inspector.")
-  }
-
-  const toggleWorkbench = (force?: boolean) => {
-    const next = force ?? !ui.open
-    setUi("open", next)
-    persistUi()
-  }
-
-  const setLayoutMode = (mode: WorkbenchLayoutMode) => {
-    setUi("layoutMode", mode)
-    if (!ui.open) setUi("open", true)
-    persistUi()
-  }
-
-  const setSplitWidthPct = (pct: number) => {
-    setUi("splitWidthPct", Math.min(72, Math.max(38, pct)))
-    persistUi()
-  }
-
-  const setShowHistoryColumn = (show: boolean) => {
-    setUi("showHistoryColumn", show)
-    persistUi()
-  }
-
-  const setDirectoryOverride = (dir: string) => {
-    setUi("directoryOverride", dir)
-    persistUi()
-    void refreshBackend()
-  }
-
-  function updateDraft<K extends ManualToolId>(
-    toolId: K,
-    updater: (prev: ManualToolDraftMap[K]) => ManualToolDraftMap[K],
-  ): void {
-    const next = updater(JSON.parse(JSON.stringify(drafts[toolId])) as ManualToolDraftMap[K])
-    setDrafts(toolId, reconcile(next))
-    persistDrafts()
-  }
-
-  function resetToolDraft(toolId: ManualToolId): void {
-    const defaults = createDefaultToolDrafts()
-    setDrafts(toolId, reconcile(defaults[toolId]))
-    persistDrafts()
-    setNotice(`Configurações padrão restauradas para ${getToolMeta(toolId).shortTitle}.`)
-  }
-
-  function recordHistoryEntry(toolId: ManualToolId, entry: ToolHistoryEntry): void {
-    const current = histories[toolId] ?? []
-    const next = [entry, ...current.filter((item) => item.id !== entry.id)].slice(0, MAX_HISTORY_PER_TOOL)
-    batch(() => {
-      setHistories(toolId, next)
-      setUi("selectedHistoryByTool", toolId, entry.id)
-    })
-    persistHistories()
-  }
-
-  function updateHistoryEntry(
-    toolId: ManualToolId,
-    entryId: string,
-    patch: Partial<ToolHistoryEntry>,
-  ): void {
-    const current = histories[toolId] ?? []
-    const next = current.map((item) => (item.id === entryId ? { ...item, ...patch } : item))
-    setHistories(toolId, next)
-    persistHistories()
-  }
-
-  function deleteHistoryEntry(toolId: ManualToolId, entryId: string): void {
-    const current = histories[toolId] ?? []
-    const next = current.filter((item) => item.id !== entryId)
-    batch(() => {
-      setHistories(toolId, next)
-      if (ui.selectedHistoryByTool[toolId] === entryId) {
-        setUi("selectedHistoryByTool", toolId, next[0]?.id)
+      const target = serverTarget()
+      const data = await cyberlabFetch<ArsenalOverviewDto>(
+        target,
+        forceProbe ? "/api/cyberlab/arsenal/probe" : "/api/cyberlab/arsenal",
+        forceProbe ? { method: "POST", body: "{}" } : undefined,
+      )
+      setBackend("arsenal", reconcile(data))
+      if (forceProbe) {
+        const installedCount = data.slots.filter((s) => s.installed).length
+        setNotice(
+          `Varredura concluída: ${installedCount}/${data.slots.length} slots prontos (${data.environment.wslAvailable ? `WSL2: ${data.environment.preferredWslDistro}` : "Windows Nativo"}).`,
+        )
       }
-    })
-    persistHistories()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
   }
 
-  function clearToolHistory(toolId: ManualToolId): void {
-    batch(() => {
-      setHistories(toolId, [])
-      setUi("selectedHistoryByTool", toolId, undefined)
-    })
-    persistHistories()
-    setNotice(`Histórico de ${getToolMeta(toolId).shortTitle} limpo.`)
+  async function browseFiles(subpath = ui.currentFilesDir): Promise<void> {
+    try {
+      const res = await cyberlabFetch<WorkspaceFilesListDto>(serverTarget(), "/api/cyberlab/files/list", {
+        method: "POST",
+        body: JSON.stringify({ subpath }),
+      })
+      batch(() => {
+        setUi("currentFilesDir", res.currentDir)
+        setBackend("files", reconcile(res.entries))
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
   }
 
-  function restoreHistoryDraft(entry: ToolHistoryEntry): void {
-    if (!entry.draftSnapshot) return
-    const defaults = createDefaultToolDrafts()[entry.toolId]
-    const merged = { ...defaults, ...entry.draftSnapshot }
-    const loc = findSuiteAndFunctionForTool(entry.toolId)
-    batch(() => {
-      setDrafts(entry.toolId, reconcile(merged as never))
-      setUi("activeSuiteId", loc.suiteId)
-      setUi("activeFunctionBySuite", loc.suiteId, loc.functionId)
-      setUi("activeEngineByFunction", `${loc.suiteId}:${loc.functionId}`, entry.toolId)
-      setUi("activeToolId", entry.toolId)
-      setUi("selectedHistoryByTool", entry.toolId, entry.id)
-    })
-    persistUi()
-    persistDrafts()
-    setNotice(`Parâmetros de "${entry.targetSummary}" carregados na ferramenta.`)
+  async function previewFile(relativePath: string): Promise<void> {
+    try {
+      const res = await cyberlabFetch<WorkspaceFilePreviewDto>(serverTarget(), "/api/cyberlab/files/preview", {
+        method: "POST",
+        body: JSON.stringify({ relativePath }),
+      })
+      setBackend("filePreview", res)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
   }
 
-  async function refreshBackend(): Promise<void> {
+  async function refreshAll(): Promise<void> {
     setBackend("loading", true)
-    const target = serverTarget()
     try {
-      const [status, approvals, executions, evidence, findings, proxy, partners, external, projectsAndLabs, artifacts] =
+      const target = serverTarget()
+      const [status, arsenal, filesRes, approvals, evidence, findings, partners, projectsAndLabs] =
         await Promise.all([
           cyberlabFetch<WorkspaceStatusDto>(target, "/api/cyberlab/status").catch(() => null),
+          cyberlabFetch<ArsenalOverviewDto>(target, "/api/cyberlab/arsenal").catch(() => null),
+          cyberlabFetch<WorkspaceFilesListDto>(target, "/api/cyberlab/files/list", {
+            method: "POST",
+            body: JSON.stringify({ subpath: ui.currentFilesDir || "." }),
+          }).catch(() => null),
           cyberlabFetch<ApprovalDto[]>(target, "/api/cyberlab/approvals").catch(() => []),
-          cyberlabFetch<ExecutionDto[]>(target, "/api/cyberlab/executions").catch(() => []),
           cyberlabFetch<EvidenceDto[]>(target, "/api/cyberlab/evidence").catch(() => []),
           cyberlabFetch<FindingDto[]>(target, "/api/cyberlab/findings").catch(() => []),
-          cyberlabFetch<ProxyOverviewDto>(target, "/api/cyberlab/proxy").catch(() => null),
           cyberlabFetch<PartnersOverviewDto>(target, "/api/cyberlab/partners").catch(() => null),
-          cyberlabFetch<ExternalToolsOverviewDto>(target, "/api/cyberlab/external/tools").catch(() => null),
           cyberlabFetch<ProjectsAndLabsOverviewDto>(target, "/api/cyberlab/projects").catch(() => null),
-          cyberlabFetch<ImportedArtifactDto[]>(target, "/api/cyberlab/artifacts").catch(() => []),
         ])
+
       batch(() => {
         if (status) setBackend("status", reconcile(status))
+        if (arsenal) {
+          setBackend("arsenal", reconcile(arsenal))
+          // Seed default args for CLI slots on first load
+          for (const slot of arsenal.slots) {
+            if (!ui.cliArgsBySlot[slot.slotId] && slot.presets[0]?.argsTemplate) {
+              setUi("cliArgsBySlot", slot.slotId, slot.presets[0].argsTemplate)
+            }
+          }
+        }
+        if (filesRes) {
+          setUi("currentFilesDir", filesRes.currentDir)
+          setBackend("files", reconcile(filesRes.entries))
+        }
         setBackend("approvals", reconcile(approvals))
-        setBackend("executions", reconcile(executions))
         setBackend("evidence", reconcile(evidence))
         setBackend("findings", reconcile(findings))
-        if (proxy) setBackend("proxy", reconcile(proxy))
         if (partners) setBackend("partners", reconcile(partners))
-        if (external) setBackend("external", reconcile(external))
         if (projectsAndLabs) setBackend("projectsAndLabs", reconcile(projectsAndLabs))
-        setBackend("importedArtifacts", reconcile(artifacts))
       })
     } finally {
       setBackend("loading", false)
     }
   }
 
-  async function readEvidenceText(evidenceIds: string[]): Promise<{ combinedText: string; firstSha256?: string }> {
-    const target = serverTarget()
-    const chunks: string[] = []
-    let firstSha256: string | undefined
-    for (const evId of evidenceIds) {
-      try {
-        const ev = await cyberlabFetch<ReadEvidenceDto>(target, "/api/cyberlab/evidence/read", {
-          method: "POST",
-          body: JSON.stringify({ evidenceId: evId }),
-        })
-        if (!firstSha256) firstSha256 = ev.sha256
-        chunks.push(
-          evidenceIds.length > 1
-            ? `=== Evidência ${ev.evidenceId} (${ev.title}) [SHA-256: ${ev.sha256}] ===\n${ev.text}`
-            : ev.text,
-        )
-      } catch (err) {
-        chunks.push(`Erro ao ler evidência ${evId}: ${err instanceof Error ? err.message : String(err)}`)
+  function openWorkspace(options?: { slotId?: string; view?: CenterViewMode; leftTab?: LeftSidebarTab }) {
+    batch(() => {
+      setUi("open", true)
+      if (options?.slotId) {
+        setUi("activeSlotId", options.slotId)
+        setUi("centerView", "tool")
       }
-    }
-    return { combinedText: chunks.join("\n\n"), firstSha256 }
-  }
-
-  async function runCapabilityTool(toolId: ManualToolId): Promise<void> {
-    setUi("error", "")
-    setUi("notice", "")
-    const snapshot = JSON.parse(JSON.stringify(drafts[toolId])) as Record<string, unknown>
-
-    // Special multi-port sequential convenience mode for Sonda TCP
-    if (toolId === "tcp-probe" && drafts["tcp-probe"].useMultiPort && !drafts["tcp-probe"].useRawJson) {
-      const d = drafts["tcp-probe"]
-      const ports = d.multiPortList
-        .split(/[\s,;]+/)
-        .map((p) => Number.parseInt(p.trim(), 10))
-        .filter((p) => Number.isInteger(p) && p >= 1 && p <= 65535)
-        .slice(0, 25)
-      if (ports.length === 0) {
-        setError("Informe ao menos uma porta válida (1–65535) na lista multi-portas.")
-        return
-      }
-      const startedAt = Date.now()
-      const entryId = `hist-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-      recordHistoryEntry(toolId, {
-        id: entryId,
-        toolId,
-        capabilityId: "network-assessment.tcp-surface-probe",
-        timestamp: new Date().toISOString(),
-        targetSummary: `TCP Multi ${d.host.trim()} [${ports.join(",")}]`,
-        status: "running",
-        evidenceIds: [],
-        summaryText: `Sondando ${ports.length} portas em ${d.host.trim()}...`,
-        outputText: "",
-        draftSnapshot: snapshot,
-      })
-      setUi("runningToolId", toolId)
-      try {
-        const target = serverTarget()
-        const lines: string[] = []
-        const allEvIds: string[] = []
-        let firstSha: string | undefined
-        for (const p of ports) {
-          const exec = await cyberlabFetch<ExecutionDto>(target, "/api/cyberlab/executions", {
-            method: "POST",
-            body: JSON.stringify({
-              capabilityId: "network-assessment.tcp-surface-probe",
-              mode: d.executionMode,
-              input: {
-                host: d.host.trim(),
-                port: p,
-                connectTimeoutMs: Math.min(5000, Math.max(100, Math.trunc(Number(d.connectTimeoutMs) || 1500))),
-                bannerWaitMs: Math.min(1000, Math.max(20, Math.trunc(Number(d.bannerWaitMs) || 250))),
-              },
-            }),
-          })
-          allEvIds.push(...exec.evidenceIds)
-          if (exec.evidenceIds.length > 0) {
-            const { combinedText, firstSha256 } = await readEvidenceText(exec.evidenceIds)
-            if (!firstSha && firstSha256) firstSha = firstSha256
-            lines.push(`--- Porta ${p} (${exec.status}) ---\n${combinedText}`)
-          } else {
-            lines.push(
-              `--- Porta ${p} (${exec.status}) ---\n${exec.error?.message || exec.policyReason || "Sem evidência gerada"}`,
-            )
-          }
-        }
-        updateHistoryEntry(toolId, entryId, {
-          status: "succeeded",
-          durationMs: Date.now() - startedAt,
-          evidenceIds: allEvIds,
-          sha256: firstSha,
-          summaryText: `${ports.length} portas testadas (${allEvIds.length} evidências SHA-256)`,
-          outputText: lines.join("\n\n"),
-        })
-        setNotice(`Varredura TCP concluída (${ports.length} portas).`)
-        await refreshBackend()
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        updateHistoryEntry(toolId, entryId, {
-          status: "failed",
-          durationMs: Date.now() - startedAt,
-          summaryText: msg,
-          outputText: msg,
-        })
-        setError(msg)
-      } finally {
-        setUi("runningToolId", null)
-      }
-      return
-    }
-
-    let built: ReturnType<typeof buildCapabilityInput>
-    try {
-      built = buildCapabilityInput(toolId, drafts)
-    } catch (err) {
-      setError(`Parâmetros inválidos: ${err instanceof Error ? err.message : String(err)}`)
-      return
-    }
-
-    const startedAt = Date.now()
-    const entryId = `hist-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-    recordHistoryEntry(toolId, {
-      id: entryId,
-      toolId,
-      capabilityId: built.capabilityId,
-      timestamp: new Date().toISOString(),
-      targetSummary: built.targetSummary,
-      status: "running",
-      evidenceIds: [],
-      summaryText: "Executando...",
-      outputText: "",
-      draftSnapshot: snapshot,
-      rawInputPayload: built.input,
-    })
-
-    setUi("runningToolId", toolId)
-    try {
-      const target = serverTarget()
-      const exec = await cyberlabFetch<ExecutionDto>(target, "/api/cyberlab/executions", {
-        method: "POST",
-        body: JSON.stringify({
-          capabilityId: built.capabilityId,
-          mode: built.mode,
-          input: built.input,
-        }),
-      })
-      setUi("runningExecutionId", exec.executionId)
-      await refreshBackend()
-
-      if (exec.status === "queued") {
-        const matchingApproval = backend.approvals.find((a) => a.executionId === exec.executionId)
-        updateHistoryEntry(toolId, entryId, {
-          status: "queued",
-          durationMs: Date.now() - startedAt,
-          executionId: exec.executionId,
-          approvalId: matchingApproval?.approvalId,
-          evidenceIds: exec.evidenceIds,
-          summaryText: exec.policyReason || "Aguardando aprovação humana em 1 clique",
-          outputText: JSON.stringify(
-            {
-              status: "queued_for_human_approval",
-              executionId: exec.executionId,
-              approvalId: matchingApproval?.approvalId,
-              reason: exec.policyReason,
-              input: built.input,
-            },
-            null,
-            2,
-          ),
-        })
-        setNotice("Execução enfileirada para confirmação humana. Clique em 'Aprovar & Executar Agora' no resultado.")
-        return
-      }
-
-      if (exec.status !== "succeeded") {
-        const reason = exec.error?.message || exec.policyReason || `Execução terminou com status: ${exec.status}`
-        updateHistoryEntry(toolId, entryId, {
-          status: exec.status === "cancelled" ? "cancelled" : "failed",
-          durationMs: Date.now() - startedAt,
-          executionId: exec.executionId,
-          evidenceIds: exec.evidenceIds,
-          summaryText: reason,
-          outputText: JSON.stringify(exec, null, 2),
-        })
-        setError(reason)
-        return
-      }
-
-      const { combinedText, firstSha256 } = await readEvidenceText(exec.evidenceIds)
-      updateHistoryEntry(toolId, entryId, {
-        status: "succeeded",
-        durationMs: Date.now() - startedAt,
-        executionId: exec.executionId,
-        evidenceIds: exec.evidenceIds,
-        sha256: firstSha256,
-        summaryText: `Concluído (${exec.evidenceIds.length} evidência(s) SHA-256)`,
-        outputText: combinedText || JSON.stringify(exec, null, 2),
-      })
-      setNotice(`Execução concluída com sucesso em ${Date.now() - startedAt} ms.`)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      updateHistoryEntry(toolId, entryId, {
-        status: "failed",
-        durationMs: Date.now() - startedAt,
-        summaryText: msg,
-        outputText: msg,
-      })
-      setError(msg)
-    } finally {
-      setUi("runningToolId", null)
-      setUi("runningExecutionId", null)
-    }
-  }
-
-  async function approvePendingExecution(approvalId: string, relatedHistory?: ToolHistoryEntry): Promise<void> {
-    setUi("error", "")
-    const startedAt = Date.now()
-    try {
-      const target = serverTarget()
-      const exec = await cyberlabFetch<ExecutionDto>(target, "/api/cyberlab/executions/approve", {
-        method: "POST",
-        body: JSON.stringify({
-          approvalId,
-          decidedBy: "manual-workbench-operator",
-          reason: "Aprovado manualmente pelo operador na Bancada CyberLab OS",
-        }),
-      })
-      const { combinedText, firstSha256 } = await readEvidenceText(exec.evidenceIds)
-      if (relatedHistory) {
-        updateHistoryEntry(relatedHistory.toolId, relatedHistory.id, {
-          status: exec.status === "succeeded" ? "succeeded" : "failed",
-          durationMs: Date.now() - startedAt,
-          executionId: exec.executionId,
-          evidenceIds: exec.evidenceIds,
-          sha256: firstSha256,
-          summaryText:
-            exec.status === "succeeded"
-              ? `Aprovado e concluído (${exec.evidenceIds.length} evidência(s))`
-              : exec.error?.message || exec.policyReason || exec.status,
-          outputText: combinedText || JSON.stringify(exec, null, 2),
-        })
-      }
-      setNotice(`Ticket ${approvalId.slice(0, 8)} aprovado e executado (${exec.status}).`)
-      await refreshBackend()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  async function cancelExecution(executionId: string): Promise<void> {
-    try {
-      await cyberlabFetch(serverTarget(), "/api/cyberlab/executions/cancel", {
-        method: "POST",
-        body: JSON.stringify({ executionId, reason: "Cancelado pelo operador na Bancada Manual" }),
-      })
-      setNotice(`Execução ${executionId.slice(0, 8)} cancelada.`)
-      await refreshBackend()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  async function controlProxy(
-    action: "start" | "stop" | "clear" | "set_scope_only" | "set_https_mode",
-    overrideHttpsMode?: "tls_intercept" | "tunnel_passthrough",
-  ): Promise<void> {
-    const d = drafts["http-proxy"]
-    const nextHttpsMode = overrideHttpsMode ?? d.httpsMode
-    try {
-      const res = await cyberlabFetch<ProxyOverviewDto>(serverTarget(), "/api/cyberlab/proxy/control", {
-        method: "POST",
-        body: JSON.stringify({
-          action,
-          port: Math.min(65535, Math.max(1024, Math.trunc(Number(d.port) || 8899))),
-          scopeOnly: action === "set_scope_only" ? !backend.proxy?.status.scopeOnly : d.scopeOnly,
-          httpsMode: nextHttpsMode,
-          allowSelfSignedUpstream: d.allowSelfSignedUpstream,
-        }),
-      })
-      setBackend("proxy", reconcile(res))
-      if (res.status.httpsMode) {
-        updateDraft("http-proxy", (prev) => ({ ...prev, httpsMode: res.status.httpsMode! }))
-      }
-      recordHistoryEntry("http-proxy", {
-        id: `proxy-${Date.now()}`,
-        toolId: "http-proxy",
-        timestamp: new Date().toISOString(),
-        targetSummary: `Proxy ${action.toUpperCase()} (${res.status.listenHost}:${res.status.listenPort ?? d.port})`,
-        status: "succeeded",
-        evidenceIds: [],
-        summaryText: res.status.running
-          ? `Ativo em http://${res.status.listenHost}:${res.status.listenPort} [${res.status.httpsMode ?? "tls_intercept"}] (${res.history.length} capturas)`
-          : "Proxy parado",
-        outputText: JSON.stringify(res.status, null, 2),
-        draftSnapshot: JSON.parse(JSON.stringify(d)) as Record<string, unknown>,
-      })
-      setNotice(
-        res.status.running
-          ? `Proxy HTTP/HTTPS/WS ativo em http://${res.status.listenHost}:${res.status.listenPort} (${res.status.httpsMode === "tunnel_passthrough" ? "Túnel CONNECT" : "TLS MITM c/ Root CA"})`
-          : "Proxy HTTP/HTTPS atualizado.",
-      )
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  function downloadProxyRootCaCert(): void {
-    const pem = backend.proxy?.status.caCertPem
-    if (!pem) {
-      setError("Inicie o Proxy ao menos uma vez ou atualize o painel para gerar a Root CA local.")
-      return
-    }
-    const blob = new Blob([pem], { type: "application/x-x509-ca-cert" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "cyberlab-root-ca.crt"
-    a.click()
-    URL.revokeObjectURL(url)
-    setNotice("Certificado cyberlab-root-ca.crt exportado! Importe no navegador/sistema para inspecionar HTTPS.")
-  }
-
-  async function persistProxyCapture(entry: ProxyHistoryEntryDto): Promise<void> {
-    try {
-      const res = await cyberlabFetch<{ evidenceId: string; sha256: string }>(
-        serverTarget(),
-        "/api/cyberlab/proxy/persist",
-        {
-          method: "POST",
-          body: JSON.stringify({ entryId: entry.entryId }),
-        },
-      )
-      recordHistoryEntry("http-proxy", {
-        id: `proxy-ev-${Date.now()}`,
-        toolId: "http-proxy",
-        timestamp: new Date().toISOString(),
-        targetSummary: `${entry.method} ${entry.url} → ${entry.statusCode}`,
-        status: "succeeded",
-        evidenceIds: [res.evidenceId],
-        sha256: res.sha256,
-        summaryText: `Evidência gravada (${res.evidenceId.slice(0, 12)})`,
-        outputText: JSON.stringify(entry, null, 2),
-        draftSnapshot: JSON.parse(JSON.stringify(drafts["http-proxy"])) as Record<string, unknown>,
-      })
-      setNotice(`Captura gravada no cofre SHA-256 (${res.sha256.slice(0, 16)}…).`)
-      await refreshBackend()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  async function refreshProxyOnly(): Promise<void> {
-    try {
-      const proxy = await cyberlabFetch<ProxyOverviewDto>(serverTarget(), "/api/cyberlab/proxy")
-      if (proxy) setBackend("proxy", reconcile(proxy))
-    } catch {
-      // Ignore background poll glitches
-    }
-  }
-
-  async function controlProxyAdvanced(
-    payload: Record<string, unknown>,
-    customNotice?: string,
-  ): Promise<ProxyOverviewDto | null> {
-    try {
-      const res = await cyberlabFetch<ProxyOverviewDto>(serverTarget(), "/api/cyberlab/proxy/control", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      })
-      setBackend("proxy", reconcile(res))
-      if (res.browserLaunchResult) {
-        setBackend("lastBrowserLaunch", reconcile(res.browserLaunchResult))
-      }
-      if (customNotice) setNotice(customNotice)
-      return res
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-      return null
-    }
-  }
-
-  async function launchProxyBrowser(startUrl?: string, preferredBrowserId?: string): Promise<void> {
-    const d = drafts["http-proxy"]
-    const res = await controlProxyAdvanced({
-      action: "launch_browser",
-      port: Math.min(65535, Math.max(1024, Math.trunc(Number(d.port) || 8899))),
-      startUrl: (startUrl ?? d.browserStartUrl ?? "").trim() || "http://cyberlab.proxy/",
-      ...(preferredBrowserId ?? d.preferredBrowserId
-        ? { preferredBrowserId: preferredBrowserId ?? d.preferredBrowserId }
-        : {}),
-    })
-    if (res?.browserLaunchResult) {
-      setNotice(res.browserLaunchResult.message)
-    }
-  }
-
-  async function fetchLiveProxyReplay(entry: ProxyHistoryEntryDto): Promise<ProxyReplayBundleDto | null> {
-    try {
-      return await cyberlabFetch<ProxyReplayBundleDto>(serverTarget(), "/api/cyberlab/proxy/replay", {
-        method: "POST",
-        body: JSON.stringify({ entryId: entry.entryId }),
-      })
-    } catch {
-      return null
-    }
-  }
-
-  function sendProxyCaptureToRepeater(entry: ProxyHistoryEntryDto): void {
-    void (async () => {
-      const live = await fetchLiveProxyReplay(entry)
-      const srcHeaders = live?.headers ?? entry.requestHeaders ?? {}
-      const headerRows: KeyValueHeaderRow[] = Object.entries(srcHeaders).map(([name, value], idx) => ({
-        id: `px-h-${idx}-${Date.now()}`,
-        enabled: name.toLowerCase() !== "host" && name.toLowerCase() !== "content-length",
-        name,
-        value,
-      }))
-      const allowedMethods = ["GET", "HEAD", "POST", "PUT" , "PATCH", "DELETE", "OPTIONS"] as const
-      const upper = (live?.method ?? entry.method).toUpperCase()
-      const method = allowedMethods.find((m) => m === upper) ?? "GET"
-      const targetUrl = live?.url ?? entry.url
-      const bodyStr = live?.body ?? entry.requestBody ?? ""
-      const rawHttpText = live?.rawHttpRequest ?? ""
-
-      updateDraft("http-repeater", (prev) => {
-        const existingTabs = prev.tabs && prev.tabs.length > 0 ? [...prev.tabs] : []
-        const newTabId = `rtab-${Date.now()}`
-        let shortHost = targetUrl
-        try {
-          const u = new URL(targetUrl)
-          shortHost = `${method} ${u.pathname.slice(0, 22) || "/"}`
-        } catch {
-          // keep fallback
-        }
-        const createdTab: RepeaterSavedTab = {
-          tabId: newTabId,
-          title: `${existingTabs.length + 1}: ${shortHost}`,
-          method,
-          url: targetUrl,
-          headers: headerRows,
-          body: bodyStr,
-          useRawHttp: false,
-          rawHttpText,
-          followRedirects: Boolean(prev.followRedirects),
-        }
-        return {
-          ...prev,
-          viewMode: "repeater",
-          tabs: [...existingTabs, createdTab].slice(-12),
-          activeTabId: newTabId,
-          method,
-          url: targetUrl,
-          headers: headerRows.length > 0 ? headerRows : prev.headers,
-          body: bodyStr,
-          rawHttpText,
-          useRawJson: false,
-        }
-      })
-      selectTool("http-repeater")
-      setNotice(`Requisição ${method} ${targetUrl} enviada com sessão real ao Repeater!`)
-    })()
-  }
-
-  function sendProxyCaptureToIntruder(entry: ProxyHistoryEntryDto): void {
-    void (async () => {
-      const live = await fetchLiveProxyReplay(entry)
-      const srcHeaders = live?.headers ?? entry.requestHeaders ?? {}
-      const headerRows: KeyValueHeaderRow[] = Object.entries(srcHeaders).map(([name, value], idx) => ({
-        id: `px-i-${idx}-${Date.now()}`,
-        enabled: name.toLowerCase() !== "host" && name.toLowerCase() !== "content-length",
-        name,
-        value,
-      }))
-      const allowedMethods = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] as const
-      const upper = (live?.method ?? entry.method).toUpperCase()
-      const method = allowedMethods.find((m) => m === upper) ?? "GET"
-      const baseUrl = live?.url ?? entry.url
-      const templatedUrl = baseUrl.includes("=")
-        ? baseUrl.replace(/=([^&]*)/, "=§$1§")
-        : `${baseUrl.replace(/\/$/, "")}/§payload§`
-      updateDraft("http-intruder", (prev) => ({
-        ...prev,
-        method,
-        url: templatedUrl,
-        headers: headerRows.length > 0 ? headerRows : prev.headers,
-        bodyTemplate: live?.body ?? entry.requestBody ?? "",
-        useRawJson: false,
-      }))
-      selectTool("http-intruder")
-      setNotice(`Captura enviada com sessão real para o HTTP Intruder (${templatedUrl})!`)
-    })()
-  }
-
-  function sendProxyCaptureToComparer(entry: ProxyHistoryEntryDto, slot: "A" | "B"): void {
-    void (async () => {
-      const live = await fetchLiveProxyReplay(entry)
-      const text = [
-        `HTTP ${live?.responseStatusCode ?? entry.statusCode} — ${entry.method} ${entry.url}`,
-        ...Object.entries(live?.responseHeaders ?? entry.responseHeaders ?? {}).map(([k, v]) => `${k}: ${v}`),
-        "",
-        live?.responseBody ?? entry.responseBody ?? "",
-      ].join("\n")
-      updateDraft("http-repeater", (prev) => ({
-        ...prev,
-        viewMode: "comparer",
-        ...(slot === "A"
-          ? { comparerTextA: text, comparerLabelA: `${entry.method} ${entry.path} (${entry.statusCode})` }
-          : { comparerTextB: text, comparerLabelB: `${entry.method} ${entry.path} (${entry.statusCode})` }),
-      }))
-      selectTool("http-repeater")
-      setNotice(`Resposta carregada no Comparer — Item ${slot}!`)
-    })()
-  }
-
-  async function copyProxyCaptureAsCurl(entry: ProxyHistoryEntryDto): Promise<void> {
-    const live = await fetchLiveProxyReplay(entry)
-    const curl = live?.curlCommand || `curl -i -k -X ${entry.method} '${entry.url}'`
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      await navigator.clipboard.writeText(curl)
-      setNotice("Comando cURL copiado para a área de transferência!")
-    }
-  }
-
-  function addRepeaterTab(): void {
-    updateDraft("http-repeater", (prev) => {
-      const currentTabs = prev.tabs && prev.tabs.length > 0 ? [...prev.tabs] : []
-      // Save active tab first if present
-      const synced = currentTabs.map((t) =>
-        t.tabId === prev.activeTabId
-          ? {
-              ...t,
-              method: prev.method,
-              url: prev.url,
-              headers: prev.headers,
-              body: prev.body,
-              useRawHttp: prev.useRawHttp,
-              rawHttpText: prev.rawHttpText,
-              followRedirects: prev.followRedirects,
-            }
-          : t,
-      )
-      const newTabId = `rtab-${Date.now()}`
-      const nextNum = synced.length + 1
-      const newTab: RepeaterSavedTab = {
-        tabId: newTabId,
-        title: `Tab ${nextNum}`,
-        method: prev.method,
-        url: prev.url,
-        headers: JSON.parse(JSON.stringify(prev.headers)) as KeyValueHeaderRow[],
-        body: prev.body,
-        useRawHttp: prev.useRawHttp,
-        rawHttpText: prev.rawHttpText,
-        followRedirects: prev.followRedirects,
-      }
-      return {
-        ...prev,
-        viewMode: "repeater",
-        tabs: [...synced, newTab].slice(-12),
-        activeTabId: newTabId,
+      if (options?.view) setUi("centerView", options.view)
+      if (options?.leftTab) {
+        setUi("leftSidebarOpen", true)
+        setUi("leftSidebarTab", options.leftTab)
       }
     })
+    persistUi()
+    void refreshAll()
   }
 
-  function switchRepeaterTab(targetTabId: string): void {
-    updateDraft("http-repeater", (prev) => {
-      const currentTabs = prev.tabs ?? []
-      const synced = currentTabs.map((t) =>
-        t.tabId === prev.activeTabId
-          ? {
-              ...t,
-              method: prev.method,
-              url: prev.url,
-              headers: prev.headers,
-              body: prev.body,
-              useRawHttp: prev.useRawHttp,
-              rawHttpText: prev.rawHttpText,
-              followRedirects: prev.followRedirects,
-            }
-          : t,
-      )
-      const chosen = synced.find((t) => t.tabId === targetTabId)
-      if (!chosen) return prev
-      return {
-        ...prev,
-        viewMode: "repeater",
-        tabs: synced,
-        activeTabId: chosen.tabId,
-        method: chosen.method,
-        url: chosen.url,
-        headers: chosen.headers,
-        body: chosen.body,
-        useRawHttp: Boolean(chosen.useRawHttp),
-        rawHttpText: chosen.rawHttpText ?? "",
-        followRedirects: Boolean(chosen.followRedirects),
+  function toggleWorkbench(next?: boolean) {
+    setUi("open", next ?? !ui.open)
+    persistUi()
+    if (ui.open) void refreshAll()
+  }
+
+  function toggleLeftSidebar(next?: boolean) {
+    setUi("leftSidebarOpen", next ?? !ui.leftSidebarOpen)
+    persistUi()
+  }
+
+  function setLeftSidebarTab(tab: LeftSidebarTab) {
+    batch(() => {
+      setUi("leftSidebarOpen", true)
+      setUi("leftSidebarTab", tab)
+    })
+    persistUi()
+  }
+
+  function setLeftSidebarWidth(width: number) {
+    setUi("leftSidebarWidth", Math.min(440, Math.max(210, Math.round(width))))
+    persistUi()
+  }
+
+  function toggleRightAgent(next?: boolean) {
+    setUi("rightAgentOpen", next ?? !ui.rightAgentOpen)
+    persistUi()
+  }
+
+  function setRightAgentWidth(width: number) {
+    setUi("rightAgentWidth", Math.min(620, Math.max(300, Math.round(width))))
+    persistUi()
+  }
+
+  function setCenterView(view: CenterViewMode) {
+    setUi("centerView", view)
+    persistUi()
+  }
+
+  function selectSlot(slotId: string) {
+    batch(() => {
+      setUi("open", true)
+      setUi("activeSlotId", slotId)
+      setUi("centerView", "tool")
+      const slot = backend.arsenal?.slots.find((s) => s.slotId === slotId)
+      if (slot && !ui.cliArgsBySlot[slotId] && slot.presets[0]?.argsTemplate) {
+        setUi("cliArgsBySlot", slotId, slot.presets[0].argsTemplate)
       }
     })
+    persistUi()
   }
 
-  function closeRepeaterTab(targetTabId: string): void {
-    updateDraft("http-repeater", (prev) => {
-      const remaining = (prev.tabs ?? []).filter((t) => t.tabId !== targetTabId)
-      if (remaining.length === 0) {
-        return { ...prev, tabs: [], activeTabId: "" }
-      }
-      if (prev.activeTabId === targetTabId) {
-        const nextActive = remaining[remaining.length - 1]!
-        return {
-          ...prev,
-          tabs: remaining,
-          activeTabId: nextActive.tabId,
-          method: nextActive.method,
-          url: nextActive.url,
-          headers: nextActive.headers,
-          body: nextActive.body,
-          useRawHttp: Boolean(nextActive.useRawHttp),
-          rawHttpText: nextActive.rawHttpText ?? "",
-          followRedirects: Boolean(nextActive.followRedirects),
-        }
-      }
-      return { ...prev, tabs: remaining }
-    })
-  }
-
-  function importCurlIntoRepeater(rawCurl: string): void {
-    const clean = rawCurl.replace(/\\\r?\n/g, " ").trim()
-    if (!clean) return
-    const urlMatch = /(https?:\/\/[^\s'"]+)/i.exec(clean)
-    const methodMatch = /(?:-X|--request)\s+['"]?([A-Z]+)['"]?/i.exec(clean)
-    const headerRegex = /(?:-H|--header)\s+(['"])(.*?)\1/gi
-    const dataMatch = /(?:--data-raw|--data|-d)\s+(['"])([\s\S]*?)\1/i.exec(clean)
-
-    const headers: KeyValueHeaderRow[] = []
-    let idx = 0
-    for (const m of clean.matchAll(headerRegex)) {
-      const fullHdr = m[2] ?? ""
-      const cIdx = fullHdr.indexOf(":")
-      if (cIdx > 0) {
-        headers.push({
-          id: `curl-h-${idx++}-${Date.now()}`,
-          enabled: true,
-          name: fullHdr.slice(0, cIdx).trim(),
-          value: fullHdr.slice(cIdx + 1).trim(),
-        })
-      }
-    }
-
-    const allowedMethods = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] as const
-    const parsedMethod = (methodMatch?.[1] || (dataMatch ? "POST" : "GET")).toUpperCase()
-    const method = allowedMethods.find((m) => m === parsedMethod) ?? "GET"
-
-    updateDraft("http-repeater", (prev) => ({
-      ...prev,
-      viewMode: "repeater",
-      useRawHttp: false,
-      method,
-      ...(urlMatch?.[1] ? { url: urlMatch[1] } : {}),
-      ...(headers.length > 0 ? { headers } : {}),
-      body: dataMatch?.[2] ?? prev.body,
-      curlImportText: "",
-    }))
-    setNotice("Comando cURL importado para o Repeater!")
-  }
-
-  async function dispatchCdiMission(): Promise<void> {
-    const d = drafts["cdi-hub"]
-    if (d.selectedPartnerIds.length === 0) {
-      setError("Selecione ao menos um parceiro CDI (ex.: Kairós, Naia, Salem ou Nova).")
-      return
-    }
-    if (!d.objective.trim()) {
-      setError("Informe o tema, hipótese ou questão para colaboração partilhada com os parceiros CDI.")
-      return
-    }
-    const startedAt = Date.now()
-    const entryId = `cdi-${Date.now()}`
-    const snapshot = JSON.parse(JSON.stringify(d)) as Record<string, unknown>
-    recordHistoryEntry("cdi-hub", {
-      id: entryId,
-      toolId: "cdi-hub",
-      timestamp: new Date().toISOString(),
-      targetSummary: `${d.selectedPartnerIds.join(", ")} — ${d.objective.trim().slice(0, 60)}`,
-      status: "running",
-      evidenceIds: [],
-      summaryText: "Aguardando perspetivas assinadas HMAC-SHA256 dos parceiros CDI...",
-      outputText: "",
-      draftSnapshot: snapshot,
-    })
-    setUi("runningToolId", "cdi-hub")
-    try {
-      const res = await cyberlabFetch<DispatchPartnersResultDto>(serverTarget(), "/api/cyberlab/partners/dispatch", {
-        method: "POST",
-        body: JSON.stringify({
-          partnerIds: d.selectedPartnerIds,
-          objective: d.objective.trim(),
-          evidenceIds: d.selectedEvidenceIds.length > 0 ? d.selectedEvidenceIds : undefined,
-          contextText: d.contextText.trim() || undefined,
-          timeoutMs: Math.min(120000, Math.max(1000, Math.trunc(Number(d.timeoutMs) || 30000))),
-        }),
-      })
-      const evIds = res.results.map((r) => r.outcome?.rawEvidenceId).filter((x): x is string => Boolean(x))
-      const formatted = res.results
-        .map(
-          (r) =>
-            `### ${r.displayName} (${r.partnerId}) — ${r.ok ? "PARCERIA OK" : "OFFLINE / FALHA"} (${r.durationMs} ms)\n${
-              r.ok ? r.outcome?.result?.summary || "(sem síntese textual)" : r.error || "Falha de conexão"
-            }`,
-        )
-        .join("\n\n")
-      updateHistoryEntry("cdi-hub", entryId, {
-        status: res.succeededCount > 0 ? "succeeded" : "failed",
-        durationMs: Date.now() - startedAt,
-        evidenceIds: evIds,
-        summaryText: `${res.succeededCount}/${res.totalDispatched} parceiro(s) CDI colaboraram (${res.mode})`,
-        outputText: formatted || JSON.stringify(res, null, 2),
-      })
-      setNotice(`Colaboração CDI concluída: ${res.succeededCount}/${res.totalDispatched} parceiro(s) responderam.`)
-      await refreshBackend()
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      updateHistoryEntry("cdi-hub", entryId, {
-        status: "failed",
-        durationMs: Date.now() - startedAt,
-        summaryText: msg,
-        outputText: msg,
-      })
-      setError(msg)
-    } finally {
-      setUi("runningToolId", null)
-    }
-  }
-
-  async function ingestManualExternal(): Promise<void> {
-    const d = drafts["external-ingest"]
-    if (!d.rawOutput.trim()) {
-      setError("Cole a saída da ferramenta externa ou carregue um arquivo antes de ingerir.")
-      return
-    }
-    const startedAt = Date.now()
-    const snapshot = JSON.parse(JSON.stringify(d)) as Record<string, unknown>
-    try {
-      const res = await cyberlabFetch<{
-        evidenceId: string
-        sha256: string
-        targetInScope: boolean
-        scopeReason: string
-      }>(serverTarget(), "/api/cyberlab/external/ingest", {
-        method: "POST",
-        body: JSON.stringify({
-          toolId: d.toolId.trim() || "custom",
-          title: d.title.trim() || undefined,
-          origin: d.origin.trim() || "manual_gui_export",
-          target: d.target.trim() || undefined,
-          commandSummary: d.commandSummary.trim() || undefined,
-          mediaType: d.mediaType.trim() || "text/plain",
-          rawOutput: d.rawOutput,
-        }),
-      })
-      recordHistoryEntry("external-ingest", {
-        id: `ing-${Date.now()}`,
-        toolId: "external-ingest",
-        timestamp: new Date().toISOString(),
-        targetSummary: `${d.toolId}: ${d.title || d.target || "Artefato externo"}`,
-        status: "succeeded",
-        durationMs: Date.now() - startedAt,
-        evidenceIds: [res.evidenceId],
-        sha256: res.sha256,
-        summaryText: `Gravado no EvidenceStore (SHA-256: ${res.sha256.slice(0, 16)}…)`,
-        outputText: JSON.stringify(res, null, 2),
-        draftSnapshot: snapshot,
-      })
-      setNotice(`Saída externa ingerida com custódia SHA-256 (${res.evidenceId.slice(0, 12)}).`)
-      await refreshBackend()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  async function syncExternalInbox(): Promise<void> {
-    try {
-      const res = await cyberlabFetch<{ ingestedCount: number; evidenceIds: string[] }>(
-        serverTarget(),
-        "/api/cyberlab/external/sync",
-        { method: "POST", body: JSON.stringify({}) },
-      )
-      recordHistoryEntry("external-ingest", {
-        id: `sync-${Date.now()}`,
-        toolId: "external-ingest",
-        timestamp: new Date().toISOString(),
-        targetSummary: "Sincronização .cyberlab/inbox",
-        status: "succeeded",
-        evidenceIds: res.evidenceIds ?? [],
-        summaryText: `${res.ingestedCount} arquivo(s) sincronizado(s) da inbox`,
-        outputText: JSON.stringify(res, null, 2),
-        draftSnapshot: JSON.parse(JSON.stringify(drafts["external-ingest"])) as Record<string, unknown>,
-      })
-      setNotice(`Inbox sincronizada: ${res.ingestedCount} arquivo(s) importado(s).`)
-      await refreshBackend()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  async function updateScopeRules(patch: {
-    name?: string
-    allowExternalTargets?: boolean
-    allowedTargets?: ScopeRuleDto[]
-    blockedTargets?: ScopeRuleDto[]
-    engagement?: EngagementProfileDto
+  async function launchSlot(params: {
+    slotId: string
+    action: "run_cli" | "launch_desktop" | "start_web" | "stop_web" | "install_tool"
+    target?: string
+    rawArgs?: string
+    runtimeOverride?: "windows" | "wsl" | "linux_mac"
   }): Promise<void> {
+    setUi("busy", true)
     try {
-      await cyberlabFetch(serverTarget(), "/api/cyberlab/scope", {
+      const res = await cyberlabFetch<ArsenalLaunchResultDto>(serverTarget(), "/api/cyberlab/arsenal/launch", {
+        method: "POST",
+        body: JSON.stringify(params),
+      })
+      batch(() => {
+        setBackend("arsenal", reconcile(res.overview))
+        if (res.run) {
+          setUi("selectedRunIdBySlot", params.slotId, res.run.runId)
+        }
+        if (res.embedUrl) {
+          setUi("iframeReloadNonce", (n) => n + 1)
+        }
+        if (res.ok) setNotice(res.message)
+        else setError(res.message)
+      })
+      void browseFiles(ui.currentFilesDir)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUi("busy", false)
+    }
+  }
+
+  async function stopRun(runId: string): Promise<void> {
+    try {
+      await cyberlabFetch<{ stopped: boolean }>(serverTarget(), "/api/cyberlab/arsenal/stop", {
+        method: "POST",
+        body: JSON.stringify({ runId }),
+      })
+      setNotice(`Execução ${runId} interrompida.`)
+      await refreshArsenalOnly(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function configureArsenal(patch: {
+    toolsRootDir?: string
+    preferredWslDistro?: string
+    enforceScopeOnCliRuns?: boolean
+    slotId?: string
+    slotOverride?: {
+      customExecutablePath?: string
+      customEmbedUrl?: string
+      preferredRuntime?: ArsenalRuntimePrefDto
+      defaultArgs?: string
+      companionProxyPort?: number
+    }
+  }): Promise<void> {
+    setUi("busy", true)
+    try {
+      const updated = await cyberlabFetch<ArsenalOverviewDto>(serverTarget(), "/api/cyberlab/arsenal/config", {
         method: "PUT",
         body: JSON.stringify(patch),
       })
-      setNotice("Escopo e perfil de engajamento salvos (.cyberlab/scope.json).")
-      await refreshBackend()
+      setBackend("arsenal", reconcile(updated))
+      setNotice("Configuração do Arsenal salva com sucesso.")
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUi("busy", false)
     }
   }
 
-  async function importBugBountyScope(): Promise<void> {
-    const d = drafts["scope-governance"]
-    const raw = (d.bountyRawImportText ?? "").trim()
-    if (!raw) {
-      setError("Cole a lista de domínios wildcard (*.alvo.com) ou o JSON exportado do HackerOne / Bugcrowd.")
+  async function upsertCustomSlot(input: {
+    slotId?: string
+    name: string
+    shortLabel?: string
+    kind: ArsenalSlotKindDto
+    tagline?: string
+    description?: string
+    executableOrUrl: string
+    preferredRuntime?: ArsenalRuntimePrefDto
+    companionProxyPort?: number
+    defaultArgsTemplate?: string
+  }): Promise<void> {
+    setUi("busy", true)
+    try {
+      const updated = await cyberlabFetch<ArsenalOverviewDto>(serverTarget(), "/api/cyberlab/arsenal/custom", {
+        method: "POST",
+        body: JSON.stringify(input),
+      })
+      const newest = updated.slots.filter((s) => s.isCustom).at(-1)
+      batch(() => {
+        setBackend("arsenal", reconcile(updated))
+        if (newest) {
+          setUi("activeSlotId", newest.slotId)
+          setUi("centerView", "tool")
+        }
+        setNotice(`Slot personalizado "${input.name}" salvo no Arsenal!`)
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUi("busy", false)
+    }
+  }
+
+  async function removeCustomSlot(slotId: string): Promise<void> {
+    setUi("busy", true)
+    try {
+      const updated = await cyberlabFetch<ArsenalOverviewDto>(
+        serverTarget(),
+        "/api/cyberlab/arsenal/custom/remove",
+        {
+          method: "POST",
+          body: JSON.stringify({ slotId }),
+        },
+      )
+      batch(() => {
+        setBackend("arsenal", reconcile(updated))
+        if (ui.activeSlotId === slotId) {
+          setUi("activeSlotId", updated.slots[0]?.slotId ?? "burp-suite")
+        }
+        setNotice("Slot personalizado removido.")
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUi("busy", false)
+    }
+  }
+
+  async function launchProxyBrowser(params: {
+    proxyPort?: number
+    startUrl?: string
+    preferredBrowserId?: string
+  }): Promise<void> {
+    setUi("busy", true)
+    try {
+      const res = await cyberlabFetch<ProxyBrowserLaunchResultDto>(
+        serverTarget(),
+        "/api/cyberlab/arsenal/browser",
+        {
+          method: "POST",
+          body: JSON.stringify(params),
+        },
+      )
+      setBackend("lastBrowserLaunch", res)
+      if (res.launched) setNotice(res.message)
+      else setError(res.message)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUi("busy", false)
+    }
+  }
+
+  async function persistOutputToEvidence(title: string, content: string, slotId?: string): Promise<void> {
+    if (!content.trim()) {
+      setError("Não há conteúdo para registrar em custódia SHA-256.")
       return
     }
+    setUi("busy", true)
+    try {
+      const savedEv = await cyberlabFetch<{ evidenceId: string; sha256: string }>(
+        serverTarget(),
+        "/api/cyberlab/arsenal/persist",
+        {
+          method: "POST",
+          body: JSON.stringify({ title, content, ...(slotId ? { slotId } : {}) }),
+        },
+      )
+      setNotice(`Registrado em Custódia SHA-256 (${savedEv.evidenceId} · ${savedEv.sha256.slice(0, 14)}…).`)
+      await refreshAll()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUi("busy", false)
+    }
+  }
+
+  async function uploadExternalFile(file: File): Promise<void> {
+    setUi("busy", true)
+    try {
+      const contentBase64 = await fileToBase64(file)
+      const res = await cyberlabFetch<{ relativePath: string }>(
+        serverTarget(),
+        "/api/cyberlab/artifacts/upload",
+        {
+          method: "POST",
+          body: JSON.stringify({ fileName: file.name, contentBase64 }),
+        },
+      )
+      setNotice(`Arquivo "${file.name}" importado em ${res.relativePath}!`)
+      await browseFiles(".cyberlab/imports")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUi("busy", false)
+    }
+  }
+
+  async function importScope(params: {
+    rawInput: string
+    platformHint?: "custom" | "hackerone" | "bugcrowd" | "intigriti" | "yeswehack"
+    researcherHandle?: string
+    headerName?: string
+    headerValue?: string
+    maxRequestsPerSecond?: number
+  }): Promise<void> {
+    setUi("busy", true)
     try {
       const res = await cyberlabFetch<{
+        scope: ScopeDto
         detectedFormat: string
         importedAllowedCount: number
         importedBlockedCount: number
       }>(serverTarget(), "/api/cyberlab/scope/import", {
         method: "POST",
-        body: JSON.stringify({
-          rawInput: raw,
-          platformHint: d.bountyPlatform ?? "hackerone",
-          ...(d.bountyResearcherHandle?.trim() ? { researcherHandle: d.bountyResearcherHandle.trim() } : {}),
-          ...(d.bountyHeaderName?.trim() ? { headerName: d.bountyHeaderName.trim() } : {}),
-          ...(d.bountyHeaderValue?.trim() ? { headerValue: d.bountyHeaderValue.trim() } : {}),
-          ...(d.bountyMaxRps ? { maxRequestsPerSecond: Number(d.bountyMaxRps) } : {}),
-          mergeWithExisting: true,
-        }),
+        body: JSON.stringify(params),
       })
-      updateDraft("scope-governance", (prev) => ({ ...prev, bountyRawImportText: "" }))
       setNotice(
-        `Escopo Bug Bounty importado (${res.detectedFormat}): +${res.importedAllowedCount} In-Scope, +${res.importedBlockedCount} Out-of-Scope!`,
+        `Escopo importado (${res.detectedFormat}): +${res.importedAllowedCount} em escopo, +${res.importedBlockedCount} exclusões.`,
       )
-      await refreshBackend()
+      await refreshAll()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUi("busy", false)
     }
   }
 
-  async function uploadLocalArtifact(file: File, subdir = "imports"): Promise<string | null> {
+  async function updateScope(patch: Partial<ScopeDto>): Promise<void> {
+    setUi("busy", true)
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result || ""))
-        reader.onerror = () => reject(new Error("Falha ao ler arquivo local"))
-        reader.readAsDataURL(file)
+      await cyberlabFetch<ScopeDto>(serverTarget(), "/api/cyberlab/scope", {
+        method: "PUT",
+        body: JSON.stringify(patch),
       })
-      const uploaded = await cyberlabFetch<{
-        fileName: string
-        relativePath: string
-        sizeBytes: number
-      }>(serverTarget(), "/api/cyberlab/artifacts/upload", {
-        method: "POST",
-        body: JSON.stringify({
-          fileName: file.name,
-          contentBase64: base64,
-          subdir,
-        }),
-      })
-      setNotice(`Arquivo "${uploaded.fileName}" importado para ${uploaded.relativePath} (${uploaded.sizeBytes} bytes).`)
-      await refreshBackend()
-      return uploaded.relativePath
+      setNotice("Escopo do projeto atualizado.")
+      await refreshAll()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
-      return null
-    }
-  }
-
-  async function verifyEvidenceCustody(evidenceId: string): Promise<void> {
-    try {
-      const res = await cyberlabFetch<{ valid: boolean; expectedSha256: string; computedSha256: string }>(
-        serverTarget(),
-        "/api/cyberlab/evidence/verify",
-        { method: "POST", body: JSON.stringify({ evidenceId }) },
-      )
-      if (res.valid) {
-        setNotice(`Integridade SHA-256 ÍNTEGRA (${res.computedSha256.slice(0, 20)}…).`)
-      } else {
-        setError(`ALERTA DE ADULTERAÇÃO: esperado ${res.expectedSha256}, calculado ${res.computedSha256}`)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  async function inspectEvidenceById(evidenceId: string): Promise<void> {
-    try {
-      const res = await cyberlabFetch<ReadEvidenceDto>(serverTarget(), "/api/cyberlab/evidence/read", {
-        method: "POST",
-        body: JSON.stringify({ evidenceId }),
-      })
-      setBackend("inspectedEvidence", reconcile(res))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  async function createManualFinding(): Promise<void> {
-    const d = drafts["scope-governance"]
-    if (!d.findingTitle.trim() || !d.findingDescription.trim()) {
-      setError("Preencha o título e a descrição técnica do Finding.")
-      return
-    }
-    const assets = d.findingAssetsText
-      .split(/[\r\n,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-    try {
-      const created = await cyberlabFetch<FindingDto>(serverTarget(), "/api/cyberlab/findings", {
-        method: "POST",
-        body: JSON.stringify({
-          title: d.findingTitle.trim(),
-          description: d.findingDescription.trim(),
-          severity: d.findingSeverity,
-          confidence: Math.min(1, Math.max(0, Number(d.findingConfidence) || 0.85)),
-          evidenceIds: d.findingEvidenceIds,
-          affectedAssets: assets.length > 0 ? assets : ["workspace"],
-          proposedRemediation: d.findingRemediation.trim() || undefined,
-        }),
-      })
-      recordHistoryEntry("scope-governance", {
-        id: `find-${Date.now()}`,
-        toolId: "scope-governance",
-        timestamp: new Date().toISOString(),
-        targetSummary: `Finding [${created.severity.toUpperCase()}] ${created.title}`,
-        status: "succeeded",
-        evidenceIds: created.evidenceIds,
-        summaryText: `Finding registrado (${created.findingId.slice(0, 10)})`,
-        outputText: JSON.stringify(created, null, 2),
-        draftSnapshot: JSON.parse(JSON.stringify(d)) as Record<string, unknown>,
-      })
-      updateDraft("scope-governance", (prev) => ({
-        ...prev,
-        findingTitle: "",
-        findingDescription: "",
-        findingRemediation: "",
-      }))
-      setNotice(`Finding "${created.title}" registrado com sucesso.`)
-      await refreshBackend()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  async function reviewFindingDecision(
-    findingId: string,
-    decision: "confirmed" | "rejected" | "needs_more_evidence",
-  ): Promise<void> {
-    try {
-      await cyberlabFetch(serverTarget(), "/api/cyberlab/findings/review", {
-        method: "POST",
-        body: JSON.stringify({
-          findingId,
-          reviewedBy: "manual-workbench-analyst",
-          decision,
-        }),
-      })
-      setNotice(`Finding revisado como "${decision}".`)
-      await refreshBackend()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  async function generateReportMarkdown(): Promise<void> {
-    try {
-      const res = await cyberlabFetch<{ markdown: string }>(serverTarget(), "/api/cyberlab/report")
-      setBackend("reportMarkdown", res.markdown)
-      recordHistoryEntry("scope-governance", {
-        id: `rep-${Date.now()}`,
-        toolId: "scope-governance",
-        timestamp: new Date().toISOString(),
-        targetSummary: "Relatório Técnico Markdown (.md)",
-        status: "succeeded",
-        evidenceIds: [],
-        summaryText: `Relatório gerado (${res.markdown.length} caracteres)`,
-        outputText: res.markdown,
-        draftSnapshot: JSON.parse(JSON.stringify(drafts["scope-governance"])) as Record<string, unknown>,
-      })
-      setNotice("Relatório Markdown gerado com referências SHA-256.")
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  async function loadFourCdiPreset(): Promise<void> {
-    try {
-      const res = await cyberlabFetch<PartnersOverviewDto>(serverTarget(), "/api/cyberlab/partners/manage", {
-        method: "POST",
-        body: JSON.stringify({ operation: "preset_4" }),
-      })
-      setBackend("partners", reconcile(res))
-      setNotice("Perfis autónomos dos 4 parceiros CDI (Kairós 8788, Naia 8789, Salem 8790, Nova 8791 — sem hierarquia) ativados!")
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  function openPartnerProfileEditor(partner: {
-    partnerId: string
-    displayName: string
-    specialty: string
-    endpointUrl: string
-    enabled: boolean
-    profile?: { identityNotes: string; interests: string[] }
-    permissions: {
-      readProjectState: boolean
-      readEvidenceAndFiles: boolean
-      writeWorkspaceAndCode?: boolean
-      fullRuntimeAndCodeAccess?: boolean
-      manageProjectsAndScope?: boolean
-      accessTrainingLabs?: boolean
-      createArtifactsAndFindings: boolean
-      initiateActions:
-        | "full_autonomy"
-        | "autonomous_in_scope"
-        | "allow_readonly_and_low_propose_others"
-        | "allow_readonly_propose_others"
-        | "propose_only"
-        | "disabled"
-    }
-  }): void {
-    updateDraft("cdi-hub", (prev) => ({
-      ...prev,
-      editingPartnerId: prev.editingPartnerId === partner.partnerId ? "" : partner.partnerId,
-      editDisplayName: partner.displayName,
-      editSpecialty: partner.specialty,
-      editEndpointUrl: partner.endpointUrl,
-      editIdentityNotes: partner.profile?.identityNotes ?? "",
-      editInterestsText: (partner.profile?.interests ?? []).join(", "),
-      editInitiateActions: partner.permissions.initiateActions,
-      editReadProjectState: partner.permissions.readProjectState,
-      editReadEvidenceAndFiles: partner.permissions.readEvidenceAndFiles,
-      editWriteWorkspaceAndCode: partner.permissions.writeWorkspaceAndCode !== false,
-      editFullRuntimeAndCodeAccess: partner.permissions.fullRuntimeAndCodeAccess !== false,
-      editManageProjectsAndScope: partner.permissions.manageProjectsAndScope !== false,
-      editAccessTrainingLabs: partner.permissions.accessTrainingLabs !== false,
-      editCreateArtifactsAndFindings: partner.permissions.createArtifactsAndFindings,
-      editEnabled: partner.enabled,
-      editSecretOverride: "",
-    }))
-  }
-
-  async function savePartnerProfile(): Promise<void> {
-    const d = drafts["cdi-hub"]
-    const partnerId = (d.editingPartnerId ?? "").trim()
-    if (!partnerId) return
-    try {
-      const interests = (d.editInterestsText ?? "")
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean)
-      const secretTrimmed = (d.editSecretOverride ?? "").trim()
-      const res = await cyberlabFetch<PartnersOverviewDto>(serverTarget(), "/api/cyberlab/partners/manage", {
-        method: "POST",
-        body: JSON.stringify({
-          operation: "upsert",
-          partnerId,
-          displayName: (d.editDisplayName ?? "").trim() || partnerId,
-          specialty: (d.editSpecialty ?? "").trim() || undefined,
-          endpointUrl: (d.editEndpointUrl ?? "").trim() || undefined,
-          enabled: d.editEnabled !== false,
-          ...(secretTrimmed.length >= 16 ? { secretOverride: secretTrimmed } : {}),
-          profile: {
-            identityNotes: (d.editIdentityNotes ?? "").trim() || undefined,
-            interests,
-          },
-          permissions: {
-            readProjectState: d.editReadProjectState !== false,
-            readEvidenceAndFiles: d.editReadEvidenceAndFiles !== false,
-            writeWorkspaceAndCode: d.editWriteWorkspaceAndCode !== false,
-            fullRuntimeAndCodeAccess: d.editFullRuntimeAndCodeAccess !== false,
-            manageProjectsAndScope: d.editManageProjectsAndScope !== false,
-            accessTrainingLabs: d.editAccessTrainingLabs !== false,
-            createArtifactsAndFindings: d.editCreateArtifactsAndFindings !== false,
-            initiateActions: d.editInitiateActions ?? "full_autonomy",
-          },
-        }),
-      })
-      setBackend("partners", reconcile(res))
-      updateDraft("cdi-hub", (prev) => ({ ...prev, editingPartnerId: "", editSecretOverride: "" }))
-      setNotice(`Perfil individual do parceiro CDI "${d.editDisplayName || partnerId}" atualizado com sucesso!`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUi("busy", false)
     }
   }
 
   async function controlTrainingLab(action: "start" | "reset" | "stop", labId: string): Promise<void> {
+    setUi("busy", true)
     try {
-      const lab = await cyberlabFetch<TrainingLabDto>(serverTarget(), "/api/cyberlab/labs/control", {
-        method: "POST",
-        body: JSON.stringify({ action, labId, setActive: action === "start" }),
-      })
-      if (action === "start" && lab.workspaceRoot) {
-        setDirectoryOverride(lab.workspaceRoot)
+      const lab = await cyberlabFetch<{ title: string; baseUrl?: string; workspaceRoot: string }>(
+        serverTarget(),
+        "/api/cyberlab/labs/control",
+        {
+          method: "POST",
+          body: JSON.stringify({ action, labId, setActive: action === "start" }),
+        },
+      )
+      if (action === "start") {
+        setUi("directoryOverride", lab.workspaceRoot)
+        persistUi()
       }
-      await refreshBackend()
       setNotice(
         action === "start"
-          ? `Laboratório "${lab.title}" iniciado${lab.baseUrl ? ` em ${lab.baseUrl}` : ""} e definido como projeto ativo!`
-          : action === "reset"
-            ? `Ficheiros originais de "${lab.title}" restaurados!`
-            : `Servidor do laboratório "${lab.title}" encerrado.`,
+          ? `Lab "${lab.title}" ativo${lab.baseUrl ? ` em ${lab.baseUrl}` : ""}!`
+          : `Lab "${lab.title}" (${action}).`,
       )
+      await refreshAll()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUi("busy", false)
     }
   }
 
-  async function manageCyberLabProject(
-    operation: "create" | "select",
-    params: { name?: string; projectId?: string; directory?: string },
-  ): Promise<void> {
+  async function manageCdiPreset4(baseHost = "http://127.0.0.1"): Promise<void> {
+    setUi("busy", true)
     try {
-      const res = await cyberlabFetch<ProjectsAndLabsOverviewDto>(serverTarget(), "/api/cyberlab/projects/manage", {
+      const ov = await cyberlabFetch<PartnersOverviewDto>(serverTarget(), "/api/cyberlab/partners/manage", {
         method: "POST",
-        body: JSON.stringify({ operation, ...params }),
+        body: JSON.stringify({ operation: "preset_4", baseHost }),
       })
-      setBackend("projectsAndLabs", reconcile(res))
-      const active = res.projects.find((p) => p.isActive)
-      if (active?.workspaceRoot) {
-        setDirectoryOverride(active.workspaceRoot)
-      }
-      await refreshBackend()
-      setNotice(
-        operation === "create"
-          ? `Projeto "${active?.name ?? params.name}" criado e registado no CyberLab OS & OpenCode!`
-          : `Projeto ativo alterado para "${active?.name ?? params.projectId}"!`,
-      )
+      setBackend("partners", reconcile(ov))
+      setNotice("Preset dos 4 CDIs carregado (Kairós:8788, Naia:8789, Salem:8790, Nova:8791)!")
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUi("busy", false)
     }
   }
 
-  async function manageCdiSecret(operation: "generate" | "set" | "reveal"): Promise<void> {
+  async function manageCdiSecret(
+    operation: "reveal" | "generate" | "custom",
+    customSecret?: string,
+  ): Promise<void> {
+    setUi("busy", true)
     try {
-      const customSecret = drafts["cdi-hub"].customSecretInput.trim()
-      const apiOp = operation === "set" ? "custom" : operation
       const res = await cyberlabFetch<{ sharedSecret: string; cyberlabCallbackUrl: string }>(
         serverTarget(),
         "/api/cyberlab/partners/secret",
         {
           method: "POST",
           body: JSON.stringify({
-            operation: apiOp,
-            customSecret: apiOp === "custom" ? customSecret : undefined,
+            operation,
+            ...(customSecret ? { customSecret } : {}),
           }),
         },
       )
       setBackend("revealedSecret", res.sharedSecret)
-      setNotice(
-        operation === "reveal"
-          ? "Segredo compartilhado exibido abaixo."
-          : "CYBERLAB_PARTNER_SECRET atualizado com sucesso!",
+      setNotice(operation === "reveal" ? "Segredo HMAC exibido abaixo." : "CYBERLAB_PARTNER_SECRET atualizado!")
+      await refreshAll()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUi("busy", false)
+    }
+  }
+
+  async function dispatchToCdis(params: {
+    partnerIds: string[]
+    objective: string
+    contextText?: string
+  }): Promise<void> {
+    setUi("busy", true)
+    try {
+      const res = await cyberlabFetch<{
+        succeededCount?: number
+        totalDispatched?: number
+        results?: Array<{ partnerId: string; ok: boolean; error?: string; outcome?: { result?: { summary?: string } } }>
+      }>(serverTarget(), "/api/cyberlab/partners/dispatch", {
+        method: "POST",
+        body: JSON.stringify(params),
+      })
+      const lines = (res.results ?? []).map(
+        (r) => `[${r.partnerId}] ${r.ok ? r.outcome?.result?.summary ?? "OK" : `ERRO: ${r.error ?? "falha"}`}`,
       )
-      await refreshBackend()
+      setBackend("lastCdiDispatchSummary", lines.join("\n\n"))
+      setNotice(`Disparo CDI concluído (${res.succeededCount ?? 0}/${res.totalDispatched ?? params.partnerIds.length}).`)
+      await refreshAll()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUi("busy", false)
+    }
+  }
+
+  async function readEvidence(evidenceId: string): Promise<void> {
+    try {
+      const data = await cyberlabFetch<ReadEvidenceDto>(serverTarget(), "/api/cyberlab/evidence/read", {
+        method: "POST",
+        body: JSON.stringify({ evidenceId }),
+      })
+      setBackend("inspectedEvidence", data)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
   }
 
-  function attachToComposer(title: string, textContent: string, filename = "cyberlab-evidencia.txt"): void {
+  async function verifyEvidence(evidenceId: string): Promise<void> {
+    try {
+      const res = await cyberlabFetch<{ valid: boolean; expectedSha256: string }>(
+        serverTarget(),
+        "/api/cyberlab/evidence/verify",
+        {
+          method: "POST",
+          body: JSON.stringify({ evidenceId }),
+        },
+      )
+      if (res.valid) setNotice(`Integridade SHA-256 ÍNTEGRA (${res.expectedSha256.slice(0, 16)}…).`)
+      else setError(`ALERTA: Falha na verificação SHA-256 de ${evidenceId}!`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function createFinding(input: {
+    title: string
+    description: string
+    severity: "info" | "low" | "medium" | "high" | "critical"
+    evidenceIds: string[]
+    affectedAssets: string[]
+    proposedRemediation?: string
+  }): Promise<void> {
+    setUi("busy", true)
+    try {
+      await cyberlabFetch(serverTarget(), "/api/cyberlab/findings", {
+        method: "POST",
+        body: JSON.stringify(input),
+      })
+      setNotice(`Finding "${input.title}" registrado!`)
+      await refreshAll()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUi("busy", false)
+    }
+  }
+
+  async function generateReport(): Promise<void> {
+    setUi("busy", true)
+    try {
+      const res = await cyberlabFetch<{ markdown: string }>(serverTarget(), "/api/cyberlab/report")
+      setBackend("reportMarkdown", res.markdown)
+      setNotice("Relatório Markdown gerado com hashes SHA-256!")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUi("busy", false)
+    }
+  }
+
+  function sendToAgent(title: string, textContent: string, filename = "arsenal-output.txt"): void {
+    // Ensure Right Agent Panel is expanded so the user sees the attachment right away!
+    if (!ui.rightAgentOpen) {
+      setUi("rightAgentOpen", true)
+      persistUi()
+    }
     const formatted = `# ${title}\n${textContent}`
     if (activeComposer) {
       const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "-")
       const file = new File([formatted], safeName, { type: "text/plain" })
       activeComposer.addAttachments([file])
       activeComposer.restoreFocus()
-      setNotice(`Resultado anexado na caixa de diálogo (${safeName}).`)
+      setNotice(`Anexado ao Agente OpenCode na barra direita (${safeName}).`)
       return
     }
     if (typeof navigator !== "undefined" && navigator.clipboard) {
       void navigator.clipboard.writeText(formatted)
-      setNotice("Resultado copiado para a área de transferência (abra uma sessão para anexar direto).")
+      setNotice("Copiado para a área de transferência — cole na conversa com o Agente OpenCode à direita.")
     }
   }
 
   onMount(() => {
-    void refreshBackend()
-    const timer = window.setInterval(() => {
-      if (ui.open) void refreshBackend()
-    }, 8000)
-    const fastProxyTimer = window.setInterval(() => {
-      if (ui.open && backend.proxy?.status.running && (ui.activeToolId === "http-proxy" || backend.proxy?.status.interceptEnabled)) {
-        void refreshProxyOnly()
+    void refreshAll()
+    const fastPoll = window.setInterval(() => {
+      if (ui.open && hasRunningJobs()) {
+        void refreshArsenalOnly(false)
       }
-    }, 1500)
+    }, 1200)
+    const slowPoll = window.setInterval(() => {
+      if (ui.open) {
+        void refreshArsenalOnly(false)
+      }
+    }, 8000)
     onCleanup(() => {
-      window.clearInterval(timer)
-      window.clearInterval(fastProxyTimer)
+      window.clearInterval(fastPoll)
+      window.clearInterval(slowPoll)
     })
   })
 
   createEffect(() => {
-    // Refresh whenever active project directory changes while workbench is open
     const _dir = resolvedDirectory()
-    if (ui.open && _dir !== undefined) {
-      void refreshBackend()
+    if (_dir && ui.open) {
+      void refreshAll()
     }
   })
 
   return {
     ui,
-    drafts,
-    histories,
+    setUi,
     backend,
-    resolvedDirectory,
+    activeSlot,
+    activeSlotRuns,
+    selectedRunForActiveSlot,
+    hasRunningJobs,
     registerComposer,
-    selectSuite,
-    selectSuiteFunction,
-    selectSuiteEngine,
-    setHistoryScope,
-    sendUrlAcrossWebSuite,
-    sendTextToDecoder,
-    selectTool,
+    openWorkspace,
     toggleWorkbench,
-    setLayoutMode,
-    setSplitWidthPct,
-    setShowHistoryColumn,
-    setDirectoryOverride,
-    updateDraft,
-    resetToolDraft,
-    deleteHistoryEntry,
-    clearToolHistory,
-    restoreHistoryDraft,
-    refreshBackend,
-    refreshProxyOnly,
-    runCapabilityTool,
-    approvePendingExecution,
-    cancelExecution,
-    controlProxy,
-    controlProxyAdvanced,
+    toggleLeftSidebar,
+    setLeftSidebarTab,
+    setLeftSidebarWidth,
+    toggleRightAgent,
+    setRightAgentWidth,
+    setCenterView,
+    selectSlot,
+    refreshAll,
+    refreshArsenalOnly,
+    browseFiles,
+    previewFile,
+    launchSlot,
+    stopRun,
+    configureArsenal,
+    upsertCustomSlot,
+    removeCustomSlot,
     launchProxyBrowser,
-    downloadProxyRootCaCert,
-    persistProxyCapture,
-    sendProxyCaptureToRepeater,
-    sendProxyCaptureToIntruder,
-    sendProxyCaptureToComparer,
-    copyProxyCaptureAsCurl,
-    addRepeaterTab,
-    switchRepeaterTab,
-    closeRepeaterTab,
-    importCurlIntoRepeater,
-    dispatchCdiMission,
-    ingestManualExternal,
-    syncExternalInbox,
-    updateScopeRules,
-    importBugBountyScope,
-    uploadLocalArtifact,
-    verifyEvidenceCustody,
-    inspectEvidenceById,
-    createManualFinding,
-    reviewFindingDecision,
-    generateReportMarkdown,
-    loadFourCdiPreset,
-    openPartnerProfileEditor,
-    savePartnerProfile,
+    persistOutputToEvidence,
+    uploadExternalFile,
+    importScope,
+    updateScope,
     controlTrainingLab,
-    manageCyberLabProject,
+    manageCdiPreset4,
     manageCdiSecret,
-    attachToComposer,
+    dispatchToCdis,
+    readEvidence,
+    verifyEvidence,
+    createFinding,
+    generateReport,
+    sendToAgent,
     setNotice,
     setError,
-    selectHistoryItem(toolId: ManualToolId, entryId: string) {
-      setUi("selectedHistoryByTool", toolId, entryId)
-    },
   }
 }
 
@@ -1885,7 +933,11 @@ const CyberLabWorkbenchContext = createContext<CyberLabWorkbenchService>()
 
 export function CyberLabWorkbenchProvider(props: ParentProps) {
   const service = createWorkbenchService()
-  return <CyberLabWorkbenchContext.Provider value={service}>{props.children}</CyberLabWorkbenchContext.Provider>
+  return (
+    <CyberLabWorkbenchContext.Provider value={service}>
+      {props.children}
+    </CyberLabWorkbenchContext.Provider>
+  )
 }
 
 export function useCyberLabWorkbench(): CyberLabWorkbenchService | undefined {

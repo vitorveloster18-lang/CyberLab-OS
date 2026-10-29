@@ -83,9 +83,9 @@ const DelegatePartnerOutput = Schema.Struct({
 })
 
 const ExternalControlInput = Schema.Struct({
-  operation: Schema.Literals(["list_tools", "sync_inbox"]).annotate({
+  operation: Schema.Literals(["list_tools", "list_arsenal_slots", "sync_inbox"]).annotate({
     description:
-      "Inspect externally installed tools (nmap, nuclei, ffuf, tshark, opentrap, mvt, ghidra) or sync manual external tool outputs from .cyberlab/inbox/",
+      "Inspect externally installed tools & v5.0 Real Arsenal Slots (Windows PowerShell + WSL2 Kali + Web UIs) or sync manual external tool outputs from .cyberlab/inbox/",
   }),
 })
 
@@ -357,6 +357,23 @@ export const Plugin = {
                 const summary = `Synced .cyberlab/inbox: ${ids.length} artifact(s) ingested [${ids.join(", ") || "none"}]; available external tools: ${availableTools.join(", ") || "none"}.`
                 return {
                   output: { availableTools, ingestedEvidenceIds: ids, summary },
+                  content: summary,
+                }
+              }
+
+              if (input.operation === "list_arsenal_slots") {
+                const arsenal = yield* Effect.tryPromise({
+                  try: () => ws.getArsenalOverview(false),
+                  catch: (e) => failTool("cyberlab_external_control", e),
+                })
+                const installedIds = arsenal.slots.filter((s) => s.installed).map((s) => s.slotId)
+                const lines = arsenal.slots.map(
+                  (s) =>
+                    `${s.slotId} (${s.name}) [${s.kind}]: ${s.installed ? `INSTALLED via ${s.activeRuntime} (${s.resolvedPath ?? s.embedUrl ?? ""})` : "NOT INSTALLED"}`,
+                )
+                const summary = `WSL2=${arsenal.environment.preferredWslDistro || "none"} | Installed Slots (${installedIds.length}/${arsenal.slots.length}):\n${lines.join("\n")}`
+                return {
+                  output: { availableTools: installedIds, ingestedEvidenceIds: [], summary },
                   content: summary,
                 }
               }

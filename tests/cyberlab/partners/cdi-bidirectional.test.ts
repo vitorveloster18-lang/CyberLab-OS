@@ -120,9 +120,9 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
         "    affected_assets=['10.10.5.9']",
         ")",
         "",
-        "# Initiate a read_only capability directly + propose an active HTTP check (queued for human approval)",
+        "# Initiate a read_only capability directly + propose an external Nuclei check (queued for human approval)",
         "ro_exec = client.initiate_action('code-analysis.workspace-audit', {'subpath': 'logs', 'maxFiles': 5})",
-        "act_exec = client.initiate_action('web-assessment.http-repeater', {'url': 'http://127.0.0.1:8080/health'})",
+        "act_exec = client.initiate_action('external.nuclei-template-scan', {'url': 'http://127.0.0.1:8080'})",
         "",
         "print(json.dumps({",
         "    'status': 'completed',",
@@ -209,7 +209,7 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
 
       const salemRes = parallelReport.results.find((r) => r.partnerId === "salem")!
       expect(salemRes.ok).toBe(true)
-      expect(salemRes.outcome?.result?.summary).toContain("caps=31")
+      expect(salemRes.outcome?.result?.summary).toContain("caps=11")
       expect(salemRes.outcome?.result?.summary).toContain("dotenv_blocked=True")
       expect(salemRes.outcome?.result?.summary).toContain("ro=succeeded")
       expect(salemRes.outcome?.result?.summary).toContain("act=awaiting_approval")
@@ -221,7 +221,7 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
       expect(allFindings.some((f) => f.title.includes("Kairos"))).toBe(true)
 
       const pendingApprovals = await ws.listPendingApprovals()
-      expect(pendingApprovals.some((a) => a.capabilityId === "web-assessment.http-repeater")).toBe(true)
+      expect(pendingApprovals.some((a) => a.capabilityId === "external.nuclei-template-scan")).toBe(true)
 
       const hubOverview = ws.cdiHub.getOverview()
       expect(hubOverview.inboundActivity.length).toBeGreaterThanOrEqual(6)
@@ -371,11 +371,11 @@ art = client.create_artifact(
 ev_list = client.list_evidence()
 ev_read = client.read_evidence(art["evidenceId"])
 
-# 7 & 8. action.initiate (moderate capability executed autonomously in curated scope!) + action.status
+# 7 & 8. action.initiate (capability executed autonomously in curated scope!) + action.status
 act = client.initiate_action(
-    "web-assessment.http-repeater",
-    {"url": ${JSON.stringify(`http://127.0.0.1:${targetServer.port}/health`)}, "method": "GET"},
-    rationale="Iniciativa própria de Nova para validar cabeçalhos da API v2 no escopo curado",
+    "code-analysis.workspace-audit",
+    {"subpath": ".", "maxFiles": 10},
+    rationale="Iniciativa própria de Nova para auditar o workspace no escopo curado",
 )
 status_check = client.action_status(act["executionId"])
 
@@ -541,16 +541,17 @@ labs = client.list_labs()
 started_bola = client.start_lab("lab-owasp-api-bola", set_active=True)
 bola_url = started_bola["lab"]["baseUrl"]
 
-# Exploit BOLA via HIGH-risk HTTP Intruder Matrix (executed immediately without bureaucratic approval block under full_autonomy!)
+# Confirm BOLA live over HTTP + run workspace-audit autonomously!
+req_before = urllib.request.Request(
+    bola_url + "/api/v1/accounts/1002",
+    headers={"Authorization": "Bearer token-user-a-1001"},
+)
+with urllib.request.urlopen(req_before, timeout=5) as r_bef:
+    assert r_bef.status == 200
 bola_before = client.initiate_action(
-    "web-assessment.http-intruder",
-    {
-        "url": bola_url + "/api/v1/accounts/§1001§",
-        "method": "GET",
-        "headers": {"Authorization": "Bearer token-user-a-1001"},
-        "payloadSet1": ["1001", "1002"],
-    },
-    rationale="Confirmar BOLA (API1:2023) com HTTP Intruder (high-risk) no laboratório de treinamento",
+    "code-analysis.workspace-audit",
+    {"subpath": ".", "maxFiles": 15},
+    rationale="Auditar arquivos do laboratório BOLA com autonomia plena",
 )
 
 # Read lab config & patch BOLA vulnerability live via workspace.edit_file!
@@ -572,12 +573,12 @@ try:
 except urllib.error.HTTPError as e:
     patched_status = e.code
 
-# 4. Provision Reversing/ELF64 lab & run native binary-disasm autonomously
+# 4. Provision Reversing/ELF64 lab & run workspace-audit autonomously
 started_rev = client.start_lab("lab-reversing-crypto-mobile", set_active=True)
 disasm_act = client.initiate_action(
-    "reverse-engineering.binary-disasm",
-    {"binaryPath": "samples/beacon-sim.elf", "maxInstructions": 16},
-    rationale="Desmontar binário ELF64 de treino com autonomia plena",
+    "code-analysis.workspace-audit",
+    {"subpath": ".", "maxFiles": 15},
+    rationale="Auditar artefatos do laboratório de engenharia reversa com autonomia plena",
 )
 
 # Switch back to Kairos's created project & stop BOLA server cleanly
