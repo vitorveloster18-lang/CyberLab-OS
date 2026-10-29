@@ -11,6 +11,7 @@
 
 import { spawn, spawnSync } from "node:child_process"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
+import net from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -91,6 +92,38 @@ if (["1", "true"].includes((process.env.OPENCODE_DISABLE_FREE_MODELS ?? "").toLo
   )
 }
 
+async function isLoopbackPortOccupied(portNum: number): Promise<boolean> {
+  return await new Promise<boolean>((resolve) => {
+    const socket = net.createConnection({ host: "127.0.0.1", port: portNum })
+    socket.setTimeout(600)
+    socket.once("connect", () => {
+      socket.destroy()
+      resolve(true)
+    })
+    socket.once("timeout", () => {
+      socket.destroy()
+      resolve(false)
+    })
+    socket.once("error", () => {
+      socket.destroy()
+      resolve(false)
+    })
+  })
+}
+
+if (await isLoopbackPortOccupied(Number(port))) {
+  console.error(`\n[ERRO] Já existe um processo escutando em 127.0.0.1:${port}!`)
+  console.error(
+    `No Windows, um serviço antigo do OpenCode (opencode.exe) ou instância anterior em 127.0.0.1:${port} intercepta as chamadas dos CDIs e causa HTTP 404 em /api/cyberlab/partner-gateway.`,
+  )
+  console.error(`\nPara encerrar o processo antigo no PowerShell e subir o CyberLab OS limpo, execute:`)
+  console.error(
+    `  Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force }`,
+  )
+  console.error(`ou escolha outra porta com: bun run start -- --port 4097\n`)
+  process.exit(1)
+}
+
 const cliArgs = [
   "--user-agent=opencode/latest/2.1.4/cli",
   "--use-system-ca",
@@ -114,6 +147,7 @@ const child = spawn(bunExecutable, cliArgs, {
   env: {
     ...process.env,
     ...(disableAuth ? { CYBERLAB_NO_SERVER_AUTH: "1" } : {}),
+    CYBERLAB_DEFAULT_WORKSPACE_DIR: process.env.CYBERLAB_DEFAULT_WORKSPACE_DIR || repoRoot,
     CYBERLAB_CALLBACK_URL:
       process.env.CYBERLAB_CALLBACK_URL || `http://127.0.0.1:${port}/api/cyberlab/partner-gateway`,
   },
@@ -129,12 +163,14 @@ async function waitForServerAndOpenBrowser() {
   while (Date.now() < deadline) {
     if (child.exitCode !== null) return
     try {
-      const [rootRes, infoRes] = await Promise.all([
+      const [rootRes, infoRes, gwRes] = await Promise.all([
         fetch(`${primaryUrl}/`, { headers }),
         fetch(`${primaryUrl}/api/info`, { headers }),
+        fetch(`${primaryUrl}/api/cyberlab/partner-gateway`, { headers }),
       ])
-      if (rootRes.ok && infoRes.ok) {
+      if (rootRes.ok && infoRes.ok && gwRes.ok) {
         console.log(`\n[CyberLab OS] Interface pronta em ${primaryUrl} (e ${localhostUrl})`)
+        console.log(`[CyberLab OS] Partner Gateway ativo (GET/POST): http://127.0.0.1:${port}/api/cyberlab/partner-gateway`)
         if (!noOpen) {
           try {
             if (process.platform === "win32") {

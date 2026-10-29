@@ -226,7 +226,7 @@ export class CdiPartnerHub {
         if (typeof raw.cyberlabCallbackUrl === "string" && raw.cyberlabCallbackUrl.trim()) {
           this.cyberlabCallbackUrl = raw.cyberlabCallbackUrl.trim()
         }
-        if (Array.isArray(raw.partners)) {
+        if (Array.isArray(raw.partners) && raw.partners.length > 0) {
           for (const p of raw.partners) {
             if (p && typeof p.partnerId === "string" && p.partnerId.trim()) {
               this.partners.set(p.partnerId.trim(), {
@@ -243,12 +243,23 @@ export class CdiPartnerHub {
               })
             }
           }
+          return
         }
-        return
+        // If partners array was empty (e.g. secret saved before preset clicked), fall through to seed default 4 CDIs
+        break
       } catch {
         // Ignore malformed optional config file
       }
     }
+
+    // Seed default 4-CDI preset (kairos:8788, naia:8789, salem:8790, nova:8791) when no config file exists yet
+    const defaultPorts = [8788, 8789, 8790, 8791]
+    FOUR_CDI_PRESET_ENTRIES.forEach((preset, idx) => {
+      this.partners.set(preset.partnerId, {
+        ...preset,
+        endpointUrl: `http://127.0.0.1:${defaultPorts[idx]}/cyberlab/partner`,
+      })
+    })
 
     // Seed from single-partner env vars if provided
     if (process.env.CYBERLAB_PARTNER_URL?.trim()) {

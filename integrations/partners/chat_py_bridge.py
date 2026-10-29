@@ -136,7 +136,7 @@ class CyberLabOSClient:
             isinstance(parsed, dict)
             and "location" in parsed
             and isinstance(parsed.get("data"), dict)
-            and parsed["data"].get("protocol") == "cyberlab-cdi-gateway"
+            and ("ok" in parsed["data"] or parsed["data"].get("protocol") == "cyberlab-cdi-gateway")
         ):
             parsed = parsed["data"]
         if isinstance(parsed, dict) and "signature" in parsed:

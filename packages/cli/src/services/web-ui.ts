@@ -20,6 +20,8 @@ export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: {
       if (
         url.pathname === "/api" ||
         url.pathname.startsWith("/api/") ||
+        url.pathname === "/cyberlab/partner-gateway" ||
+        url.pathname.startsWith("/cyberlab/partner-gateway/") ||
         url.pathname.startsWith("/auth/") ||
         url.pathname === "/openapi.json"
       )

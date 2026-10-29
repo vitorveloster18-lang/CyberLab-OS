@@ -8,6 +8,7 @@ import {
 import { Location } from "@opencode/core/location"
 import { InvalidRequestError } from "@opencode/protocol/errors"
 import { Effect } from "effect"
+import { HttpServerRequest } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 import { response } from "../location"
@@ -88,6 +89,70 @@ const runBadRequest = <A>(fn: () => Promise<A>) =>
       new InvalidRequestError({
         message: error instanceof Error ? error.message : String(error),
       }),
+  })
+
+const resolveGatewayWorkspace = Effect.gen(function* () {
+  const location = yield* Location.Service
+  const request = yield* HttpServerRequest.HttpServerRequest
+  const query = new URL(request.url, "http://localhost").searchParams
+  const hasExplicitDir = Boolean(query.get("location[directory]") || request.headers["x-opencode-directory"])
+  const fallbackRoot =
+    !hasExplicitDir && process.env.CYBERLAB_DEFAULT_WORKSPACE_DIR?.trim()
+      ? process.env.CYBERLAB_DEFAULT_WORKSPACE_DIR.trim()
+      : String(location.directory)
+  return yield* Effect.promise(() =>
+    CyberLabWorkspaceManager.global.forInboundGateway(
+      String(location.project.id),
+      fallbackRoot,
+      hasExplicitDir,
+    ),
+  )
+})
+
+const buildGatewayDiscoveryInfo = Effect.gen(function* () {
+  const ws = yield* resolveGatewayWorkspace
+  const overview = ws.cdiHub.getOverview()
+  return {
+    ok: true,
+    service: "cyberlab-os-partner-gateway",
+    protocol: "cyberlab-cdi-gateway",
+    protocolVersion: "1.0",
+    canonicalUrl: overview.cyberlabCallbackUrl || "http://127.0.0.1:4096/api/cyberlab/partner-gateway",
+    methods: ["GET", "POST"],
+    auth: "HMAC-SHA256 canonicalJson envelope (CYBERLAB_PARTNER_SECRET)",
+    supportedActions: [
+      "project.state",
+      "evidence.list",
+      "evidence.read",
+      "workspace.list_files",
+      "workspace.read_file",
+      "artifact.create",
+      "finding.propose",
+      "action.initiate",
+      "action.status",
+    ],
+    secretConfigured: overview.secretConfigured,
+    registeredPartners: overview.partners.map((p) => ({
+      partnerId: p.partnerId,
+      displayName: p.displayName,
+      endpointUrl: p.endpointUrl,
+      enabled: p.enabled,
+    })),
+  }
+})
+
+const handleInboundGateway = (payload: unknown, fallbackAction?: string) =>
+  Effect.gen(function* () {
+    const ws = yield* resolveGatewayWorkspace
+    const normalizedPayload =
+      fallbackAction &&
+      payload !== null &&
+      typeof payload === "object" &&
+      !("action" in (payload as Record<string, unknown>))
+        ? { ...(payload as Record<string, unknown>), action: fallbackAction }
+        : payload
+    const res = yield* Effect.promise(() => ws.cdiHub.handleInboundGatewayRequest(normalizedPayload))
+    return res.body
   })
 
 export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (handlers) =>
@@ -446,14 +511,14 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
         }),
       ),
     )
-    .handle("cyberlab.partners.gateway", ({ payload }) =>
-      response(
-        Effect.gen(function* () {
-          const ws = yield* resolveWorkspace
-          const res = yield* Effect.promise(() => ws.cdiHub.handleInboundGatewayRequest(payload))
-          return res.body
-        }),
-      ),
-    ),
+    .handle("cyberlab.partners.gateway.info", () => response(buildGatewayDiscoveryInfo))
+    .handle("cyberlab.partners.gateway", ({ payload }) => response(handleInboundGateway(payload)))
+    .handle("cyberlab.partners.gateway.action", ({ params, payload }) =>
+      response(handleInboundGateway(payload, params.action)),
+    )
+    .handle("cyberlab.partners.gateway.alias.api.info", () => response(buildGatewayDiscoveryInfo))
+    .handle("cyberlab.partners.gateway.alias.api.post", ({ payload }) => response(handleInboundGateway(payload)))
+    .handle("cyberlab.partners.gateway.alias.root.info", () => response(buildGatewayDiscoveryInfo))
+    .handle("cyberlab.partners.gateway.alias.root.post", ({ payload }) => response(handleInboundGateway(payload))),
 )
 

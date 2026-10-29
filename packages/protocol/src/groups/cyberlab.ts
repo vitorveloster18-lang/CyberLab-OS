@@ -402,6 +402,20 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
       ),
   )
   .add(
+    HttpApiEndpoint.get("cyberlab.partners.gateway.info", "/api/cyberlab/partner-gateway", {
+      query: LocationQuery,
+      success: Location.response(Schema.Unknown),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.partners.gateway.info",
+          summary: "Bidirectional CDI Gateway discovery & healthcheck (GET)",
+          description: "Returns protocol metadata, supported actions, secret configuration state, and registered partner IDs.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.post("cyberlab.partners.gateway", "/api/cyberlab/partner-gateway", {
       query: LocationQuery,
       payload: Schema.Unknown,
@@ -417,6 +431,51 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
         }),
       ),
   )
+  .add(
+    HttpApiEndpoint.post("cyberlab.partners.gateway.action", "/api/cyberlab/partner-gateway/:action", {
+      params: { action: Schema.String },
+      query: LocationQuery,
+      payload: Schema.Unknown,
+      success: Location.response(Schema.Unknown),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.partners.gateway.action",
+          summary: "Bidirectional CDI -> CyberLab OS HMAC-SHA256 Gateway (subpath action alias)",
+          description: "Subpath alias supporting POST /api/cyberlab/partner-gateway/<action>.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("cyberlab.partners.gateway.alias.api.info", "/api/partner-gateway", {
+      query: LocationQuery,
+      success: Location.response(Schema.Unknown),
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.partners.gateway.alias.api.post", "/api/partner-gateway", {
+      query: LocationQuery,
+      payload: Schema.Unknown,
+      success: Location.response(Schema.Unknown),
+      error: [InvalidRequestError],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("cyberlab.partners.gateway.alias.root.info", "/cyberlab/partner-gateway", {
+      query: LocationQuery,
+      success: Location.response(Schema.Unknown),
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.partners.gateway.alias.root.post", "/cyberlab/partner-gateway", {
+      query: LocationQuery,
+      payload: Schema.Unknown,
+      success: Location.response(Schema.Unknown),
+      error: [InvalidRequestError],
+    }),
+  )
   .annotateMerge(
     OpenApi.annotations({
       title: "cyberlab",
@@ -426,11 +485,25 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
 
 export const CYBERLAB_PARTNER_GATEWAY_PATH = "/api/cyberlab/partner-gateway"
 
+const PARTNER_GATEWAY_EXACT_PATHS = new Set([
+  "/api/cyberlab/partner-gateway",
+  "/api/partner-gateway",
+  "/cyberlab/partner-gateway",
+])
+
+export function isCyberLabPartnerGatewayPath(pathname: string): boolean {
+  return PARTNER_GATEWAY_EXACT_PATHS.has(pathname) || pathname.startsWith("/api/cyberlab/partner-gateway/")
+}
+
+export function isCyberLabPartnerGatewayPublicProbe(method: string, url: URL): boolean {
+  return (method === "GET" || method === "HEAD") && PARTNER_GATEWAY_EXACT_PATHS.has(url.pathname)
+}
+
 export function hasCyberLabPartnerGatewaySignature(
   headers: Readonly<Record<string, string | undefined>>,
   url: URL,
 ): boolean {
-  if (url.pathname !== CYBERLAB_PARTNER_GATEWAY_PATH) return false
+  if (!isCyberLabPartnerGatewayPath(url.pathname)) return false
   return Boolean(headers["x-cyberlab-signature"] && headers["x-cyberlab-partner-id"])
 }
 

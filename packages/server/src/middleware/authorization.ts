@@ -6,7 +6,11 @@ import { PTY_CONNECT_PATH, PTY_CONNECT_TICKET_QUERY } from "@opencode/protocol/g
 import { PERSISTENT_PTY_CONNECT_PATH } from "@opencode/protocol/groups/persistent-pty"
 import { MCP_CLIENT_PATH } from "@opencode/protocol/groups/mcp"
 import { PAIRING_CONNECT_PATH } from "@opencode/protocol/groups/server"
-import { CYBERLAB_PARTNER_GATEWAY_PATH, hasCyberLabPartnerGatewaySignature } from "@opencode/protocol/groups/cyberlab"
+import {
+  hasCyberLabPartnerGatewaySignature,
+  isCyberLabPartnerGatewayPath,
+  isCyberLabPartnerGatewayPublicProbe,
+} from "@opencode/protocol/groups/cyberlab"
 import { Effect, Layer, Redacted } from "effect"
 import { Base64 } from "effect/encoding"
 import { HttpEffect, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
@@ -91,7 +95,8 @@ export const authorizationLayer = Layer.effect(
             route.route.path === MCP_CLIENT_PATH) &&
             !!url.searchParams.get(PTY_CONNECT_TICKET_QUERY)) ||
           route.route.path === PAIRING_CONNECT_PATH ||
-          (route.route.path === CYBERLAB_PARTNER_GATEWAY_PATH &&
+          isCyberLabPartnerGatewayPublicProbe(request.method, url) ||
+          (isCyberLabPartnerGatewayPath(url.pathname) &&
             hasCyberLabPartnerGatewaySignature(request.headers, url))
         )
           return yield* effect

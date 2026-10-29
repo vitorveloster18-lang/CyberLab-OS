@@ -8,7 +8,10 @@ import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/persistent-pty"
 import { hasMcpClientTicketURL } from "@opencode/protocol/groups/mcp"
 import { isPairingConnectURL } from "@opencode/protocol/groups/server"
-import { hasCyberLabPartnerGatewaySignature } from "@opencode/protocol/groups/cyberlab"
+import {
+  hasCyberLabPartnerGatewaySignature,
+  isCyberLabPartnerGatewayPublicProbe,
+} from "@opencode/protocol/groups/cyberlab"
 import { Global } from "@opencode/util/global"
 import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
 import { HttpMiddleware, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
@@ -200,6 +203,7 @@ function dispatch(
         (!hasPtyConnectTicketURL(url) &&
           !hasPersistentPtyConnectTicketURL(url) &&
           !hasMcpClientTicketURL(url) &&
+          !isCyberLabPartnerGatewayPublicProbe(request.method, url) &&
           !hasCyberLabPartnerGatewaySignature(request.headers, url))) &&
       !(yield* authorizedRequest(request, auth))
     )

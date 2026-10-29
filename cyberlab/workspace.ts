@@ -811,16 +811,29 @@ export class CyberLabWorkspaceManager {
   static readonly global = new CyberLabWorkspaceManager()
 
   private readonly instances = new Map<string, CyberLabWorkspace>()
+  private lastActiveKey: string | null = null
 
-  async forProject(projectId: string, workspaceRoot: string): Promise<CyberLabWorkspace> {
+  async forProject(projectId: string, workspaceRoot: string, markActive = true): Promise<CyberLabWorkspace> {
     const key = `${projectId}::${path.resolve(workspaceRoot)}`
     const existing = this.instances.get(key)
     if (existing) {
+      if (markActive) this.lastActiveKey = key
       return existing.ensureInitialized()
     }
     const created = new CyberLabWorkspace({ projectId, workspaceRoot })
     this.instances.set(key, created)
+    if (markActive) this.lastActiveKey = key
     return created.ensureInitialized()
+  }
+
+  async forInboundGateway(fallbackProjectId: string, fallbackRoot: string, hasExplicitDir: boolean): Promise<CyberLabWorkspace> {
+    if (!hasExplicitDir && this.lastActiveKey) {
+      const active = this.instances.get(this.lastActiveKey)
+      if (active) {
+        return active.ensureInitialized()
+      }
+    }
+    return this.forProject(fallbackProjectId, fallbackRoot, false)
   }
 
   closeAll(): void {
@@ -828,5 +841,6 @@ export class CyberLabWorkspaceManager {
       ws.close()
     }
     this.instances.clear()
+    this.lastActiveKey = null
   }
 }
