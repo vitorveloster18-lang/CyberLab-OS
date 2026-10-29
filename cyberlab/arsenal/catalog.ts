@@ -135,17 +135,19 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
     upstreamUrl: "https://github.com/opentrap/opentrap",
     licenseNote: "AGPL-3.0 (Externo em WSL2 / Linux)",
     windowsBinaries: [],
-    posixBinaries: ["opentrap", "opentrap-x86_64.appimage"],
+    posixBinaries: ["opentrap", "OpenTRAP.AppImage", "opentrap-x86_64.appimage"],
     posixKnownPaths: [
-      "~/CyberLab-Tools/opentrap/opentrap-x86_64.appimage",
+      "/opt/opentrap/OpenTRAP.AppImage",
       "/opt/opentrap/opentrap-x86_64.appimage",
+      "/usr/local/bin/opentrap",
+      "~/CyberLab-Tools/opentrap/opentrap-x86_64.appimage",
       "~/.local/bin/opentrap",
     ],
     companionProxyPort: 8080,
     installPowerShell:
-      'wsl -d kali-linux -- bash -lc "mkdir -p ~/CyberLab-Tools/opentrap && wget -O ~/CyberLab-Tools/opentrap/opentrap-x86_64.appimage https://github.com/opentrap/opentrap/releases/latest/download/opentrap-x86_64.appimage && chmod +x ~/CyberLab-Tools/opentrap/opentrap-x86_64.appimage"',
+      'wsl -d kali-linux -u root -- bash -lc "mkdir -p /opt/opentrap && curl -fL https://github.com/opentrap/opentrap/releases/latest/download/opentrap-x86_64.appimage -o /opt/opentrap/OpenTRAP.AppImage && chmod +x /opt/opentrap/OpenTRAP.AppImage && ln -sf /opt/opentrap/OpenTRAP.AppImage /usr/local/bin/opentrap"',
     installKaliWsl:
-      "mkdir -p ~/CyberLab-Tools/opentrap && wget -O ~/CyberLab-Tools/opentrap/opentrap-x86_64.appimage https://github.com/opentrap/opentrap/releases/latest/download/opentrap-x86_64.appimage && chmod +x ~/CyberLab-Tools/opentrap/opentrap-x86_64.appimage",
+      "sudo mkdir -p /opt/opentrap && sudo curl -fL https://github.com/opentrap/opentrap/releases/latest/download/opentrap-x86_64.appimage -o /opt/opentrap/OpenTRAP.AppImage && sudo chmod +x /opt/opentrap/OpenTRAP.AppImage && sudo ln -sf /opt/opentrap/OpenTRAP.AppImage /usr/local/bin/opentrap",
     presets: [
       {
         id: "opentrap-wslg",
@@ -204,10 +206,13 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
       "Inicia o Caido CLI local na porta 7000 e incorpora sua interface completa direto no painel central do CyberLab OS (Intercept, HTTP History, Replay, Automate, Match & Replace e Workflows).",
     upstreamUrl: "https://caido.io/",
     licenseNote: "Proprietary Free / Pro (Externo)",
-    windowsBinaries: ["caido-cli.exe", "caido.exe"],
+    windowsBinaries: ["caido-cli.exe", "Caido.exe", "caido.exe"],
     windowsKnownPaths: [
       "{toolsRoot}\\caido\\caido-cli.exe",
       "%LOCALAPPDATA%\\Programs\\caido\\Caido.exe",
+      "%LOCALAPPDATA%\\Programs\\Caido\\Caido.exe",
+      "%LOCALAPPDATA%\\caido\\Caido.exe",
+      "%ProgramFiles%\\Caido\\Caido.exe",
     ],
     posixBinaries: ["caido-cli", "caido"],
     defaultEmbedUrl: "http://127.0.0.1:7000",
@@ -914,12 +919,12 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
       "Analisa logs reais de eventos do Windows (`.evtx`) em segundos usando milhares de regras Sigma oficiais (`hayabusa`) ou caça malware com o motor oficial `yr` (VirusTotal YARA-X).",
     upstreamUrl: "https://github.com/Yamato-Security/hayabusa",
     licenseNote: "AGPL-3.0 / BSD-3 (Externo)",
-    windowsBinaries: ["hayabusa.exe", "yr.exe"],
+    windowsBinaries: ["hayabusa.exe", "yr.exe", "yara64.exe", "yara.exe"],
     windowsKnownPaths: ["{toolsRoot}\\bin\\hayabusa.exe", "{toolsRoot}\\bin\\yr.exe"],
-    posixBinaries: ["hayabusa", "yr"],
-    posixKnownPaths: ["~/.cargo/bin/yr", "~/CyberLab-Tools/bin/hayabusa"],
+    posixBinaries: ["hayabusa", "yr", "yara"],
+    posixKnownPaths: ["~/.cargo/bin/yr", "~/CyberLab-Tools/bin/hayabusa", "/usr/bin/yara"],
     installPowerShell: "winget install --id VirusTotal.YARA-X -e",
-    installKaliWsl: "cargo install yara-x-cli",
+    installKaliWsl: "sudo apt update && sudo apt install -y yara && cargo install yara-x-cli",
     presets: [
       {
         id: "yarax-scan",
@@ -937,14 +942,14 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
     kind: "web_embed",
     tagline: "Exibe a área de trabalho gráfica completa do seu Kali WSL2 ao vivo dentro da aba central!",
     description:
-      "Conecta ao servidor noVNC / KasmVNC do Kali Linux no WSL2 (`http://127.0.0.1:6080/vnc.html`), permitindo operar OpenTRAP, Wireshark, Burp, Ghidra, BloodHound e todo o menu gráfico do Kali dentro do navegador, com o OpenCode e os 4 CDIs na barra lateral!",
+      "Inicia e incorpora automaticamente um servidor X11/noVNC do Kali Linux no WSL2 dentro do painel central, permitindo operar OpenTRAP, Wireshark, Burp, Ghidra, BloodHound e todo o menu gráfico do Kali dentro do navegador, com o OpenCode e os 4 CDIs na barra lateral!",
     upstreamUrl: "https://www.kali.org/docs/wsl/win-kex/",
     licenseNote: "GPL / Kali Official (WSL2)",
     windowsBinaries: [],
-    posixBinaries: ["kex", "vncserver"],
+    posixBinaries: ["Xtigervnc", "websockify", "kex", "vncserver"],
     defaultEmbedUrl: "http://127.0.0.1:6080/vnc.html?autoconnect=true&resize=remote",
     installPowerShell: "wsl --install -d kali-linux",
-    installKaliWsl: "sudo apt update && sudo apt install -y kali-win-kex novnc websockify x11vnc",
+    installKaliWsl: "sudo apt update && sudo apt install -y kali-win-kex tigervnc-standalone-server openbox novnc websockify x11vnc",
     presets: [],
   },
 ]

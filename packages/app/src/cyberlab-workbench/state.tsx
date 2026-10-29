@@ -109,6 +109,7 @@ function createWorkbenchService() {
     currentFilesDir: string
     directoryOverride: string
     busy: boolean
+    probing: boolean
     notice: string
     error: string
   }>({
@@ -136,6 +137,7 @@ function createWorkbenchService() {
     currentFilesDir: ".",
     directoryOverride: typeof saved.directoryOverride === "string" ? saved.directoryOverride : "",
     busy: false,
+    probing: false,
     notice: "",
     error: "",
   })
@@ -263,6 +265,7 @@ function createWorkbenchService() {
   )
 
   async function refreshArsenalOnly(forceProbe = false): Promise<void> {
+    if (forceProbe) setUi("probing", true)
     try {
       const target = serverTarget()
       const data = await cyberlabFetch<ArsenalOverviewDto>(
@@ -273,12 +276,17 @@ function createWorkbenchService() {
       setBackend("arsenal", reconcile(data))
       if (forceProbe) {
         const installedCount = data.slots.filter((s) => s.installed).length
+        const winCount = data.slots.filter((s) => Boolean(s.windowsPath)).length
+        const wslCount = data.slots.filter((s) => Boolean(s.wslPath)).length
+        const nowStr = new Date().toLocaleTimeString("pt-BR")
         setNotice(
-          `Varredura concluída: ${installedCount}/${data.slots.length} slots prontos (${data.environment.wslAvailable ? `WSL2: ${data.environment.preferredWslDistro}` : "Windows Nativo"}).`,
+          `[${nowStr}] Varredura concluída: ${installedCount} de ${data.slots.length} slots prontos (${winCount} Windows · ${wslCount} Kali WSL2).`,
         )
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      if (forceProbe) setUi("probing", false)
     }
   }
 

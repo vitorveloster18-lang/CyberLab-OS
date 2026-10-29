@@ -15,7 +15,7 @@ import net from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-const UI_BUILD_STAMP = "cyberlab-unified-v5.0-real-arsenal-antigravity"
+const UI_BUILD_STAMP = "cyberlab-unified-v5.1-embedded-gui-wsl2-fix"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const distDir = path.join(repoRoot, "packages", "app", "dist")

@@ -184,11 +184,17 @@ export function CyberLabLeftExplorer() {
               />
               <button
                 type="button"
-                title="Re-escanear PowerShell + WSL2 Kali agora"
-                class="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-v2-border-border-base bg-v2-background-bg-base text-v2-text-text-muted hover:border-emerald-500 hover:text-emerald-500 cursor-pointer"
+                disabled={wb.ui.probing}
+                title="Re-escanear Windows + WinGet + WSL2 Kali agora"
+                class={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[10.5px] font-medium cursor-pointer transition-colors ${
+                  wb.ui.probing
+                    ? "border-emerald-500 bg-emerald-600/20 text-emerald-400"
+                    : "border-v2-border-border-base bg-v2-background-bg-base text-v2-text-text-base hover:border-emerald-500 hover:text-emerald-400"
+                }`}
                 onClick={() => void wb.refreshArsenalOnly(true)}
               >
-                <Icon name="refresh" class="size-3.5" />
+                <Icon name="refresh" class={`size-3.5 ${wb.ui.probing ? "animate-spin text-emerald-400" : ""}`} />
+                <span>{wb.ui.probing ? "Lendo..." : "Atualizar"}</span>
               </button>
             </div>
 
@@ -526,6 +532,7 @@ export function CyberLabCenterStage() {
   const [findingDesc, setFindingDesc] = createSignal("")
   const [findingSev, setFindingSev] = createSignal<"info" | "low" | "medium" | "high" | "critical">("high")
   const [desktopIngestText, setDesktopIngestText] = createSignal("")
+  const [showDesktopIngestDrawer, setShowDesktopIngestDrawer] = createSignal(false)
   const [showSlotSettings, setShowSlotSettings] = createSignal(false)
   const [customPathInput, setCustomPathInput] = createSignal("")
   const [customUrlInput, setCustomUrlInput] = createSignal("")
@@ -579,6 +586,17 @@ export function CyberLabCenterStage() {
         </div>
 
         <div class="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            disabled={wb.ui.probing}
+            title="Re-escanear todas as ferramentas do Windows + WinGet + Kali WSL2"
+            class="inline-flex items-center gap-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-base px-2 py-1 text-[11px] text-v2-text-text-base hover:border-emerald-500 hover:text-emerald-400 cursor-pointer"
+            onClick={() => void wb.refreshArsenalOnly(true)}
+          >
+            <Icon name="refresh" class={`size-3.5 ${wb.ui.probing ? "animate-spin text-emerald-400" : ""}`} />
+            <span>{wb.ui.probing ? "Escaneando..." : "Atualizar Slots"}</span>
+          </button>
+
           <button
             type="button"
             title={
@@ -819,13 +837,25 @@ export function CyberLabCenterStage() {
                   <div class="flex items-center gap-1.5">
                     <button
                       type="button"
-                      class="rounded bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-500 cursor-pointer"
+                      disabled={wb.ui.busy}
+                      class="rounded bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-500 cursor-pointer disabled:opacity-50"
                       onClick={() =>
                         void wb.launchSlot({ slotId: slot().slotId, action: "start_web" })
                       }
                     >
-                      ▶ Iniciar / Hospedar Web UI
+                      {wb.ui.busy ? "⏳ Iniciando..." : "▶ Abrir Aqui no Centro"}
                     </button>
+                    <Show when={slot().daemonRunning}>
+                      <button
+                        type="button"
+                        class="rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-[11px] text-red-400 hover:bg-red-500/20 cursor-pointer"
+                        onClick={() =>
+                          void wb.launchSlot({ slotId: slot().slotId, action: "stop_web" })
+                        }
+                      >
+                        ⏹ Parar
+                      </button>
+                    </Show>
                     <button
                       type="button"
                       class="rounded border border-v2-border-border-base px-2 py-1 text-[11px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
@@ -1029,117 +1059,242 @@ export function CyberLabCenterStage() {
               </div>
             </Show>
 
-            {/* MODO C: DESKTOP GUI / WSLg BRIDGE (Burp Suite, OpenTRAP, Ghidra, Wireshark, JADX-GUI, Cutter) */}
+            {/* MODO C: DESKTOP GUI INTEGRADA AO PALCO CENTRAL (noVNC/X11) + JANELA NATIVA WINDOWS */}
             <Show when={slot().kind === "desktop_gui"}>
-              <div class="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
-                <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  <div class="rounded-xl border border-v2-border-border-base bg-v2-background-bg-deep/55 p-4 space-y-3">
-                    <div class="text-[14px] font-semibold text-v2-text-text-strong">
-                      Lançador Direto — {slot().name}
-                    </div>
-                    <p class="text-[12px] text-v2-text-text-muted">{slot().description}</p>
-                    <div class="flex flex-wrap gap-2 pt-1">
-                      <button
-                        type="button"
-                        class="rounded-lg bg-emerald-600 px-4 py-2 text-[12px] font-semibold text-white hover:bg-emerald-500 cursor-pointer"
-                        onClick={() =>
-                          void wb.launchSlot({
-                            slotId: slot().slotId,
-                            action: "launch_desktop",
-                            target: wb.ui.cliTargetBySlot[slot().slotId] ?? "",
-                          })
-                        }
-                      >
-                        🚀 Abrir Janela Nativa ({slot().shortLabel})
-                      </button>
-
-                      <Show when={slot().companionProxyPort}>
-                        {(port) => (
+              <Show
+                when={slot().embedUrl}
+                fallback={
+                  <div class="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
+                    <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                      <div class="rounded-xl border border-emerald-600/40 bg-v2-background-bg-deep/65 p-4 space-y-3">
+                        <div class="text-[14.5px] font-semibold text-v2-text-text-strong">
+                          Palco Central Integrado — {slot().name}
+                        </div>
+                        <p class="text-[12px] text-v2-text-text-muted">
+                          Você pode abrir a interface gráfica completa do <strong>{slot().shortLabel}</strong>{" "}
+                          <strong>aqui dentro desta coluna central do CyberLab OS</strong> (via motor gráfico X11/noVNC do seu Kali WSL2, redimensionando automaticamente com as barras laterais) ou em uma janela solta do Windows.
+                        </p>
+                        <div class="flex flex-wrap gap-2 pt-1">
                           <button
                             type="button"
-                            class="rounded-lg bg-sky-600 px-4 py-2 text-[12px] font-semibold text-white hover:bg-sky-500 cursor-pointer"
+                            disabled={wb.ui.busy}
+                            class="rounded-lg bg-emerald-600 px-4 py-2 text-[12px] font-semibold text-white hover:bg-emerald-500 cursor-pointer disabled:opacity-60"
                             onClick={() =>
-                              void wb.launchProxyBrowser({
-                                proxyPort: port(),
-                                startUrl: "https://example.com",
+                              void wb.launchSlot({
+                                slotId: slot().slotId,
+                                action: "start_web",
                               })
                             }
                           >
-                            🌐 Abrir Chrome/Edge Isolado no Proxy (:{port()})
+                            {wb.ui.busy
+                              ? `⏳ Carregando ${slot().shortLabel} no Centro...`
+                              : `🖥 Abrir ${slot().shortLabel} Aqui Dentro do CyberLab`}
                           </button>
-                        )}
+
+                          <button
+                            type="button"
+                            class="rounded-lg border border-v2-border-border-base bg-v2-background-bg-base px-3.5 py-2 text-[12px] font-medium text-v2-text-text-strong hover:border-emerald-500 cursor-pointer"
+                            onClick={() =>
+                              void wb.launchSlot({
+                                slotId: slot().slotId,
+                                action: "launch_desktop",
+                                target: wb.ui.cliTargetBySlot[slot().slotId] ?? "",
+                              })
+                            }
+                          >
+                            🪟 Abrir Janela Externa ({slot().shortLabel})
+                          </button>
+
+                          <Show when={slot().companionProxyPort}>
+                            {(port) => (
+                              <button
+                                type="button"
+                                class="rounded-lg bg-sky-600 px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-sky-500 cursor-pointer"
+                                onClick={() =>
+                                  void wb.launchProxyBrowser({
+                                    proxyPort: port(),
+                                    startUrl: "https://example.com",
+                                  })
+                                }
+                              >
+                                🌐 Navegador Isolado no Proxy (:{port()})
+                              </button>
+                            )}
+                          </Show>
+                        </div>
+                        <Show when={slot().resolvedPath}>
+                          <div class="font-mono text-[10.5px] text-emerald-400">
+                            Detectado em: {slot().resolvedPath}
+                          </div>
+                        </Show>
+                      </div>
+
+                      {/* Card Especial de Sinergia Burp Suite + OpenTRAP */}
+                      <Show when={slot().slotId === "burp-suite" || slot().slotId === "opentrap"}>
+                        <div class="rounded-xl border border-emerald-600/35 bg-emerald-950/20 p-4 space-y-2">
+                          <div class="text-[13px] font-semibold text-emerald-400">
+                            ⚡ Sinergia Real: Burp Suite Community + OpenTRAP
+                          </div>
+                          <ul class="list-disc pl-4 space-y-1 text-[11.5px] text-v2-text-text-base">
+                            <li>
+                              <strong>Burp Suite Community (`:8080`)</strong>: Melhor ergonomia manual para Proxy, Repeater multi-abas, Decoder, Comparer e extensões BApp (Autorize, Param Miner). Ao clicar em <strong>"Abrir Aqui Dentro do CyberLab"</strong>, o CyberLab reutiliza o <code>.jar</code> do seu Burp já instalado no Windows dentro do Canvas Central!
+                            </li>
+                            <li>
+                              <strong>OpenTRAP (Kali WSL2)</strong>: Entrega gratuitamente os 3 recursos bloqueados no Burp Community — <strong>Intruder sem limite de velocidade</strong>, <strong>Scanner Ativo real (OWASP ZAP)</strong> e <strong>Collaborator OAST nativo (Interactsh)</strong>!
+                            </li>
+                            <li>
+                              <strong>Multitarefa Real</strong>: Você pode abrir ambos dentro do CyberLab OS e alternar entre eles na barra esquerda em 1 clique sem perder a sessão!
+                            </li>
+                          </ul>
+                        </div>
                       </Show>
                     </div>
-                    <Show when={slot().resolvedPath}>
-                      <div class="font-mono text-[10.5px] text-emerald-400">
-                        Detectado em: {slot().resolvedPath}
+
+                    {/* Ingestão de Exportações / Requests / Achados da GUI para SHA-256 + Agente IA */}
+                    <div class="rounded-xl border border-v2-border-border-base bg-v2-background-bg-deep/40 p-4 space-y-2.5">
+                      <div class="text-[12.5px] font-semibold text-v2-text-text-strong">
+                        Ponte Rápida: Colar Request HTTP / Descompilação / Log da GUI para Custódia SHA-256 ou Agente OpenCode
+                      </div>
+                      <textarea
+                        rows={5}
+                        placeholder={`Cole aqui um request/response do ${slot().shortLabel}, código descompilado do Ghidra/JADX ou alerta do Scanner para gravar com hash SHA-256 ou analisar com o Agente IA à direita...`}
+                        value={desktopIngestText()}
+                        class="w-full rounded-lg border border-v2-border-border-base bg-zinc-950 p-2.5 font-mono text-[11.5px] text-zinc-100 outline-none focus:border-emerald-500"
+                        onInput={(e) => setDesktopIngestText(e.currentTarget.value)}
+                      />
+                      <div class="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          class="rounded-md bg-sky-600 px-3 py-1.5 text-[11.5px] font-medium text-white hover:bg-sky-500 cursor-pointer"
+                          onClick={() => {
+                            void wb.persistOutputToEvidence(
+                              `Captura Manual — ${slot().name}`,
+                              desktopIngestText(),
+                              slot().slotId,
+                            )
+                          }}
+                        >
+                          🔒 Gravar em Custódia SHA-256
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded-md bg-emerald-600 px-3 py-1.5 text-[11.5px] font-medium text-white hover:bg-emerald-500 cursor-pointer"
+                          onClick={() =>
+                            wb.sendToAgent(
+                              `Artefato de ${slot().name}`,
+                              desktopIngestText(),
+                              `${slot().slotId}-capture.txt`,
+                            )
+                          }
+                        >
+                          🤖 Enviar p/ Agente OpenCode →
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                }
+              >
+                {(url) => (
+                  <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-v2-border-border-base bg-v2-background-bg-base px-3 py-1 text-[11px] shrink-0">
+                      <div class="flex items-center gap-2 min-w-0">
+                        <span class="inline-block size-2 rounded-full bg-emerald-500" />
+                        <span class="font-medium text-emerald-400">
+                          {slot().shortLabel} integrado ao Palco Central
+                        </span>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                          onClick={() => setShowDesktopIngestDrawer((v) => !v)}
+                        >
+                          📋 Colar p/ SHA-256 ou IA
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                          onClick={() => wb.setUi("iframeReloadNonce", (n) => n + 1)}
+                        >
+                          ↻ Reconectar Tela
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                          onClick={() =>
+                            void wb.launchSlot({
+                              slotId: slot().slotId,
+                              action: "launch_desktop",
+                            })
+                          }
+                        >
+                          🪟 Janela Externa
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[10.5px] text-red-400 hover:bg-red-500/20 cursor-pointer"
+                          onClick={() =>
+                            void wb.launchSlot({
+                              slotId: slot().slotId,
+                              action: "stop_web",
+                            })
+                          }
+                        >
+                          ⏹ Fechar Tela Central
+                        </button>
+                      </div>
+                    </div>
+
+                    <Show when={showDesktopIngestDrawer()}>
+                      <div class="border-b border-v2-border-border-base bg-v2-background-bg-deep/90 p-2.5 space-y-2 shrink-0">
+                        <textarea
+                          rows={3}
+                          placeholder={`Cole aqui um request/response ou achado do ${slot().shortLabel} p/ gravar em SHA-256 ou enviar ao Agente OpenCode...`}
+                          value={desktopIngestText()}
+                          class="w-full rounded border border-v2-border-border-base bg-zinc-950 p-2 font-mono text-[11px] text-zinc-100 outline-none focus:border-emerald-500"
+                          onInput={(e) => setDesktopIngestText(e.currentTarget.value)}
+                        />
+                        <div class="flex items-center gap-2">
+                          <button
+                            type="button"
+                            class="rounded bg-sky-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-sky-500 cursor-pointer"
+                            onClick={() => {
+                              void wb.persistOutputToEvidence(
+                                `Captura Manual — ${slot().name}`,
+                                desktopIngestText(),
+                                slot().slotId,
+                              )
+                            }}
+                          >
+                            🔒 Gravar SHA-256
+                          </button>
+                          <button
+                            type="button"
+                            class="rounded bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-500 cursor-pointer"
+                            onClick={() =>
+                              wb.sendToAgent(
+                                `Artefato de ${slot().name}`,
+                                desktopIngestText(),
+                                `${slot().slotId}-capture.txt`,
+                              )
+                            }
+                          >
+                            🤖 Enviar p/ Agente IA →
+                          </button>
+                        </div>
                       </div>
                     </Show>
-                  </div>
 
-                  {/* Card Especial de Sinergia Burp Suite + OpenTRAP */}
-                  <Show when={slot().slotId === "burp-suite" || slot().slotId === "opentrap"}>
-                    <div class="rounded-xl border border-emerald-600/35 bg-emerald-950/20 p-4 space-y-2">
-                      <div class="text-[13px] font-semibold text-emerald-400">
-                        ⚡ Sinergia Real: Burp Suite Community + OpenTRAP
-                      </div>
-                      <ul class="list-disc pl-4 space-y-1 text-[11.5px] text-v2-text-text-base">
-                        <li>
-                          <strong>Burp Suite Community (Windows Nativo `:8080`)</strong>: Melhor ergonomia do mercado para Proxy Manual, Repeater multi-abas, Decoder, Comparer e ecossistema BApp Store (Autorize, Turbo Intruder, Param Miner).
-                        </li>
-                        <li>
-                          <strong>OpenTRAP (WSL2 Kali Linux GUI)</strong>: Desbloqueia sem custo de licença os 3 recursos que a edição Community do Burp bloqueia ou limita — <strong>Intruder sem throttling artificial</strong>, <strong>Scanner Ativo integrado (motor OWASP ZAP headless)</strong> e <strong>Collaborator OAST nativo (Interactsh)</strong>!
-                        </li>
-                        <li>
-                          <strong>Dica Pro</strong>: Você pode usar o Burp na `:8080` e configurar o OpenTRAP na `:8082` (ou encadear Upstream Proxy <code>Burp → OpenTRAP</code>) com o Navegador Isolado de 1 clique acima!
-                        </li>
-                      </ul>
-                    </div>
-                  </Show>
-                </div>
-
-                {/* Ingestão de Exportações / Requests / Achados da GUI Externa direto em SHA-256 + Agente IA */}
-                <div class="rounded-xl border border-v2-border-border-base bg-v2-background-bg-deep/40 p-4 space-y-2.5">
-                  <div class="text-[12.5px] font-semibold text-v2-text-text-strong">
-                    Ponte Rápida: Colar Request HTTP / Descompilação / Log da GUI para Custódia SHA-256 ou Agente OpenCode
+                    <iframe
+                      data-slot="cyberlab-embedded-gui-iframe"
+                      src={`${url()}${url().includes("?") ? "&" : "?"}_cb=${wb.ui.iframeReloadNonce}`}
+                      title={slot().name}
+                      class="h-full w-full flex-1 border-0 bg-zinc-950"
+                      allow="clipboard-read; clipboard-write"
+                    />
                   </div>
-                  <textarea
-                    rows={6}
-                    placeholder={`Cole aqui um request/response do ${slot().shortLabel}, código descompilado do Ghidra/JADX ou alerta do Scanner para gravar com hash SHA-256 ou analisar com o Agente IA à direita...`}
-                    value={desktopIngestText()}
-                    class="w-full rounded-lg border border-v2-border-border-base bg-zinc-950 p-2.5 font-mono text-[11.5px] text-zinc-100 outline-none focus:border-emerald-500"
-                    onInput={(e) => setDesktopIngestText(e.currentTarget.value)}
-                  />
-                  <div class="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      class="rounded-md bg-sky-600 px-3 py-1.5 text-[11.5px] font-medium text-white hover:bg-sky-500 cursor-pointer"
-                      onClick={() => {
-                        void wb.persistOutputToEvidence(
-                          `Captura Manual — ${slot().name}`,
-                          desktopIngestText(),
-                          slot().slotId,
-                        )
-                      }}
-                    >
-                      🔒 Gravar em Custódia SHA-256
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded-md bg-emerald-600 px-3 py-1.5 text-[11.5px] font-medium text-white hover:bg-emerald-500 cursor-pointer"
-                      onClick={() =>
-                        wb.sendToAgent(
-                          `Artefato de ${slot().name}`,
-                          desktopIngestText(),
-                          `${slot().slotId}-capture.txt`,
-                        )
-                      }
-                    >
-                      🤖 Enviar p/ Agente OpenCode →
-                    </button>
-                  </div>
-                </div>
-              </div>
+                )}
+              </Show>
             </Show>
           </div>
         )}
