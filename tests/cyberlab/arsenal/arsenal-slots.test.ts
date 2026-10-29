@@ -13,11 +13,12 @@ const tempDirs: string[] = []
 const workspaces: CyberLabWorkspace[] = []
 
 afterEach(() => {
+  delete process.env.CYBERLAB_GLOBAL_CONFIG_DIR
   for (const ws of workspaces.splice(0)) {
     ws.close()
   }
   for (const d of tempDirs.splice(0)) {
-    rmSync(d, { recursive: true, force: true })
+    rmSync(d, { recursive: true, force: true, maxRetries: 4, retryDelay: 50 })
   }
 })
 
@@ -57,6 +58,7 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
     const wsDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-v5-arsenal-"))
     const externalToolsDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-v5-ext-tools-"))
     tempDirs.push(wsDir, externalToolsDir)
+    process.env.CYBERLAB_GLOBAL_CONFIG_DIR = path.join(wsDir, ".global-cfg")
 
     // Simulate user downloading GCHQ CyberChef zip into <toolsRoot>/CyberChef/CyberChef_v10.19.4.html
     const chefDir = path.join(externalToolsDir, "CyberChef")
@@ -154,5 +156,7 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
     // Verify Workspace File Explorer lists .cyberlab/outputs/ log
     const outListing = await ws.listWorkspaceFiles(".cyberlab/outputs")
     expect(outListing.entries.length).toBeGreaterThanOrEqual(1)
-  })
+
+    await ws.launchArsenalSlot({ slotId: "cyberchef", action: "stop_web" })
+  }, 25_000)
 })

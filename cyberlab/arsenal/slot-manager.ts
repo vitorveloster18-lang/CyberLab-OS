@@ -297,51 +297,42 @@ export class ArsenalSlotManager {
   }
 
   private findWhereOnWindows(binNames: string[]): string | null {
-    for (const bin of binNames) {
+    const pathDirs = [
+      path.join(this.workspaceRoot, ".cyberlab", "bin"),
+      path.join(this.config.toolsRootDir, "bin"),
+      ...(process.env.PATH ?? "").split(path.delimiter).filter(Boolean),
+    ]
+    const winExts = ["", ".exe", ".cmd", ".bat"]
+
+    for (const rawBin of binNames) {
+      const bin = rawBin.trim()
       if (!bin) continue
-      const localBin = path.join(this.workspaceRoot, ".cyberlab", "bin", bin)
-      if (existsSync(localBin)) return localBin
-      const toolsBin = path.join(this.config.toolsRootDir, "bin", bin)
-      if (existsSync(toolsBin)) return toolsBin
-      try {
-        const res = spawnSync("where.exe", [bin], {
-          stdio: ["ignore", "pipe", "ignore"],
-          windowsHide: true,
-          timeout: 2000,
-        })
-        if (res.status === 0 && res.stdout) {
-          const hit = decodePotentialUtf16Le(res.stdout)
-            .split(/\r?\n/)
-            .map((s) => s.trim())
-            .find((s) => s.length > 0 && existsSync(s))
-          if (hit) return hit
+      if (path.isAbsolute(bin) && existsSync(bin)) return bin
+
+      const hasExt = /\.[a-z0-9]+$/i.test(bin)
+      for (const dir of pathDirs) {
+        for (const ext of hasExt ? [""] : winExts) {
+          const candidate = path.join(dir, `${bin}${ext}`)
+          if (existsSync(candidate)) return candidate
         }
-      } catch {
-        // Ignore
       }
     }
     return null
   }
 
   private findWhichOnPosix(binNames: string[]): string | null {
-    for (const bin of binNames) {
+    const pathDirs = [
+      path.join(this.workspaceRoot, ".cyberlab", "bin"),
+      path.join(this.config.toolsRootDir, "bin"),
+      ...(process.env.PATH ?? "").split(path.delimiter).filter(Boolean),
+    ]
+    for (const rawBin of binNames) {
+      const bin = rawBin.trim()
       if (!bin) continue
-      const localBin = path.join(this.workspaceRoot, ".cyberlab", "bin", bin)
-      if (existsSync(localBin)) return localBin
-      const toolsBin = path.join(this.config.toolsRootDir, "bin", bin)
-      if (existsSync(toolsBin)) return toolsBin
-      try {
-        const res = spawnSync("which", [bin], {
-          encoding: "utf8",
-          stdio: ["ignore", "pipe", "ignore"],
-          timeout: 1800,
-        })
-        if (res.status === 0 && res.stdout) {
-          const hit = res.stdout.split(/\r?\n/)[0]?.trim()
-          if (hit && existsSync(hit)) return hit
-        }
-      } catch {
-        // Ignore
+      if (path.isAbsolute(bin) && existsSync(bin)) return bin
+      for (const dir of pathDirs) {
+        const candidate = path.join(dir, bin)
+        if (existsSync(candidate)) return candidate
       }
     }
     return null
@@ -389,9 +380,15 @@ export class ArsenalSlotManager {
         })
         if (wslList.status === 0 && wslList.stdout) {
           const distros = decodePotentialUtf16Le(wslList.stdout)
+            .replace(/^\uFEFF/, "")
             .split(/\r?\n/)
             .map((s) => s.trim())
-            .filter((s) => s.length > 0 && !s.toLowerCase().includes("docker-desktop"))
+            .filter(
+              (s) =>
+                s.length > 0 &&
+                /^[A-Za-z0-9._-]+$/.test(s) &&
+                !s.toLowerCase().includes("docker-desktop"),
+            )
           if (distros.length > 0) {
             this.wslAvailable = true
             this.wslDistros = distros
@@ -831,9 +828,9 @@ export class ArsenalSlotManager {
     const srv = http.createServer((req, res) => {
       try {
         const parsed = new URL(req.url ?? "/", "http://127.0.0.1")
-        const rel = decodeURIComponent(parsed.pathname === "/" ? `/${entryFile}` : parsed.pathname)
-        const targetFile = path.resolve(baseDir, `.${rel}`)
-        if (!targetFile.startsWith(path.resolve(baseDir)) || !existsSync(targetFile)) {
+        const rel = decodeURIComponent(parsed.pathname === "/" ? entryFile : parsed.pathname.replace(/^\/+/, ""))
+        const targetFile = path.resolve(baseDir, rel)
+        if (!isPathInsideRoot(targetFile, baseDir) || !existsSync(targetFile)) {
           res.writeHead(404)
           res.end("Not found")
           return
