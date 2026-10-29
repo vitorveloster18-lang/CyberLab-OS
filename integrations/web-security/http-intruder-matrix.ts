@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import {
+  EngagementRuntime,
   capOutputBytes,
   normalizeRawOutputDraft,
   redactSensitiveContent,
@@ -26,24 +27,24 @@ export const HttpIntruderInputSchema = Schema.Struct({
   headers: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
   bodyTemplate: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(32_768))),
   attackMode: Schema.optionalKey(IntruderAttackModeSchema),
-  payloadSet1: Schema.Array(Schema.String.check(Schema.isMaxLength(512))).check(
+  payloadSet1: Schema.Array(Schema.String.check(Schema.isMaxLength(1024))).check(
     Schema.isMinLength(1),
-    Schema.isMaxLength(60),
+    Schema.isMaxLength(200),
   ),
   payloadSet2: Schema.optionalKey(
-    Schema.Array(Schema.String.check(Schema.isMaxLength(512))).check(Schema.isMaxLength(60)),
+    Schema.Array(Schema.String.check(Schema.isMaxLength(1024))).check(Schema.isMaxLength(200)),
   ),
   maxRequests: Schema.optionalKey(
-    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(60)),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(200)),
   ),
   concurrency: Schema.optionalKey(
-    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(6)),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(10)),
   ),
   delayMs: Schema.optionalKey(
-    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(2_000)),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(5_000)),
   ),
   timeoutMs: Schema.optionalKey(
-    Schema.Int.check(Schema.isGreaterThanOrEqualTo(200), Schema.isLessThanOrEqualTo(15_000)),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(200), Schema.isLessThanOrEqualTo(30_000)),
   ),
   grepMatch: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(256))),
   urlEncodePayloads: Schema.optionalKey(Schema.Boolean),
@@ -278,9 +279,11 @@ export class HttpIntruderMatrixExecutor implements CyberLabExecutor {
       context.signal.addEventListener("abort", onOuterAbort, { once: true })
 
       try {
+        await EngagementRuntime.acquireRateSlot(context.projectId)
+        const reqHeaders = EngagementRuntime.applyHeaders(context.projectId, item.finalHeaders)
         const res = await fetch(targetUrl.toString(), {
           method,
-          headers: item.finalHeaders,
+          headers: reqHeaders,
           ...(method !== "GET" && method !== "HEAD" && item.finalBody.length > 0
             ? { body: item.finalBody }
             : {}),
@@ -289,6 +292,16 @@ export class HttpIntruderMatrixExecutor implements CyberLabExecutor {
         })
         const rawText = capOutputBytes(await res.text(), 32_768).text
         const elapsedMs = Math.round(performance.now() - t0)
+        EngagementRuntime.recordTraffic({
+          projectId: context.projectId,
+          sourceTool: "http-intruder",
+          method,
+          url: targetUrl.toString(),
+          host: targetUrl.host,
+          statusCode: res.status,
+          elapsedMs,
+          responseBytes: Buffer.byteLength(rawText, "utf8"),
+        })
         const loc = res.headers.get("location") ?? undefined
         const grepMatched = grepNeedle ? rawText.toLowerCase().includes(grepNeedle.toLowerCase()) : false
 

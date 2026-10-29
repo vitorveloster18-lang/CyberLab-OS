@@ -161,7 +161,14 @@ export interface LocalCaBundle {
   certPem: string
   keyPem: string
   fingerprintSha256: string
+  spkiSha256Base64: string
   certPath: string | null
+}
+
+function computeCertSpkiSha256Base64(certPem: string): string {
+  const pubKey = crypto.createPublicKey(certPem)
+  const spkiDer = pubKey.export({ type: "spki", format: "der" }) as Buffer
+  return crypto.createHash("sha256").update(spkiDer).digest("base64")
 }
 
 export class CyberLabLocalCa {
@@ -169,10 +176,11 @@ export class CyberLabLocalCa {
   private rootKeyPem: string
   private rootPrivateKey: crypto.KeyObject
   private fingerprintSha256: string
+  private spkiSha256Base64: string
   private readonly certPath: string | null
   private readonly leafCache = new Map<string, { certPem: string; keyPem: string }>()
 
-  private static readonly ROOT_CN = "CyberLab OS Local Lab Root CA"
+  private static readonly ROOT_CN = "CyberLab OS Root CA"
   private static readonly ROOT_ORG = "CyberLab OS Security Workbench"
 
   constructor(options?: { caDirectory?: string }) {
@@ -187,6 +195,7 @@ export class CyberLabLocalCa {
       this.rootPrivateKey = crypto.createPrivateKey(this.rootKeyPem)
       const x509 = new crypto.X509Certificate(this.rootCertPem)
       this.fingerprintSha256 = x509.fingerprint256
+      this.spkiSha256Base64 = computeCertSpkiSha256Base64(this.rootCertPem)
       return
     }
 
@@ -195,6 +204,7 @@ export class CyberLabLocalCa {
     this.rootKeyPem = generated.keyPem
     this.rootPrivateKey = generated.privateKey
     this.fingerprintSha256 = generated.fingerprintSha256
+    this.spkiSha256Base64 = computeCertSpkiSha256Base64(this.rootCertPem)
 
     if (caDir && certFile && keyFile) {
       try {
@@ -260,6 +270,7 @@ export class CyberLabLocalCa {
     return {
       certPem: this.rootCertPem,
       fingerprintSha256: this.fingerprintSha256,
+      spkiSha256Base64: this.spkiSha256Base64,
       certPath: this.certPath,
     }
   }

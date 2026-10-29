@@ -2,6 +2,7 @@ import { existsSync, lstatSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { Schema } from "effect"
 import {
+  EngagementRuntime,
   isPathInsideRoot,
   normalizeRawOutputDraft,
   redactSensitiveContent,
@@ -153,14 +154,39 @@ async function safeFetchProbe(
   init: RequestInit,
   timeoutMs: number,
   parentSignal: AbortSignal,
+  projectId?: string,
 ): Promise<{ status: number; bodyText: string; contentType: string }> {
   const ctrl = new AbortController()
   const onAbort = () => ctrl.abort()
   parentSignal.addEventListener("abort", onAbort, { once: true })
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
-    const res = await fetch(url, { ...init, redirect: "manual", signal: ctrl.signal })
+    if (projectId) {
+      await EngagementRuntime.acquireRateSlot(projectId)
+    }
+    const baseHeaders: Record<string, string> = {}
+    if (init.headers && typeof init.headers === "object" && !Array.isArray(init.headers)) {
+      for (const [k, v] of Object.entries(init.headers as Record<string, string>)) {
+        if (v !== undefined) baseHeaders[k] = v
+      }
+    }
+    const finalHeaders = projectId ? EngagementRuntime.applyHeaders(projectId, baseHeaders) : baseHeaders
+    const t0 = Date.now()
+    const res = await fetch(url, { ...init, headers: finalHeaders, redirect: "manual", signal: ctrl.signal })
     const buf = Buffer.from(await res.arrayBuffer())
+    if (projectId) {
+      const parsed = new URL(url)
+      EngagementRuntime.recordTraffic({
+        projectId,
+        sourceTool: "api-graphql-oauth",
+        method: (init.method ?? "GET").toUpperCase(),
+        url,
+        host: parsed.host,
+        statusCode: res.status,
+        elapsedMs: Date.now() - t0,
+        responseBytes: buf.byteLength,
+      })
+    }
     return {
       status: res.status,
       bodyText: buf.subarray(0, 32_768).toString("utf8"),
@@ -269,12 +295,12 @@ export class ApiGraphqlOauthLabExecutor implements CyberLabExecutor {
         const targetUrl = new URL(ep.concretePath, baseOrigin.origin)
         if (targetUrl.origin !== baseOrigin.origin) continue
 
-        const resA = await safeFetchProbe(targetUrl.toString(), { method: ep.method, headers: headersA }, timeoutMs, ctx.signal)
+        const resA = await safeFetchProbe(targetUrl.toString(), { method: ep.method, headers: headersA }, timeoutMs, ctx.signal, ctx.projectId)
         const resB = hasUserB
-          ? await safeFetchProbe(targetUrl.toString(), { method: ep.method, headers: headersB }, timeoutMs, ctx.signal)
+          ? await safeFetchProbe(targetUrl.toString(), { method: ep.method, headers: headersB }, timeoutMs, ctx.signal, ctx.projectId)
           : null
         const resUnauth = checkUnauth
-          ? await safeFetchProbe(targetUrl.toString(), { method: ep.method }, timeoutMs, ctx.signal)
+          ? await safeFetchProbe(targetUrl.toString(), { method: ep.method }, timeoutMs, ctx.signal, ctx.projectId)
           : null
 
         let bolaSuspected = false
@@ -341,6 +367,7 @@ export class ApiGraphqlOauthLabExecutor implements CyberLabExecutor {
           },
           timeoutMs,
           ctx.signal,
+          ctx.projectId,
         )
         if (introRes.status === 200 && introRes.bodyText.includes('"__schema"')) {
           introspectionEnabled = true
@@ -369,6 +396,7 @@ export class ApiGraphqlOauthLabExecutor implements CyberLabExecutor {
           },
           timeoutMs,
           ctx.signal,
+          ctx.projectId,
         )
         if (batchRes.status === 200 && batchRes.bodyText.trim().startsWith("[")) {
           batchingAccepted = true
@@ -389,6 +417,7 @@ export class ApiGraphqlOauthLabExecutor implements CyberLabExecutor {
           },
           timeoutMs,
           ctx.signal,
+          ctx.projectId,
         )
         if (/did you mean/i.test(typoRes.bodyText)) {
           fieldSuggestionsExposed = true
@@ -420,7 +449,7 @@ export class ApiGraphqlOauthLabExecutor implements CyberLabExecutor {
         const wellKnownUrl = baseIssuer.endsWith("openid-configuration")
           ? baseIssuer
           : `${baseIssuer}/.well-known/openid-configuration`
-        const wkRes = await safeFetchProbe(wellKnownUrl, { method: "GET" }, timeoutMs, ctx.signal)
+        const wkRes = await safeFetchProbe(wellKnownUrl, { method: "GET" }, timeoutMs, ctx.signal, ctx.projectId)
         if (wkRes.status === 200) {
           try {
             const meta = JSON.parse(wkRes.bodyText) as Record<string, unknown>

@@ -18,18 +18,23 @@ import {
 import type {
   ApprovalDto,
   DispatchPartnersResultDto,
+  EngagementProfileDto,
   EvidenceDto,
   ExecutionDto,
   ExternalToolsOverviewDto,
   FindingDto,
+  ImportedArtifactDto,
   KeyValueHeaderRow,
   ManualToolDraftMap,
   ManualToolId,
   PartnersOverviewDto,
   ProjectsAndLabsOverviewDto,
+  ProxyBrowserLaunchResultDto,
   ProxyHistoryEntryDto,
   ProxyOverviewDto,
+  ProxyReplayBundleDto,
   ReadEvidenceDto,
+  RepeaterSavedTab,
   ScopeRuleDto,
   ToolHistoryEntry,
   ToolSuiteId,
@@ -254,6 +259,8 @@ function createWorkbenchService() {
     partners: PartnersOverviewDto | null
     external: ExternalToolsOverviewDto | null
     projectsAndLabs: ProjectsAndLabsOverviewDto | null
+    importedArtifacts: ImportedArtifactDto[]
+    lastBrowserLaunch: ProxyBrowserLaunchResultDto | null
     reportMarkdown: string
     inspectedEvidence: ReadEvidenceDto | null
     revealedSecret: string
@@ -268,6 +275,8 @@ function createWorkbenchService() {
     partners: null,
     external: null,
     projectsAndLabs: null,
+    importedArtifacts: [],
+    lastBrowserLaunch: null,
     reportMarkdown: "",
     inspectedEvidence: null,
     revealedSecret: "",
@@ -556,7 +565,7 @@ function createWorkbenchService() {
     setBackend("loading", true)
     const target = serverTarget()
     try {
-      const [status, approvals, executions, evidence, findings, proxy, partners, external, projectsAndLabs] =
+      const [status, approvals, executions, evidence, findings, proxy, partners, external, projectsAndLabs, artifacts] =
         await Promise.all([
           cyberlabFetch<WorkspaceStatusDto>(target, "/api/cyberlab/status").catch(() => null),
           cyberlabFetch<ApprovalDto[]>(target, "/api/cyberlab/approvals").catch(() => []),
@@ -567,6 +576,7 @@ function createWorkbenchService() {
           cyberlabFetch<PartnersOverviewDto>(target, "/api/cyberlab/partners").catch(() => null),
           cyberlabFetch<ExternalToolsOverviewDto>(target, "/api/cyberlab/external/tools").catch(() => null),
           cyberlabFetch<ProjectsAndLabsOverviewDto>(target, "/api/cyberlab/projects").catch(() => null),
+          cyberlabFetch<ImportedArtifactDto[]>(target, "/api/cyberlab/artifacts").catch(() => []),
         ])
       batch(() => {
         if (status) setBackend("status", reconcile(status))
@@ -578,6 +588,7 @@ function createWorkbenchService() {
         if (partners) setBackend("partners", reconcile(partners))
         if (external) setBackend("external", reconcile(external))
         if (projectsAndLabs) setBackend("projectsAndLabs", reconcile(projectsAndLabs))
+        setBackend("importedArtifacts", reconcile(artifacts))
       })
     } finally {
       setBackend("loading", false)
@@ -934,51 +945,316 @@ function createWorkbenchService() {
     }
   }
 
+  async function refreshProxyOnly(): Promise<void> {
+    try {
+      const proxy = await cyberlabFetch<ProxyOverviewDto>(serverTarget(), "/api/cyberlab/proxy")
+      if (proxy) setBackend("proxy", reconcile(proxy))
+    } catch {
+      // Ignore background poll glitches
+    }
+  }
+
+  async function controlProxyAdvanced(
+    payload: Record<string, unknown>,
+    customNotice?: string,
+  ): Promise<ProxyOverviewDto | null> {
+    try {
+      const res = await cyberlabFetch<ProxyOverviewDto>(serverTarget(), "/api/cyberlab/proxy/control", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      })
+      setBackend("proxy", reconcile(res))
+      if (res.browserLaunchResult) {
+        setBackend("lastBrowserLaunch", reconcile(res.browserLaunchResult))
+      }
+      if (customNotice) setNotice(customNotice)
+      return res
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      return null
+    }
+  }
+
+  async function launchProxyBrowser(startUrl?: string, preferredBrowserId?: string): Promise<void> {
+    const d = drafts["http-proxy"]
+    const res = await controlProxyAdvanced({
+      action: "launch_browser",
+      port: Math.min(65535, Math.max(1024, Math.trunc(Number(d.port) || 8899))),
+      startUrl: (startUrl ?? d.browserStartUrl ?? "").trim() || "http://cyberlab.proxy/",
+      ...(preferredBrowserId ?? d.preferredBrowserId
+        ? { preferredBrowserId: preferredBrowserId ?? d.preferredBrowserId }
+        : {}),
+    })
+    if (res?.browserLaunchResult) {
+      setNotice(res.browserLaunchResult.message)
+    }
+  }
+
+  async function fetchLiveProxyReplay(entry: ProxyHistoryEntryDto): Promise<ProxyReplayBundleDto | null> {
+    try {
+      return await cyberlabFetch<ProxyReplayBundleDto>(serverTarget(), "/api/cyberlab/proxy/replay", {
+        method: "POST",
+        body: JSON.stringify({ entryId: entry.entryId }),
+      })
+    } catch {
+      return null
+    }
+  }
+
   function sendProxyCaptureToRepeater(entry: ProxyHistoryEntryDto): void {
-    const headerRows: KeyValueHeaderRow[] = Object.entries(entry.requestHeaders ?? {}).map(([name, value], idx) => ({
-      id: `px-h-${idx}-${Date.now()}`,
-      enabled: name.toLowerCase() !== "host" && name.toLowerCase() !== "content-length",
-      name,
-      value,
-    }))
-    const allowedMethods = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] as const
-    const upper = entry.method.toUpperCase()
-    const method = (allowedMethods.find((m) => m === upper) ?? "GET")
-    updateDraft("http-repeater", (prev) => ({
-      ...prev,
-      method,
-      url: entry.url,
-      headers: headerRows.length > 0 ? headerRows : prev.headers,
-      body: entry.requestBody || "",
-      useRawJson: false,
-    }))
-    selectTool("http-repeater")
-    setNotice(`Requisição ${method} ${entry.url} enviada para o HTTP Repeater!`)
+    void (async () => {
+      const live = await fetchLiveProxyReplay(entry)
+      const srcHeaders = live?.headers ?? entry.requestHeaders ?? {}
+      const headerRows: KeyValueHeaderRow[] = Object.entries(srcHeaders).map(([name, value], idx) => ({
+        id: `px-h-${idx}-${Date.now()}`,
+        enabled: name.toLowerCase() !== "host" && name.toLowerCase() !== "content-length",
+        name,
+        value,
+      }))
+      const allowedMethods = ["GET", "HEAD", "POST", "PUT" , "PATCH", "DELETE", "OPTIONS"] as const
+      const upper = (live?.method ?? entry.method).toUpperCase()
+      const method = allowedMethods.find((m) => m === upper) ?? "GET"
+      const targetUrl = live?.url ?? entry.url
+      const bodyStr = live?.body ?? entry.requestBody ?? ""
+      const rawHttpText = live?.rawHttpRequest ?? ""
+
+      updateDraft("http-repeater", (prev) => {
+        const existingTabs = prev.tabs && prev.tabs.length > 0 ? [...prev.tabs] : []
+        const newTabId = `rtab-${Date.now()}`
+        let shortHost = targetUrl
+        try {
+          const u = new URL(targetUrl)
+          shortHost = `${method} ${u.pathname.slice(0, 22) || "/"}`
+        } catch {
+          // keep fallback
+        }
+        const createdTab: RepeaterSavedTab = {
+          tabId: newTabId,
+          title: `${existingTabs.length + 1}: ${shortHost}`,
+          method,
+          url: targetUrl,
+          headers: headerRows,
+          body: bodyStr,
+          useRawHttp: false,
+          rawHttpText,
+          followRedirects: Boolean(prev.followRedirects),
+        }
+        return {
+          ...prev,
+          viewMode: "repeater",
+          tabs: [...existingTabs, createdTab].slice(-12),
+          activeTabId: newTabId,
+          method,
+          url: targetUrl,
+          headers: headerRows.length > 0 ? headerRows : prev.headers,
+          body: bodyStr,
+          rawHttpText,
+          useRawJson: false,
+        }
+      })
+      selectTool("http-repeater")
+      setNotice(`Requisição ${method} ${targetUrl} enviada com sessão real ao Repeater!`)
+    })()
   }
 
   function sendProxyCaptureToIntruder(entry: ProxyHistoryEntryDto): void {
-    const headerRows: KeyValueHeaderRow[] = Object.entries(entry.requestHeaders ?? {}).map(([name, value], idx) => ({
-      id: `px-i-${idx}-${Date.now()}`,
-      enabled: name.toLowerCase() !== "host" && name.toLowerCase() !== "content-length",
-      name,
-      value,
-    }))
+    void (async () => {
+      const live = await fetchLiveProxyReplay(entry)
+      const srcHeaders = live?.headers ?? entry.requestHeaders ?? {}
+      const headerRows: KeyValueHeaderRow[] = Object.entries(srcHeaders).map(([name, value], idx) => ({
+        id: `px-i-${idx}-${Date.now()}`,
+        enabled: name.toLowerCase() !== "host" && name.toLowerCase() !== "content-length",
+        name,
+        value,
+      }))
+      const allowedMethods = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] as const
+      const upper = (live?.method ?? entry.method).toUpperCase()
+      const method = allowedMethods.find((m) => m === upper) ?? "GET"
+      const baseUrl = live?.url ?? entry.url
+      const templatedUrl = baseUrl.includes("=")
+        ? baseUrl.replace(/=([^&]*)/, "=§$1§")
+        : `${baseUrl.replace(/\/$/, "")}/§payload§`
+      updateDraft("http-intruder", (prev) => ({
+        ...prev,
+        method,
+        url: templatedUrl,
+        headers: headerRows.length > 0 ? headerRows : prev.headers,
+        bodyTemplate: live?.body ?? entry.requestBody ?? "",
+        useRawJson: false,
+      }))
+      selectTool("http-intruder")
+      setNotice(`Captura enviada com sessão real para o HTTP Intruder (${templatedUrl})!`)
+    })()
+  }
+
+  function sendProxyCaptureToComparer(entry: ProxyHistoryEntryDto, slot: "A" | "B"): void {
+    void (async () => {
+      const live = await fetchLiveProxyReplay(entry)
+      const text = [
+        `HTTP ${live?.responseStatusCode ?? entry.statusCode} — ${entry.method} ${entry.url}`,
+        ...Object.entries(live?.responseHeaders ?? entry.responseHeaders ?? {}).map(([k, v]) => `${k}: ${v}`),
+        "",
+        live?.responseBody ?? entry.responseBody ?? "",
+      ].join("\n")
+      updateDraft("http-repeater", (prev) => ({
+        ...prev,
+        viewMode: "comparer",
+        ...(slot === "A"
+          ? { comparerTextA: text, comparerLabelA: `${entry.method} ${entry.path} (${entry.statusCode})` }
+          : { comparerTextB: text, comparerLabelB: `${entry.method} ${entry.path} (${entry.statusCode})` }),
+      }))
+      selectTool("http-repeater")
+      setNotice(`Resposta carregada no Comparer — Item ${slot}!`)
+    })()
+  }
+
+  async function copyProxyCaptureAsCurl(entry: ProxyHistoryEntryDto): Promise<void> {
+    const live = await fetchLiveProxyReplay(entry)
+    const curl = live?.curlCommand || `curl -i -k -X ${entry.method} '${entry.url}'`
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      await navigator.clipboard.writeText(curl)
+      setNotice("Comando cURL copiado para a área de transferência!")
+    }
+  }
+
+  function addRepeaterTab(): void {
+    updateDraft("http-repeater", (prev) => {
+      const currentTabs = prev.tabs && prev.tabs.length > 0 ? [...prev.tabs] : []
+      // Save active tab first if present
+      const synced = currentTabs.map((t) =>
+        t.tabId === prev.activeTabId
+          ? {
+              ...t,
+              method: prev.method,
+              url: prev.url,
+              headers: prev.headers,
+              body: prev.body,
+              useRawHttp: prev.useRawHttp,
+              rawHttpText: prev.rawHttpText,
+              followRedirects: prev.followRedirects,
+            }
+          : t,
+      )
+      const newTabId = `rtab-${Date.now()}`
+      const nextNum = synced.length + 1
+      const newTab: RepeaterSavedTab = {
+        tabId: newTabId,
+        title: `Tab ${nextNum}`,
+        method: prev.method,
+        url: prev.url,
+        headers: JSON.parse(JSON.stringify(prev.headers)) as KeyValueHeaderRow[],
+        body: prev.body,
+        useRawHttp: prev.useRawHttp,
+        rawHttpText: prev.rawHttpText,
+        followRedirects: prev.followRedirects,
+      }
+      return {
+        ...prev,
+        viewMode: "repeater",
+        tabs: [...synced, newTab].slice(-12),
+        activeTabId: newTabId,
+      }
+    })
+  }
+
+  function switchRepeaterTab(targetTabId: string): void {
+    updateDraft("http-repeater", (prev) => {
+      const currentTabs = prev.tabs ?? []
+      const synced = currentTabs.map((t) =>
+        t.tabId === prev.activeTabId
+          ? {
+              ...t,
+              method: prev.method,
+              url: prev.url,
+              headers: prev.headers,
+              body: prev.body,
+              useRawHttp: prev.useRawHttp,
+              rawHttpText: prev.rawHttpText,
+              followRedirects: prev.followRedirects,
+            }
+          : t,
+      )
+      const chosen = synced.find((t) => t.tabId === targetTabId)
+      if (!chosen) return prev
+      return {
+        ...prev,
+        viewMode: "repeater",
+        tabs: synced,
+        activeTabId: chosen.tabId,
+        method: chosen.method,
+        url: chosen.url,
+        headers: chosen.headers,
+        body: chosen.body,
+        useRawHttp: Boolean(chosen.useRawHttp),
+        rawHttpText: chosen.rawHttpText ?? "",
+        followRedirects: Boolean(chosen.followRedirects),
+      }
+    })
+  }
+
+  function closeRepeaterTab(targetTabId: string): void {
+    updateDraft("http-repeater", (prev) => {
+      const remaining = (prev.tabs ?? []).filter((t) => t.tabId !== targetTabId)
+      if (remaining.length === 0) {
+        return { ...prev, tabs: [], activeTabId: "" }
+      }
+      if (prev.activeTabId === targetTabId) {
+        const nextActive = remaining[remaining.length - 1]!
+        return {
+          ...prev,
+          tabs: remaining,
+          activeTabId: nextActive.tabId,
+          method: nextActive.method,
+          url: nextActive.url,
+          headers: nextActive.headers,
+          body: nextActive.body,
+          useRawHttp: Boolean(nextActive.useRawHttp),
+          rawHttpText: nextActive.rawHttpText ?? "",
+          followRedirects: Boolean(nextActive.followRedirects),
+        }
+      }
+      return { ...prev, tabs: remaining }
+    })
+  }
+
+  function importCurlIntoRepeater(rawCurl: string): void {
+    const clean = rawCurl.replace(/\\\r?\n/g, " ").trim()
+    if (!clean) return
+    const urlMatch = /(https?:\/\/[^\s'"]+)/i.exec(clean)
+    const methodMatch = /(?:-X|--request)\s+['"]?([A-Z]+)['"]?/i.exec(clean)
+    const headerRegex = /(?:-H|--header)\s+(['"])(.*?)\1/gi
+    const dataMatch = /(?:--data-raw|--data|-d)\s+(['"])([\s\S]*?)\1/i.exec(clean)
+
+    const headers: KeyValueHeaderRow[] = []
+    let idx = 0
+    for (const m of clean.matchAll(headerRegex)) {
+      const fullHdr = m[2] ?? ""
+      const cIdx = fullHdr.indexOf(":")
+      if (cIdx > 0) {
+        headers.push({
+          id: `curl-h-${idx++}-${Date.now()}`,
+          enabled: true,
+          name: fullHdr.slice(0, cIdx).trim(),
+          value: fullHdr.slice(cIdx + 1).trim(),
+        })
+      }
+    }
+
     const allowedMethods = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] as const
-    const upper = entry.method.toUpperCase()
-    const method = allowedMethods.find((m) => m === upper) ?? "GET"
-    const templatedUrl = entry.url.includes("=")
-      ? entry.url.replace(/=([^&]*)/, "=§$1§")
-      : `${entry.url.replace(/\/$/, "")}/§payload§`
-    updateDraft("http-intruder", (prev) => ({
+    const parsedMethod = (methodMatch?.[1] || (dataMatch ? "POST" : "GET")).toUpperCase()
+    const method = allowedMethods.find((m) => m === parsedMethod) ?? "GET"
+
+    updateDraft("http-repeater", (prev) => ({
       ...prev,
+      viewMode: "repeater",
+      useRawHttp: false,
       method,
-      url: templatedUrl,
-      headers: headerRows.length > 0 ? headerRows : prev.headers,
-      bodyTemplate: entry.requestBody || "",
-      useRawJson: false,
+      ...(urlMatch?.[1] ? { url: urlMatch[1] } : {}),
+      ...(headers.length > 0 ? { headers } : {}),
+      body: dataMatch?.[2] ?? prev.body,
+      curlImportText: "",
     }))
-    selectTool("http-intruder")
-    setNotice(`Captura enviada para o HTTP Intruder (${templatedUrl})!`)
+    setNotice("Comando cURL importado para o Repeater!")
   }
 
   async function dispatchCdiMission(): Promise<void> {
@@ -1121,19 +1397,84 @@ function createWorkbenchService() {
   }
 
   async function updateScopeRules(patch: {
+    name?: string
     allowExternalTargets?: boolean
     allowedTargets?: ScopeRuleDto[]
     blockedTargets?: ScopeRuleDto[]
+    engagement?: EngagementProfileDto
   }): Promise<void> {
     try {
       await cyberlabFetch(serverTarget(), "/api/cyberlab/scope", {
         method: "PUT",
         body: JSON.stringify(patch),
       })
-      setNotice("Escopo do projeto atualizado com sucesso.")
+      setNotice("Escopo e perfil de engajamento salvos (.cyberlab/scope.json).")
       await refreshBackend()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function importBugBountyScope(): Promise<void> {
+    const d = drafts["scope-governance"]
+    const raw = (d.bountyRawImportText ?? "").trim()
+    if (!raw) {
+      setError("Cole a lista de domínios wildcard (*.alvo.com) ou o JSON exportado do HackerOne / Bugcrowd.")
+      return
+    }
+    try {
+      const res = await cyberlabFetch<{
+        detectedFormat: string
+        importedAllowedCount: number
+        importedBlockedCount: number
+      }>(serverTarget(), "/api/cyberlab/scope/import", {
+        method: "POST",
+        body: JSON.stringify({
+          rawInput: raw,
+          platformHint: d.bountyPlatform ?? "hackerone",
+          ...(d.bountyResearcherHandle?.trim() ? { researcherHandle: d.bountyResearcherHandle.trim() } : {}),
+          ...(d.bountyHeaderName?.trim() ? { headerName: d.bountyHeaderName.trim() } : {}),
+          ...(d.bountyHeaderValue?.trim() ? { headerValue: d.bountyHeaderValue.trim() } : {}),
+          ...(d.bountyMaxRps ? { maxRequestsPerSecond: Number(d.bountyMaxRps) } : {}),
+          mergeWithExisting: true,
+        }),
+      })
+      updateDraft("scope-governance", (prev) => ({ ...prev, bountyRawImportText: "" }))
+      setNotice(
+        `Escopo Bug Bounty importado (${res.detectedFormat}): +${res.importedAllowedCount} In-Scope, +${res.importedBlockedCount} Out-of-Scope!`,
+      )
+      await refreshBackend()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function uploadLocalArtifact(file: File, subdir = "imports"): Promise<string | null> {
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result || ""))
+        reader.onerror = () => reject(new Error("Falha ao ler arquivo local"))
+        reader.readAsDataURL(file)
+      })
+      const uploaded = await cyberlabFetch<{
+        fileName: string
+        relativePath: string
+        sizeBytes: number
+      }>(serverTarget(), "/api/cyberlab/artifacts/upload", {
+        method: "POST",
+        body: JSON.stringify({
+          fileName: file.name,
+          contentBase64: base64,
+          subdir,
+        }),
+      })
+      setNotice(`Arquivo "${uploaded.fileName}" importado para ${uploaded.relativePath} (${uploaded.sizeBytes} bytes).`)
+      await refreshBackend()
+      return uploaded.relativePath
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      return null
     }
   }
 
@@ -1451,7 +1792,15 @@ function createWorkbenchService() {
     const timer = window.setInterval(() => {
       if (ui.open) void refreshBackend()
     }, 8000)
-    onCleanup(() => window.clearInterval(timer))
+    const fastProxyTimer = window.setInterval(() => {
+      if (ui.open && backend.proxy?.status.running && (ui.activeToolId === "http-proxy" || backend.proxy?.status.interceptEnabled)) {
+        void refreshProxyOnly()
+      }
+    }, 1500)
+    onCleanup(() => {
+      window.clearInterval(timer)
+      window.clearInterval(fastProxyTimer)
+    })
   })
 
   createEffect(() => {
@@ -1487,18 +1836,29 @@ function createWorkbenchService() {
     clearToolHistory,
     restoreHistoryDraft,
     refreshBackend,
+    refreshProxyOnly,
     runCapabilityTool,
     approvePendingExecution,
     cancelExecution,
     controlProxy,
+    controlProxyAdvanced,
+    launchProxyBrowser,
     downloadProxyRootCaCert,
     persistProxyCapture,
     sendProxyCaptureToRepeater,
     sendProxyCaptureToIntruder,
+    sendProxyCaptureToComparer,
+    copyProxyCaptureAsCurl,
+    addRepeaterTab,
+    switchRepeaterTab,
+    closeRepeaterTab,
+    importCurlIntoRepeater,
     dispatchCdiMission,
     ingestManualExternal,
     syncExternalInbox,
     updateScopeRules,
+    importBugBountyScope,
+    uploadLocalArtifact,
     verifyEvidenceCustody,
     inspectEvidenceById,
     createManualFinding,

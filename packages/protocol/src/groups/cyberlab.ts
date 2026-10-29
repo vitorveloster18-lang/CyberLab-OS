@@ -61,7 +61,53 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
         OpenApi.annotations({
           identifier: "cyberlab.scope.set",
           summary: "Update CyberLab project scope",
-          description: "Update allowed/blocked targets and external target setting for the project scope.",
+          description: "Update allowed/blocked targets, engagement profile, and external target setting for the project scope.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.scope.import", "/api/cyberlab/scope/import", {
+      query: LocationQuery,
+      payload: CyberLab.ScopeImportInput,
+      success: Location.response(CyberLab.ScopeImportOutput),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.scope.import",
+          summary: "Import HackerOne / Bugcrowd / wildcard Bug Bounty scope",
+          description: "Parses HackerOne JSON, Bugcrowd JSON, or plaintext wildcard/exclusion rules into ProjectScope.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("cyberlab.artifacts.list", "/api/cyberlab/artifacts", {
+      query: LocationQuery,
+      success: Location.response(Schema.Array(CyberLab.ImportedArtifactInfo)),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.artifacts.list",
+          summary: "List external files uploaded/imported into .cyberlab/imports",
+          description: "List local APKs, binaries, PCAPs, HARs, OpenAPI specs, and logs imported into the project workspace.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.artifacts.upload", "/api/cyberlab/artifacts/upload", {
+      query: LocationQuery,
+      payload: CyberLab.ArtifactUploadInput,
+      success: Location.response(CyberLab.ArtifactUploadOutput),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.artifacts.upload",
+          summary: "Import an external file from the operator's computer into .cyberlab/imports",
+          description: "Saves an APK, ELF/PE, PCAP, HAR, OpenAPI spec, or log inside the workspace so any tool can inspect it.",
         }),
       ),
   )
@@ -336,6 +382,22 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
           identifier: "cyberlab.proxy.persist",
           summary: "Persist a captured proxy exchange into SHA-256 EvidenceStore",
           description: "Store a selected Proxy History row permanently with SHA-256 chain of custody.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.proxy.replay", "/api/cyberlab/proxy/replay", {
+      query: LocationQuery,
+      payload: CyberLab.ProxyReplayInput,
+      success: Location.response(CyberLab.ProxyReplayOutput),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.proxy.replay",
+          summary: "Export live proxy exchange for local Repeater, Intruder, Comparer, or cURL",
+          description: "Retrieves full live headers/body, raw HTTP request, and cURL command for local manual testing.",
         }),
       ),
   )

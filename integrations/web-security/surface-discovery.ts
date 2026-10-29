@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import {
+  EngagementRuntime,
   normalizeRawOutputDraft,
   type CapabilityDefinition,
   type CyberLabExecutor,
@@ -19,12 +20,13 @@ export const WebSurfaceDiscoveryInputSchema = Schema.Struct({
   ),
   customPaths: Schema.optionalKey(
     Schema.Array(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))).check(
-      Schema.isMaxLength(25),
+      Schema.isMaxLength(80),
     ),
   ),
-  concurrency: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(4))),
+  headers: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  concurrency: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(8))),
   timeoutMs: Schema.optionalKey(
-    Schema.Int.check(Schema.isGreaterThanOrEqualTo(200), Schema.isLessThanOrEqualTo(15_000)),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(200), Schema.isLessThanOrEqualTo(30_000)),
   ),
 })
 
@@ -102,6 +104,20 @@ const BUILTIN_TEMPLATES: readonly BuiltinExposureTemplate[] = [
     severityHint: "info",
     matcher: (status, _ct, body) => status === 200 && /^(User-agent|Disallow|Allow):/im.test(body),
   },
+  {
+    templateId: "TPL-SWAGGER-JSON",
+    path: "/swagger.json",
+    category: "api_schema",
+    severityHint: "info",
+    matcher: (status, _ct, body) => status === 200 && /"(openapi|swagger)"\s*:/.test(body),
+  },
+  {
+    templateId: "TPL-OIDC-CONFIG",
+    path: "/.well-known/openid-configuration",
+    category: "api_schema",
+    severityHint: "info",
+    matcher: (status, _ct, body) => status === 200 && /"issuer"\s*:/.test(body),
+  },
 ]
 
 export class WebSurfaceDiscoveryExecutor implements CyberLabExecutor {
@@ -177,14 +193,30 @@ export class WebSurfaceDiscoveryExecutor implements CyberLabExecutor {
         while (cursor < checks.length && !abortCtrl.signal.aborted) {
           const item = checks[cursor++]!
           const target = new URL(item.path, originUrl.origin)
+          await EngagementRuntime.acquireRateSlot(ctx.projectId)
+          const reqHeaders = EngagementRuntime.applyHeaders(ctx.projectId, {
+            "User-Agent": "CyberLab-OS-Surface-Scanner/4.0",
+            ...(params.headers ?? {}),
+          })
+          const t0 = Date.now()
           const res = await fetch(target.toString(), {
             method: "GET",
             redirect: "manual",
-            headers: { "User-Agent": "CyberLab-OS-Surface-Scanner/1.0" },
+            headers: reqHeaders,
             signal: abortCtrl.signal,
           })
           const contentType = res.headers.get("content-type")?.toLowerCase() ?? ""
           const rawText = (await res.text()).slice(0, 2048)
+          EngagementRuntime.recordTraffic({
+            projectId: ctx.projectId,
+            sourceTool: "surface-discovery",
+            method: "GET",
+            url: target.toString(),
+            host: target.host,
+            statusCode: res.status,
+            elapsedMs: Date.now() - t0,
+            responseBytes: rawText.length,
+          })
           const matchedSignature = item.matcher(res.status, contentType, rawText)
           if (matchedSignature || (item.templateId.startsWith("CUSTOM:") && res.status !== 404)) {
             hits.push({

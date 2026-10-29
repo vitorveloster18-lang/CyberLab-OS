@@ -6,9 +6,31 @@ export const PolicyEffectValues = ["allow", "deny", "ask"] as const
 export type PolicyEffect = (typeof PolicyEffectValues)[number]
 export const PolicyEffectSchema = Schema.Literals(PolicyEffectValues)
 
-export const ScopeTargetKindValues = ["cidr", "ip", "domain", "url_origin", "workspace_path"] as const
+export const ScopeTargetKindValues = [
+  "cidr",
+  "ip",
+  "domain",
+  "url_origin",
+  "url_prefix",
+  "url_regex",
+  "workspace_path",
+] as const
 export type ScopeTargetKind = (typeof ScopeTargetKindValues)[number]
 export const ScopeTargetKindSchema = Schema.Literals(ScopeTargetKindValues)
+
+export const EngagementModeValues = ["lab_isolated", "bug_bounty", "authorized_pentest"] as const
+export type EngagementMode = (typeof EngagementModeValues)[number]
+export const EngagementModeSchema = Schema.Literals(EngagementModeValues)
+
+export const BugBountyPlatformValues = [
+  "custom",
+  "hackerone",
+  "bugcrowd",
+  "intigriti",
+  "yeswehack",
+] as const
+export type BugBountyPlatform = (typeof BugBountyPlatformValues)[number]
+export const BugBountyPlatformSchema = Schema.Literals(BugBountyPlatformValues)
 
 const NonEmptyString = Schema.String.check(Schema.isMinLength(1))
 
@@ -24,6 +46,38 @@ export const ScopeTargetRuleSchema = Schema.Struct({
   notes: Schema.String.pipe(optional),
 }).annotate({ identifier: "CyberLab.ScopeTargetRule" })
 
+export interface EngagementHeaderRule {
+  name: string
+  value: string
+  enabled: boolean
+}
+
+export const EngagementHeaderRuleSchema = Schema.Struct({
+  name: NonEmptyString,
+  value: Schema.String,
+  enabled: Schema.Boolean,
+}).annotate({ identifier: "CyberLab.EngagementHeaderRule" })
+
+export interface EngagementProfile {
+  mode: EngagementMode
+  platform: BugBountyPlatform
+  programName?: string
+  researcherHandle?: string
+  customUserAgent?: string
+  customHeaders: EngagementHeaderRule[]
+  maxRequestsPerSecond: number
+}
+
+export const EngagementProfileSchema = Schema.Struct({
+  mode: EngagementModeSchema,
+  platform: BugBountyPlatformSchema,
+  programName: Schema.String.pipe(optional),
+  researcherHandle: Schema.String.pipe(optional),
+  customUserAgent: Schema.String.pipe(optional),
+  customHeaders: Schema.Array(EngagementHeaderRuleSchema),
+  maxRequestsPerSecond: Schema.Number,
+}).annotate({ identifier: "CyberLab.EngagementProfile" })
+
 export interface ProjectScope {
   scopeId: string
   projectId: string
@@ -33,6 +87,7 @@ export interface ProjectScope {
   blockedTargets: ScopeTargetRule[]
   /** Defaults to false: public/routable external IP targets are blocked unless explicitly enabled. */
   allowExternalTargets: boolean
+  engagement?: EngagementProfile
   active: boolean
   updatedAt: string
 }
@@ -45,6 +100,7 @@ export const ProjectScopeSchema = Schema.Struct({
   allowedTargets: Schema.Array(ScopeTargetRuleSchema),
   blockedTargets: Schema.Array(ScopeTargetRuleSchema),
   allowExternalTargets: Schema.Boolean,
+  engagement: EngagementProfileSchema.pipe(optional),
   active: Schema.Boolean,
   updatedAt: NonEmptyString,
 }).annotate({ identifier: "CyberLab.ProjectScope" })
@@ -114,11 +170,55 @@ export interface PolicyAuditEntry {
   timestamp: string
 }
 
+export function createDefaultEngagementProfile(): EngagementProfile {
+  return {
+    mode: "lab_isolated",
+    platform: "custom",
+    customHeaders: [],
+    maxRequestsPerSecond: 20,
+  }
+}
+
 export function validateProjectScope(input: unknown): ProjectScope {
   const decoded = Schema.decodeUnknownSync(ProjectScopeSchema)(input)
   return {
-    ...decoded,
-    allowedTargets: decoded.allowedTargets.map((rule) => ({ ...rule })),
-    blockedTargets: decoded.blockedTargets.map((rule) => ({ ...rule })),
+    scopeId: decoded.scopeId,
+    projectId: decoded.projectId,
+    name: decoded.name,
+    workspaceRoot: decoded.workspaceRoot,
+    allowExternalTargets: decoded.allowExternalTargets,
+    active: decoded.active,
+    updatedAt: decoded.updatedAt,
+    allowedTargets: decoded.allowedTargets.map((rule) => ({
+      kind: rule.kind,
+      value: rule.value,
+      ...(rule.notes !== undefined ? { notes: rule.notes } : {}),
+    })),
+    blockedTargets: decoded.blockedTargets.map((rule) => ({
+      kind: rule.kind,
+      value: rule.value,
+      ...(rule.notes !== undefined ? { notes: rule.notes } : {}),
+    })),
+    ...(decoded.engagement
+      ? {
+          engagement: {
+            mode: decoded.engagement.mode,
+            platform: decoded.engagement.platform,
+            ...(decoded.engagement.programName !== undefined ? { programName: decoded.engagement.programName } : {}),
+            ...(decoded.engagement.researcherHandle !== undefined
+              ? { researcherHandle: decoded.engagement.researcherHandle }
+              : {}),
+            ...(decoded.engagement.customUserAgent !== undefined
+              ? { customUserAgent: decoded.engagement.customUserAgent }
+              : {}),
+            maxRequestsPerSecond: Math.max(1, Math.min(200, Math.round(decoded.engagement.maxRequestsPerSecond || 20))),
+            customHeaders: decoded.engagement.customHeaders.map((h) => ({
+              name: h.name,
+              value: h.value,
+              enabled: h.enabled,
+            })),
+          },
+        }
+      : {}),
   }
 }

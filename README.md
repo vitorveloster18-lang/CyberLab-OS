@@ -148,20 +148,26 @@ O CyberLab OS já vem corrigido e pré-configurado para funcionar imediatamente 
 
 ## 4. Instruções de Uso das 8 Suítes Manuais (35 Modos / 31 Capacidades)
 
-> **Importante sobre Escopo de Alvos**: antes de apontar qualquer ferramenta de rede/web para um host fora de `127.0.0.1`/`localhost` (por exemplo `192.168.1.50` ou `lab.empresa.local`), abra **`Escopo, Cofre SHA-256 & Relatório → Escopo de Alvos`**, ative **"Permitir Alvos Externos Autorizados"** e cadastre a regra (`ip`, `cidr`, `domain` ou `url_origin`).
+> **Importante sobre Escopo de Alvos & Produção / Bug Bounty (HackerOne, Bugcrowd, Pentests)**:
+> - Para trabalhar em programas de **Bug Bounty (HackerOne, Bugcrowd, Intigriti)** ou redes externas autorizadas, abra **`Escopo, Cofre SHA-256 & Relatório → Escopo de Alvos`**, importe o JSON/regras do programa (`structured_scopes` do HackerOne, alvos `*.alvo.com` e exclusões `!out-of-scope.alvo.com`), configure seu header obrigatório (`X-Bug-Bounty: HackerOne-seu_usuario`) e o **Rate-Limit Global (RPS)**. O escopo fica persistido automaticamente em `.cyberlab/scope.json` e todos os motores HTTP respeitam o header e o limite de RPS.
+> - Para analisar arquivos externos do seu PC (`.apk`, `.pcap`, binários ELF/PE, `openapi.json`, logs), clique em **`Carregar Arquivo do PC`** no topo de qualquer ferramenta baseada em arquivos (importando para `.cyberlab/imports/`) ou autorize uma pasta externa (`workspace_path`) na aba Escopo.
 
 ---
 
-### Suíte 1 — `Web & API Security Suite`
-Reúne 8 abas internas para inspeção e testes de aplicações Web, APIs REST, GraphQL e OAuth2:
+### Suíte 1 — `Web & API Security Suite` (Paridade Completa Burp Suite / OpenTRAP)
+Reúne 8 abas internas para inspeção manual e testes de aplicações Web, APIs REST, GraphQL e OAuth2 em produção ou laboratório:
 
 1. **`Repeater & Comparer`** (`web-assessment.http-repeater`):
-   - Escolha método (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`), URL, tabela de cabeçalhos editáveis e corpo da requisição.
-   - Ative **"Comparar contra Baseline"** para enviar a mesma requisição a uma segunda URL/credencial e inspecionar o diff de status, tamanho e linhas alteradas.
-2. **`Proxy Intercept (HTTPS / WS)`** (Listener local `127.0.0.1:8899`):
-   - Escolha a porta (padrão `8899`), marque ` Interceptação HTTPS MITM (Root CA Local)` (ou `Túnel CONNECT Passthrough`) e clique em **`Iniciar Proxy Local`**.
-   - Para inspecionar tráfego **HTTPS** descriptografado e frames **WebSocket (`ws://` / `wss://`)**, baixe o certificado raiz gerado automaticamente em `<projeto>/.cyberlab/ca/cyberlab-root-ca.crt` (ou pelo botão **`Baixar Root CA (.crt)`** na aba Proxy) e confie nele no navegador de testes ou via `curl --proxy http://127.0.0.1:8899 --cacert .cyberlab/ca/cyberlab-root-ca.crt https://alvo`.
-   - Clique em **`Enviar ao Repeater`** em qualquer linha capturada para reenviar e editar a requisição.
+   - **Multi-Aba (`#1`, `#2`, `+ Nova Aba`)**, alternância entre **Formulário Estruturado** e **Raw HTTP/1.1**, importação direta de comandos **`cURL`**, opção **`Follow Redirects (3xx)`**, **Comparer Visual A vs B** lado a lado e **Baseline Diff**.
+2. **`Proxy Intercept (HTTPS / WS) + Navegador Embutido Pré-Configurado`** (Listener local `127.0.0.1:8899`):
+   - **Acesso Direto ao Navegador em 1 Clique (`Abrir Navegador Pré-Configurado`)**: inicia automaticamente **Chrome, Edge, Brave ou Chromium** com perfil isolado (`.cyberlab/browser-profile`), `--proxy-server=http://127.0.0.1:8899` e confiança criptográfica automática na Root CA via `--ignore-certificate-errors-spki-list` (**sem mexer no proxy ou nos certificados do seu Windows/Linux pessoal**). Para Firefox/dispositivos móveis, basta acessar `http://cyberlab.proxy/cert` pelo proxy.
+   - **6 Sub-Abas estilo Burp Suite / OpenTRAP**:
+     1. **`Intercept` (`Intercept is ON / OFF`)**: segura requisições (e respostas opcionais) em tempo real para editar método, headers e corpo antes de clicar em **`Forward`** ou **`Drop`**.
+     2. **`HTTP / WS History`**: histórico completo com descompressão automática `gzip`/`deflate`/`br`, filtros por escopo/método/status/MIME e ações em 1 clique (**`→ Repeater`** preservando `Cookie`/`Authorization` da sessão viva, **`→ Intruder`**, **`→ Comparer A/B`**, **`Copiar cURL`** e custódia `SHA-256`).
+     3. **`Target & Site Map`**: árvore automática de hosts/endpoints/parâmetros descobertos + **Scanner Passivo Contínuo** (cookies sem `HttpOnly`/`Secure`, CORS permissivo com credenciais, chaves de API vazadas em JS, SourceMaps `.js.map` e erros SQL/stack trace).
+     4. **`Match & Replace`**: regras automáticas para reescrever URL, headers ou corpo de requisição/resposta em trânsito.
+     5. **`OAST / Collaborator`**: listener HTTP local integrado para capturar callbacks *Out-of-Band* (SSRF / Blind Webhooks) ou apontar domínio externo (`interact.sh` / Webhook).
+     6. **`Logger Global`**: log consolidado em tempo real de todas as requisições enviadas pelo Proxy, Repeater, Intruder, Scanner e API Lab.
 3. **`Intruder / Payload Lab`** (`web-assessment.http-intruder`):
    - Envolva qualquer ponto da URL, header ou body com `§nome§` (ex.: `http://127.0.0.1:8080/api/users/§id§`).
    - Escolha o modo **`Sniper`**, **`Battering Ram`** ou **`Pitchfork`**, preencha a lista de payloads (1 por linha), configure concorrência/delay e `Grep Match` para destacar anomalias de tamanho ou status HTTP.

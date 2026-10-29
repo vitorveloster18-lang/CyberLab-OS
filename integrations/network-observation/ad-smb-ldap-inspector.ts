@@ -33,10 +33,10 @@ export type AdSmbLdapInput = typeof AdSmbLdapInputSchema.Type
 
 export const AdSmbLdapCapability: CapabilityDefinition = {
   id: "network-assessment.ad-smb-ldap-inspector",
-  version: "1.0.0",
-  title: "Enterprise Lab Protocol Inspector (SMB2/3 Signing, LDAP RootDSE & NTLM Metadata)",
+  version: "1.1.0",
+  title: "Enterprise Protocol Inspector (SMB2/3 Signing, LDAP RootDSE & NTLM Metadata)",
   description:
-    "Performs passive, credential-free protocol posture checks against authorized lab infrastructure: SMB2/3 Negotiate Signing enforcement, LDAPv3 anonymous RootDSE disclosure, and HTTP NTLM Type-2 Challenge target metadata decoding.",
+    "Performs passive, credential-free protocol posture checks against authorized corporate, internal, or lab infrastructure: SMB2/3 Negotiate Signing enforcement, LDAPv3 anonymous RootDSE disclosure, and HTTP NTLM Type-2 Challenge target metadata decoding.",
   inputSchemaId: AD_SMB_LDAP_INPUT_SCHEMA_ID,
   outputSchemaId: AD_SMB_LDAP_OUTPUT_SCHEMA_ID,
   risk: "moderate",

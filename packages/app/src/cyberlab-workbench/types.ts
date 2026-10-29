@@ -97,11 +97,34 @@ export type DecoderTransformStep =
   | "html_decode"
   | "sha256"
 
-export interface HttpRepeaterDraft {
+export interface RepeaterSavedTab {
+  tabId: string
+  title: string
   method: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS"
   url: string
   headers: KeyValueHeaderRow[]
   body: string
+  useRawHttp?: boolean
+  rawHttpText?: string
+  followRedirects?: boolean
+}
+
+export interface HttpRepeaterDraft {
+  viewMode?: "repeater" | "comparer"
+  tabs?: RepeaterSavedTab[]
+  activeTabId?: string
+  method: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS"
+  url: string
+  headers: KeyValueHeaderRow[]
+  body: string
+  useRawHttp?: boolean
+  rawHttpText?: string
+  followRedirects?: boolean
+  curlImportText?: string
+  comparerTextA?: string
+  comparerTextB?: string
+  comparerLabelA?: string
+  comparerLabelB?: string
   enableBaseline: boolean
   baselineUrl: string
   baselineHeaders: KeyValueHeaderRow[]
@@ -113,12 +136,34 @@ export interface HttpRepeaterDraft {
 }
 
 export interface HttpProxyDraft {
+  proxySubTab?: "intercept" | "history" | "target" | "match_replace" | "oast" | "logger"
   port: number
   scopeOnly: boolean
   httpsMode: "tls_intercept" | "tunnel_passthrough"
   allowSelfSignedUpstream: boolean
+  browserStartUrl?: string
+  preferredBrowserId?: string
   filterText: string
+  filterMethod?: string
+  filterStatusGroup?: string
+  filterInScopeOnly?: boolean
+  hideStaticAssets?: boolean
   selectedEntryId: string
+  selectedSiteMapHost?: string
+  editingInterceptId?: string
+  editInterceptMethod?: string
+  editInterceptUrl?: string
+  editInterceptHeadersText?: string
+  editInterceptBody?: string
+  editInterceptStatusCode?: number
+  mrLocation?: "url" | "request_header" | "request_body" | "response_header" | "response_body"
+  mrHeaderName?: string
+  mrMatchPattern?: string
+  mrReplaceWith?: string
+  mrIsRegex?: boolean
+  mrComment?: string
+  oastPort?: number
+  externalOastDomain?: string
 }
 
 export interface HttpIntruderDraft {
@@ -521,13 +566,49 @@ export interface ExternalIngestDraft {
   rawOutput: string
 }
 
+export type ScopeRuleKindDto =
+  | "ip"
+  | "cidr"
+  | "domain"
+  | "url_origin"
+  | "url_prefix"
+  | "url_regex"
+  | "workspace_path"
+
+export interface EngagementHeaderRuleDto {
+  name: string
+  value: string
+  enabled: boolean
+}
+
+export interface EngagementProfileDto {
+  mode: "lab_isolated" | "bug_bounty" | "authorized_pentest"
+  platform: "custom" | "hackerone" | "bugcrowd" | "intigriti" | "yeswehack"
+  programName?: string
+  researcherHandle?: string
+  customUserAgent?: string
+  maxRequestsPerSecond: number
+  customHeaders: EngagementHeaderRuleDto[]
+}
+
 export interface ScopeGovernanceDraft {
   subTab: "scope" | "labs" | "approvals" | "evidence" | "findings" | "report"
   newProjectName?: string
-  newRuleKind: "ip" | "cidr" | "domain" | "url_origin" | "workspace_path"
+  newRuleKind: ScopeRuleKindDto
   newRuleValue: string
   newRuleNotes: string
   newRuleBlocked: boolean
+  bountyPlatform?: "hackerone" | "bugcrowd" | "intigriti" | "yeswehack" | "custom"
+  bountyResearcherHandle?: string
+  bountyHeaderName?: string
+  bountyHeaderValue?: string
+  bountyMaxRps?: number
+  bountyRawImportText?: string
+  engagementMode?: "lab_isolated" | "bug_bounty" | "authorized_pentest"
+  engagementUserAgent?: string
+  engagementMaxRps?: number
+  newHeaderName?: string
+  newHeaderValue?: string
   findingTitle: string
   findingDescription: string
   findingSeverity: "critical" | "high" | "medium" | "low" | "info"
@@ -606,9 +687,16 @@ export interface ToolHistoryEntry {
 }
 
 export interface ScopeRuleDto {
-  kind: "ip" | "cidr" | "domain" | "url_origin" | "workspace_path"
+  kind: ScopeRuleKindDto
   value: string
   notes?: string
+}
+
+export interface ImportedArtifactDto {
+  fileName: string
+  relativePath: string
+  sizeBytes: number
+  modifiedAt: string
 }
 
 export interface WorkspaceStatusDto {
@@ -621,6 +709,7 @@ export interface WorkspaceStatusDto {
     allowExternalTargets: boolean
     allowedTargets: ScopeRuleDto[]
     blockedTargets: ScopeRuleDto[]
+    engagement?: EngagementProfileDto
   }
   capabilityCount: number
   skillCount: number
@@ -710,14 +799,126 @@ export interface ProxyHistoryEntryDto {
   host: string
   path: string
   statusCode: number
+  mimeType?: string
   elapsedMs: number
   requestHeaders: Record<string, string>
   requestBody: string
+  responseHeaders?: Record<string, string>
   responseBody: string
   responseBytes: number
   blockedByScope: boolean
   blockReason?: string
+  modifiedByRuleOrIntercept?: boolean
+  passiveAlertCount?: number
   persistedEvidenceId?: string
+}
+
+export interface ProxyInterceptItemDto {
+  interceptId: string
+  phase: "request" | "response"
+  createdAt: string
+  protocol: "http" | "https"
+  method: string
+  url: string
+  host: string
+  path: string
+  headers: Record<string, string>
+  body: string
+  statusCode?: number
+}
+
+export interface ProxyMatchReplaceRuleDto {
+  ruleId: string
+  enabled: boolean
+  location: "url" | "request_header" | "request_body" | "response_header" | "response_body"
+  headerName?: string
+  matchPattern: string
+  replaceWith: string
+  isRegex: boolean
+  comment?: string
+}
+
+export interface ProxySiteMapEndpointDto {
+  path: string
+  methods: string[]
+  statusCodes: number[]
+  mimeTypes: string[]
+  paramNames: string[]
+  hitCount: number
+  lastSeenAt: string
+  sampleEntryId: string
+}
+
+export interface ProxySiteMapHostDto {
+  host: string
+  scheme: "http" | "https" | "ws" | "wss"
+  inScope: boolean
+  requestCount: number
+  passiveAlertCount: number
+  endpoints: ProxySiteMapEndpointDto[]
+}
+
+export interface PassiveProxyAlertDto {
+  alertId: string
+  timestamp: string
+  severity: "info" | "low" | "medium" | "high"
+  category: string
+  title: string
+  host: string
+  url: string
+  evidenceSnippet: string
+  entryId: string
+}
+
+export interface OastCallbackHitDto {
+  hitId: string
+  timestamp: string
+  method: string
+  path: string
+  query: string
+  remoteAddress: string
+  headers: Record<string, string>
+  bodyPreview: string
+}
+
+export interface GlobalHttpTrafficEntryDto {
+  logId: string
+  timestamp: string
+  projectId: string
+  sourceTool: string
+  method: string
+  url: string
+  host: string
+  statusCode: number
+  elapsedMs: number
+  responseBytes: number
+  notes?: string
+}
+
+export interface ProxyBrowserLaunchResultDto {
+  launched: boolean
+  browserName: string | null
+  executablePath: string | null
+  proxyUrl: string
+  startUrl: string
+  spkiSha256Base64: string
+  profileDirectory: string
+  message: string
+  manualPowershellCommand: string
+  manualBashCommand: string
+}
+
+export interface ProxyReplayBundleDto {
+  entryId: string
+  method: string
+  url: string
+  headers: Record<string, string>
+  body: string
+  responseStatusCode: number
+  responseHeaders: Record<string, string>
+  responseBody: string
+  rawHttpRequest: string
+  curlCommand: string
 }
 
 export interface ProxyOverviewDto {
@@ -728,12 +929,36 @@ export interface ProxyOverviewDto {
     scopeOnly: boolean
     httpsMode?: "tls_intercept" | "tunnel_passthrough"
     allowSelfSignedUpstream?: boolean
+    interceptEnabled?: boolean
+    interceptResponses?: boolean
+    interceptInScopeOnly?: boolean
+    skipStaticAssets?: boolean
+    pendingInterceptCount?: number
+    matchReplaceRuleCount?: number
+    siteMapHostCount?: number
+    passiveAlertCount?: number
+    oastRunning?: boolean
+    oastListenPort?: number | null
+    oastCallbackBaseUrl?: string | null
+    externalOastDomain?: string | null
+    oastHitCount?: number
     caFingerprintSha256?: string
+    caSpkiSha256Base64?: string
     caCertPath?: string | null
     caCertPem?: string
+    availableBrowsers?: Array<{ id: string; displayName: string; executablePath: string }>
     capturedCount: number
   }
   history: ProxyHistoryEntryDto[]
+  interceptQueue?: ProxyInterceptItemDto[]
+  matchReplaceRules?: ProxyMatchReplaceRuleDto[]
+  siteMap?: {
+    hosts: ProxySiteMapHostDto[]
+    passiveAlerts: PassiveProxyAlertDto[]
+  }
+  oastHits?: OastCallbackHitDto[]
+  httpLogger?: GlobalHttpTrafficEntryDto[]
+  browserLaunchResult?: ProxyBrowserLaunchResultDto
 }
 
 export interface CdiPartnerProfileDto {

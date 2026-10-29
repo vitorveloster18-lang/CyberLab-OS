@@ -3,6 +3,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { Schema } from "effect"
 import {
+  EngagementRuntime,
   isPathInsideRoot,
   normalizeRawOutputDraft,
   type CapabilityDefinition,
@@ -1305,11 +1306,26 @@ export class KeyHunterExecutor implements CyberLabExecutor {
     if (params.targetUrl?.trim()) {
       const pageUrl = params.targetUrl.trim()
       try {
+        await EngagementRuntime.acquireRateSlot(context.projectId)
+        const pageHeaders = EngagementRuntime.applyHeaders(context.projectId, {
+          "User-Agent": "CyberLab-OS-KeyHunter/4.0",
+        })
+        const t0 = Date.now()
         const res = await fetch(pageUrl, {
-          headers: { "User-Agent": "CyberLab-OS-KeyHunter/1.0" },
-          signal: AbortSignal.any([context.signal, AbortSignal.timeout(8000)]),
+          headers: pageHeaders,
+          signal: AbortSignal.any([context.signal, AbortSignal.timeout(12000)]),
         })
         const html = await res.text()
+        EngagementRuntime.recordTraffic({
+          projectId: context.projectId,
+          sourceTool: "key-hunter",
+          method: "GET",
+          url: pageUrl,
+          host: new URL(pageUrl).host,
+          statusCode: res.status,
+          elapsedMs: Date.now() - t0,
+          responseBytes: Buffer.byteLength(html, "utf8"),
+        })
         scannedWebAssets++
         const htmlScan = scanTextWithKeyHunter({
           text: html,
@@ -1328,12 +1344,27 @@ export class KeyHunterExecutor implements CyberLabExecutor {
         for (const scriptUrl of scriptUrls) {
           if (context.signal.aborted) break
           try {
+            await EngagementRuntime.acquireRateSlot(context.projectId)
+            const scriptHeaders = EngagementRuntime.applyHeaders(context.projectId, {
+              "User-Agent": "CyberLab-OS-KeyHunter/4.0",
+            })
+            const ts0 = Date.now()
             const sRes = await fetch(scriptUrl, {
-              headers: { "User-Agent": "CyberLab-OS-KeyHunter/1.0" },
-              signal: AbortSignal.any([context.signal, AbortSignal.timeout(6000)]),
+              headers: scriptHeaders,
+              signal: AbortSignal.any([context.signal, AbortSignal.timeout(10000)]),
             })
             if (!sRes.ok) continue
             const jsBody = (await sRes.text()).slice(0, 2 * 1024 * 1024)
+            EngagementRuntime.recordTraffic({
+              projectId: context.projectId,
+              sourceTool: "key-hunter",
+              method: "GET",
+              url: scriptUrl,
+              host: new URL(scriptUrl).host,
+              statusCode: sRes.status,
+              elapsedMs: Date.now() - ts0,
+              responseBytes: Buffer.byteLength(jsBody, "utf8"),
+            })
             scannedWebAssets++
             const jsScan = scanTextWithKeyHunter({
               text: jsBody,

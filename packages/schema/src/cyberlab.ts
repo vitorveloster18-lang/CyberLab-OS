@@ -3,9 +3,25 @@ import { optional } from "./schema.js"
 
 export namespace CyberLab {
   export const ScopeRule = Schema.Struct({
-    kind: Schema.Literals(["ip", "cidr", "domain", "url_origin", "workspace_path"]),
+    kind: Schema.Literals(["ip", "cidr", "domain", "url_origin", "url_prefix", "url_regex", "workspace_path"]),
     value: Schema.String,
     notes: optional(Schema.String),
+  })
+
+  export const EngagementHeaderRule = Schema.Struct({
+    name: Schema.String,
+    value: Schema.String,
+    enabled: Schema.Boolean,
+  })
+
+  export const EngagementProfile = Schema.Struct({
+    mode: Schema.Literals(["lab_isolated", "bug_bounty", "authorized_pentest"]),
+    platform: Schema.Literals(["custom", "hackerone", "bugcrowd", "intigriti", "yeswehack"]),
+    programName: optional(Schema.String),
+    researcherHandle: optional(Schema.String),
+    customUserAgent: optional(Schema.String),
+    maxRequestsPerSecond: Schema.Number,
+    customHeaders: Schema.Array(EngagementHeaderRule),
   })
 
   export const Scope = Schema.Struct({
@@ -16,6 +32,7 @@ export namespace CyberLab {
     allowedTargets: Schema.Array(ScopeRule),
     blockedTargets: Schema.Array(ScopeRule),
     allowExternalTargets: Schema.Boolean,
+    engagement: optional(EngagementProfile),
     active: Schema.Boolean,
     updatedAt: Schema.String,
   })
@@ -25,7 +42,45 @@ export namespace CyberLab {
     allowedTargets: optional(Schema.Array(ScopeRule)),
     blockedTargets: optional(Schema.Array(ScopeRule)),
     allowExternalTargets: optional(Schema.Boolean),
+    engagement: optional(EngagementProfile),
     active: optional(Schema.Boolean),
+  })
+
+  export const ScopeImportInput = Schema.Struct({
+    rawInput: Schema.String,
+    platformHint: optional(Schema.Literals(["custom", "hackerone", "bugcrowd", "intigriti", "yeswehack"])),
+    researcherHandle: optional(Schema.String),
+    headerName: optional(Schema.String),
+    headerValue: optional(Schema.String),
+    maxRequestsPerSecond: optional(Schema.Number),
+    mergeWithExisting: optional(Schema.Boolean),
+  })
+
+  export const ScopeImportOutput = Schema.Struct({
+    scope: Scope,
+    detectedFormat: Schema.String,
+    importedAllowedCount: Schema.Number,
+    importedBlockedCount: Schema.Number,
+  })
+
+  export const ArtifactUploadInput = Schema.Struct({
+    fileName: Schema.String,
+    contentBase64: Schema.String,
+    subdir: optional(Schema.String),
+  })
+
+  export const ArtifactUploadOutput = Schema.Struct({
+    fileName: Schema.String,
+    relativePath: Schema.String,
+    absolutePath: Schema.String,
+    sizeBytes: Schema.Number,
+  })
+
+  export const ImportedArtifactInfo = Schema.Struct({
+    fileName: Schema.String,
+    relativePath: Schema.String,
+    sizeBytes: Schema.Number,
+    modifiedAt: Schema.String,
   })
 
   export const EnvironmentInfo = Schema.Struct({
@@ -248,6 +303,25 @@ export namespace CyberLab {
     text: Schema.String,
   })
 
+  export const ProxyBrowserInfo = Schema.Struct({
+    id: Schema.String,
+    displayName: Schema.String,
+    executablePath: Schema.String,
+  })
+
+  export const ProxyBrowserLaunchResult = Schema.Struct({
+    launched: Schema.Boolean,
+    browserName: Schema.NullOr(Schema.String),
+    executablePath: Schema.NullOr(Schema.String),
+    proxyUrl: Schema.String,
+    startUrl: Schema.String,
+    spkiSha256Base64: Schema.String,
+    profileDirectory: Schema.String,
+    message: Schema.String,
+    manualPowershellCommand: Schema.String,
+    manualBashCommand: Schema.String,
+  })
+
   export const ProxyStatusInfo = Schema.Struct({
     running: Schema.Boolean,
     listenHost: Schema.String,
@@ -255,9 +329,24 @@ export namespace CyberLab {
     scopeOnly: Schema.Boolean,
     httpsMode: optional(Schema.Literals(["tls_intercept", "tunnel_passthrough"])),
     allowSelfSignedUpstream: optional(Schema.Boolean),
+    interceptEnabled: optional(Schema.Boolean),
+    interceptResponses: optional(Schema.Boolean),
+    interceptInScopeOnly: optional(Schema.Boolean),
+    skipStaticAssets: optional(Schema.Boolean),
+    pendingInterceptCount: optional(Schema.Number),
+    matchReplaceRuleCount: optional(Schema.Number),
+    siteMapHostCount: optional(Schema.Number),
+    passiveAlertCount: optional(Schema.Number),
+    oastRunning: optional(Schema.Boolean),
+    oastListenPort: optional(Schema.NullOr(Schema.Number)),
+    oastCallbackBaseUrl: optional(Schema.NullOr(Schema.String)),
+    externalOastDomain: optional(Schema.NullOr(Schema.String)),
+    oastHitCount: optional(Schema.Number),
     caFingerprintSha256: optional(Schema.String),
+    caSpkiSha256Base64: optional(Schema.String),
     caCertPath: optional(Schema.NullOr(Schema.String)),
     caCertPem: optional(Schema.String),
+    availableBrowsers: optional(Schema.Array(ProxyBrowserInfo)),
     capturedCount: Schema.Number,
   })
 
@@ -270,6 +359,7 @@ export namespace CyberLab {
     host: Schema.String,
     path: Schema.String,
     statusCode: Schema.Number,
+    mimeType: optional(Schema.String),
     elapsedMs: Schema.Number,
     requestHeaders: Schema.Record(Schema.String, Schema.String),
     requestBody: Schema.String,
@@ -278,20 +368,177 @@ export namespace CyberLab {
     responseBytes: Schema.Number,
     blockedByScope: Schema.Boolean,
     blockReason: optional(Schema.String),
+    modifiedByRuleOrIntercept: optional(Schema.Boolean),
+    passiveAlertCount: optional(Schema.Number),
     persistedEvidenceId: optional(Schema.String),
+  })
+
+  export const ProxyInterceptItemInfo = Schema.Struct({
+    interceptId: Schema.String,
+    phase: Schema.Literals(["request", "response"]),
+    createdAt: Schema.String,
+    protocol: Schema.Literals(["http", "https"]),
+    method: Schema.String,
+    url: Schema.String,
+    host: Schema.String,
+    path: Schema.String,
+    headers: Schema.Record(Schema.String, Schema.String),
+    body: Schema.String,
+    statusCode: optional(Schema.Number),
+  })
+
+  export const ProxyMatchReplaceRuleInfo = Schema.Struct({
+    ruleId: Schema.String,
+    enabled: Schema.Boolean,
+    location: Schema.Literals(["url", "request_header", "request_body", "response_header", "response_body"]),
+    headerName: optional(Schema.String),
+    matchPattern: Schema.String,
+    replaceWith: Schema.String,
+    isRegex: Schema.Boolean,
+    comment: optional(Schema.String),
+  })
+
+  export const ProxySiteMapEndpointInfo = Schema.Struct({
+    path: Schema.String,
+    methods: Schema.Array(Schema.String),
+    statusCodes: Schema.Array(Schema.Number),
+    mimeTypes: Schema.Array(Schema.String),
+    paramNames: Schema.Array(Schema.String),
+    hitCount: Schema.Number,
+    lastSeenAt: Schema.String,
+    sampleEntryId: Schema.String,
+  })
+
+  export const ProxySiteMapHostInfo = Schema.Struct({
+    host: Schema.String,
+    scheme: Schema.Literals(["http", "https", "ws", "wss"]),
+    inScope: Schema.Boolean,
+    requestCount: Schema.Number,
+    passiveAlertCount: Schema.Number,
+    endpoints: Schema.Array(ProxySiteMapEndpointInfo),
+  })
+
+  export const PassiveProxyAlertInfo = Schema.Struct({
+    alertId: Schema.String,
+    timestamp: Schema.String,
+    severity: Schema.Literals(["info", "low", "medium", "high"]),
+    category: Schema.String,
+    title: Schema.String,
+    host: Schema.String,
+    url: Schema.String,
+    evidenceSnippet: Schema.String,
+    entryId: Schema.String,
+  })
+
+  export const OastCallbackHitInfo = Schema.Struct({
+    hitId: Schema.String,
+    timestamp: Schema.String,
+    method: Schema.String,
+    path: Schema.String,
+    query: Schema.String,
+    remoteAddress: Schema.String,
+    headers: Schema.Record(Schema.String, Schema.String),
+    bodyPreview: Schema.String,
+  })
+
+  export const GlobalHttpTrafficEntryInfo = Schema.Struct({
+    logId: Schema.String,
+    timestamp: Schema.String,
+    projectId: Schema.String,
+    sourceTool: Schema.String,
+    method: Schema.String,
+    url: Schema.String,
+    host: Schema.String,
+    statusCode: Schema.Number,
+    elapsedMs: Schema.Number,
+    responseBytes: Schema.Number,
+    notes: optional(Schema.String),
   })
 
   export const ProxyOverview = Schema.Struct({
     status: ProxyStatusInfo,
     history: Schema.Array(ProxyHistoryEntryInfo),
+    interceptQueue: optional(Schema.Array(ProxyInterceptItemInfo)),
+    matchReplaceRules: optional(Schema.Array(ProxyMatchReplaceRuleInfo)),
+    siteMap: optional(
+      Schema.Struct({
+        hosts: Schema.Array(ProxySiteMapHostInfo),
+        passiveAlerts: Schema.Array(PassiveProxyAlertInfo),
+      }),
+    ),
+    oastHits: optional(Schema.Array(OastCallbackHitInfo)),
+    httpLogger: optional(Schema.Array(GlobalHttpTrafficEntryInfo)),
+    browserLaunchResult: optional(ProxyBrowserLaunchResult),
   })
 
   export const ProxyControlInput = Schema.Struct({
-    action: Schema.Literals(["start", "stop", "clear", "set_scope_only", "set_https_mode"]),
+    action: Schema.Literals([
+      "start",
+      "stop",
+      "clear",
+      "set_scope_only",
+      "set_https_mode",
+      "launch_browser",
+      "configure_intercept",
+      "resolve_intercept",
+      "forward_all_intercepts",
+      "drop_all_intercepts",
+      "upsert_match_replace",
+      "remove_match_replace",
+      "start_oast",
+      "stop_oast",
+      "clear_oast",
+      "clear_http_logger",
+    ]),
     port: optional(Schema.Number),
     scopeOnly: optional(Schema.Boolean),
     httpsMode: optional(Schema.Literals(["tls_intercept", "tunnel_passthrough"])),
     allowSelfSignedUpstream: optional(Schema.Boolean),
+    startUrl: optional(Schema.String),
+    preferredBrowserId: optional(Schema.String),
+    interceptEnabled: optional(Schema.Boolean),
+    interceptResponses: optional(Schema.Boolean),
+    interceptInScopeOnly: optional(Schema.Boolean),
+    skipStaticAssets: optional(Schema.Boolean),
+    interceptId: optional(Schema.String),
+    decision: optional(Schema.Literals(["forward", "drop"])),
+    method: optional(Schema.String),
+    url: optional(Schema.String),
+    headers: optional(Schema.Record(Schema.String, Schema.String)),
+    body: optional(Schema.String),
+    statusCode: optional(Schema.Number),
+    matchReplaceRule: optional(
+      Schema.Struct({
+        ruleId: optional(Schema.String),
+        enabled: Schema.Boolean,
+        location: Schema.Literals(["url", "request_header", "request_body", "response_header", "response_body"]),
+        headerName: optional(Schema.String),
+        matchPattern: Schema.String,
+        replaceWith: Schema.String,
+        isRegex: Schema.Boolean,
+        comment: optional(Schema.String),
+      }),
+    ),
+    ruleId: optional(Schema.String),
+    oastPort: optional(Schema.Number),
+    externalOastDomain: optional(Schema.String),
+  })
+
+  export const ProxyReplayInput = Schema.Struct({
+    entryId: Schema.String,
+  })
+
+  export const ProxyReplayOutput = Schema.Struct({
+    entryId: Schema.String,
+    method: Schema.String,
+    url: Schema.String,
+    headers: Schema.Record(Schema.String, Schema.String),
+    body: Schema.String,
+    responseStatusCode: Schema.Number,
+    responseHeaders: Schema.Record(Schema.String, Schema.String),
+    responseBody: Schema.String,
+    rawHttpRequest: Schema.String,
+    curlCommand: Schema.String,
   })
 
   export const ProxyPersistInput = Schema.Struct({

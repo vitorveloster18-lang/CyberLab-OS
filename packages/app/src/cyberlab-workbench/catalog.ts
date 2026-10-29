@@ -318,13 +318,13 @@ export const MANUAL_TOOLS: ManualToolMeta[] = [
   {
     id: "ad-smb-ldap",
     category: "network",
-    title: "Inspetor Active Directory, SMB, LDAP & NTLM (Lab)",
+    title: "Inspetor Active Directory, SMB, LDAP & NTLM",
     shortTitle: "AD / SMB / LDAP",
     subtitle: "Enumeração passiva sem credenciais: SMB2/3 Signing, LDAPv3 RootDSE anônimo e metadados NTLM Type-2",
     icon: "server",
     badge: "MIT Nativo",
     capabilityId: "network-assessment.ad-smb-ldap-inspector",
-    riskLabel: "Somente Leitura (Lab)",
+    riskLabel: "Somente Leitura (Escopo)",
   },
   {
     id: "key-hunter",
@@ -446,7 +446,8 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
     id: "web-suite",
     title: "Web & API Security Suite",
     shortTitle: "Web & API Suite",
-    subtitle: "Proxy HTTPS CA & WS · Repeater · Intruder (§slot§) · API/GraphQL/OAuth2 BOLA · Parâmetros & Dalfox · JWT",
+    subtitle:
+      "Navegador + Proxy Intercept (Hold/Forward/SiteMap/OAST/Logger) · Multi-Tab Repeater & Comparer · Intruder (§slot§) · API/GraphQL/OAuth2 · JWT",
     icon: "globe",
     keywords: [
       "burp",
@@ -1531,11 +1532,16 @@ export function buildCapabilityInput<K extends ManualToolId>(
       const input: Record<string, unknown> = {
         url: d.url.trim(),
         method: d.method,
-        timeoutMs: Math.min(15000, Math.max(100, Math.trunc(Number(d.timeoutMs) || 6000))),
-        maxBodyBytes: Math.min(65536, Math.max(256, Math.trunc(Number(d.maxBodyBytes) || 32768))),
+        followRedirects: Boolean(d.followRedirects),
+        timeoutMs: Math.min(30000, Math.max(100, Math.trunc(Number(d.timeoutMs) || 12000))),
+        maxBodyBytes: Math.min(262144, Math.max(256, Math.trunc(Number(d.maxBodyBytes) || 65536))),
       }
-      if (headers) input.headers = headers
-      if (d.body && d.method !== "GET" && d.method !== "HEAD") input.body = d.body
+      if (d.useRawHttp && d.rawHttpText?.trim()) {
+        input.rawRequest = d.rawHttpText
+      } else {
+        if (headers) input.headers = headers
+        if (d.body && d.method !== "GET" && d.method !== "HEAD") input.body = d.body
+      }
       if (d.enableBaseline && d.baselineUrl.trim()) {
         input.baselineUrl = d.baselineUrl.trim()
         if (baselineHeaders) input.baselineHeaders = baselineHeaders
@@ -1543,7 +1549,7 @@ export function buildCapabilityInput<K extends ManualToolId>(
       return {
         capabilityId: "web-assessment.http-repeater",
         mode: d.executionMode,
-        targetSummary: `${d.method} ${d.url.trim()}${d.enableBaseline ? ` vs ${d.baselineUrl.trim()}` : ""}`,
+        targetSummary: `${d.useRawHttp ? "RAW" : d.method} ${d.url.trim()}${d.enableBaseline ? ` vs ${d.baselineUrl.trim()}` : ""}`,
         input,
       }
     }

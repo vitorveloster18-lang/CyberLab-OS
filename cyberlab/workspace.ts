@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process"
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { createDefaultCyberLabConfig, detectRuntimeEnvironment } from "./config/config.js"
@@ -7,9 +7,17 @@ import type { CapabilityDefinition } from "./contracts/capability.js"
 import type { EvidenceRecord, FindingSeverity, SecurityFinding } from "./contracts/evidence.js"
 import type { ExecutionMode } from "./contracts/capability.js"
 import type { ExecutionRecord } from "./contracts/execution.js"
-import type { ApprovalTicket, ProjectScope, ScopeTargetRule } from "./contracts/policy.js"
+import type {
+  ApprovalTicket,
+  BugBountyPlatform,
+  EngagementProfile,
+  ProjectScope,
+  ScopeTargetRule,
+} from "./contracts/policy.js"
+import { createDefaultEngagementProfile } from "./contracts/policy.js"
 import { EvidenceStore, type IntegrityCheckResult } from "./evidence/store.js"
 import { CyberLabExecutionDispatcher } from "./execution/dispatcher.js"
+import { EngagementRuntime, type GlobalHttpTrafficEntry } from "./http/engagement-runtime.js"
 import { TrainingLabManager, type TrainingLabStatus } from "./labs/training-labs.js"
 import { PartnerAuthenticator } from "./partners/authentication.js"
 import { PartnerBridge, type PartnerDispatchOutcome } from "./partners/bridge.js"
@@ -67,10 +75,23 @@ import {
   type IngestExternalActionInput,
   type IngestExternalActionResult,
 } from "./external/control-plane.js"
-import { CyberLabHttpProxy, type ProxyHistoryEntry, type ProxyHttpsMode, type ProxyStatus } from "./proxy/http-proxy.js"
+import {
+  CyberLabHttpProxy,
+  type MatchReplaceLocation,
+  type OastCallbackHit,
+  type PassiveProxyAlert,
+  type ProxyHistoryEntry,
+  type ProxyHttpsMode,
+  type ProxyInterceptItem,
+  type ProxyMatchReplaceRule,
+  type ProxyReplayBundle,
+  type ProxyStatus,
+  type SiteMapHostNode,
+} from "./proxy/http-proxy.js"
+import type { LaunchProxyBrowserResult } from "./proxy/browser-launcher.js"
 import { ApprovalManager } from "./policy/approval.js"
 import { PolicyEngine } from "./policy/authorize.js"
-import { ScopeController } from "./policy/scope.js"
+import { ScopeController, parseBugBountyScopeImport } from "./policy/scope.js"
 import { ControlledCapabilityRegistry, InputOutputSchemaRegistry } from "./registry/capabilities.js"
 import { CyberLabSkillCatalog } from "./registry/skills.js"
 import { ExecutorRegistry } from "./registry/tools.js"
@@ -242,6 +263,7 @@ export class CyberLabWorkspace {
   readonly cdiHub: CdiPartnerHub
   readonly externalControl: ExternalControlPlane
   readonly httpProxy: CyberLabHttpProxy
+  private readonly scopePersistencePath: string | null
   private readonly ownedManager?: CyberLabWorkspaceManager
   private initialized = false
 
@@ -253,6 +275,9 @@ export class CyberLabWorkspace {
   }) {
     this.projectId = options.projectId
     this.workspaceRoot = path.resolve(options.workspaceRoot)
+    this.scopePersistencePath = options.inMemoryDb
+      ? null
+      : path.join(this.workspaceRoot, ".cyberlab", "scope.json")
 
     const cfg = createDefaultCyberLabConfig(this.workspaceRoot)
     this.capabilities = new ControlledCapabilityRegistry()
@@ -329,27 +354,59 @@ export class CyberLabWorkspace {
     })
   }
 
+  private persistScopeToDisk(scope: ProjectScope): void {
+    if (!this.scopePersistencePath) return
+    try {
+      mkdirSync(path.dirname(this.scopePersistencePath), { recursive: true })
+      writeFileSync(this.scopePersistencePath, `${JSON.stringify(scope, null, 2)}\n`, "utf8")
+    } catch {
+      // Non-fatal best-effort persistence
+    }
+  }
+
+  private tryLoadScopeFromDisk(): ProjectScope | null {
+    if (!this.scopePersistencePath || !existsSync(this.scopePersistencePath)) return null
+    try {
+      const parsed = JSON.parse(readFileSync(this.scopePersistencePath, "utf8")) as ProjectScope
+      if (!parsed || typeof parsed !== "object") return null
+      return this.scopes.setProjectScope({
+        ...parsed,
+        projectId: this.projectId,
+        workspaceRoot: this.workspaceRoot,
+      })
+    } catch {
+      return null
+    }
+  }
+
   async ensureInitialized(): Promise<this> {
     if (this.initialized) return this
     this.initialized = true
 
-    // Default safe local scope (external network disabled by default)
-    this.scopes.setProjectScope({
-      scopeId: `scope-${this.projectId}`,
-      projectId: this.projectId,
-      name: "Default Isolated Lab & Workspace Scope",
-      workspaceRoot: this.workspaceRoot,
-      allowedTargets: [
-        { kind: "ip", value: "127.0.0.1", notes: "Localhost IPv4 loopback" },
-        { kind: "domain", value: "localhost", notes: "Localhost loopback hostname" },
-      ],
-      blockedTargets: [
-        { kind: "workspace_path", value: ".git", notes: "Protect repository VCS metadata" },
-      ],
-      allowExternalTargets: false,
-      active: true,
-      updatedAt: new Date().toISOString(),
-    })
+    const restoredScope = this.tryLoadScopeFromDisk()
+    if (restoredScope) {
+      EngagementRuntime.setProfile(this.projectId, restoredScope.engagement)
+    } else {
+      // Default safe local scope (external network disabled by default until operator configures scope)
+      const defaultScope = this.scopes.setProjectScope({
+        scopeId: `scope-${this.projectId}`,
+        projectId: this.projectId,
+        name: "Default Isolated Lab & Workspace Scope",
+        workspaceRoot: this.workspaceRoot,
+        allowedTargets: [
+          { kind: "ip", value: "127.0.0.1", notes: "Localhost IPv4 loopback" },
+          { kind: "domain", value: "localhost", notes: "Localhost loopback hostname" },
+        ],
+        blockedTargets: [
+          { kind: "workspace_path", value: ".git", notes: "Protect repository VCS metadata" },
+        ],
+        allowExternalTargets: false,
+        engagement: createDefaultEngagementProfile(),
+        active: true,
+        updatedAt: new Date().toISOString(),
+      })
+      EngagementRuntime.setProfile(this.projectId, defaultScope.engagement)
+    }
 
     // Register built-in read-only workspace audit executor & capability
     this.schemas.registerEffectSchema(WORKSPACE_AUDIT_INPUT_SCHEMA_ID, WorkspaceAuditInputSchema)
@@ -536,11 +593,13 @@ export class CyberLabWorkspace {
     allowedTargets?: ScopeTargetRule[]
     blockedTargets?: ScopeTargetRule[]
     allowExternalTargets?: boolean
+    engagement?: EngagementProfile
     active?: boolean
   }): Promise<ProjectScope> {
     await this.ensureInitialized()
     const current = this.scopes.getProjectScope(this.projectId)
-    return this.scopes.setProjectScope({
+    const nextEngagement = patch.engagement ?? current?.engagement ?? createDefaultEngagementProfile()
+    const updated = this.scopes.setProjectScope({
       scopeId: current?.scopeId ?? `scope-${this.projectId}`,
       projectId: this.projectId,
       name: patch.name ?? current?.name ?? "Project Scope",
@@ -548,9 +607,139 @@ export class CyberLabWorkspace {
       allowedTargets: patch.allowedTargets ?? current?.allowedTargets ?? [],
       blockedTargets: patch.blockedTargets ?? current?.blockedTargets ?? [],
       allowExternalTargets: patch.allowExternalTargets ?? current?.allowExternalTargets ?? false,
+      engagement: nextEngagement,
       active: patch.active ?? current?.active ?? true,
       updatedAt: new Date().toISOString(),
     })
+    EngagementRuntime.setProfile(this.projectId, updated.engagement)
+    this.persistScopeToDisk(updated)
+    return updated
+  }
+
+  async importBugBountyScope(params: {
+    rawInput: string
+    platformHint?: BugBountyPlatform
+    researcherHandle?: string
+    headerName?: string
+    headerValue?: string
+    maxRequestsPerSecond?: number
+    mergeWithExisting?: boolean
+  }): Promise<{
+    scope: ProjectScope
+    detectedFormat: string
+    importedAllowedCount: number
+    importedBlockedCount: number
+  }> {
+    await this.ensureInitialized()
+    const parsed = parseBugBountyScopeImport(params.rawInput, {
+      ...(params.platformHint ? { platformHint: params.platformHint } : {}),
+      ...(params.researcherHandle ? { researcherHandle: params.researcherHandle } : {}),
+      ...(params.headerName ? { headerName: params.headerName } : {}),
+      ...(params.headerValue ? { headerValue: params.headerValue } : {}),
+      ...(params.maxRequestsPerSecond !== undefined ? { maxRequestsPerSecond: params.maxRequestsPerSecond } : {}),
+    })
+    const current = this.scopes.getProjectScope(this.projectId)
+    const merge = params.mergeWithExisting ?? true
+
+    const dedupRules = (rules: ScopeTargetRule[]): ScopeTargetRule[] => {
+      const seen = new Set<string>()
+      const out: ScopeTargetRule[] = []
+      for (const r of rules) {
+        const key = `${r.kind}:${r.value.toLowerCase()}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push(r)
+      }
+      return out
+    }
+
+    const allowedTargets = dedupRules([
+      ...(merge ? (current?.allowedTargets ?? []) : []),
+      ...parsed.allowedTargets,
+    ])
+    const blockedTargets = dedupRules([
+      ...(merge ? (current?.blockedTargets ?? []) : []),
+      ...parsed.blockedTargets,
+    ])
+
+    const updated = await this.updateScope({
+      name: parsed.programName ? `Bug Bounty — ${parsed.programName}` : current?.name ?? "Bug Bounty Program Scope",
+      allowedTargets,
+      blockedTargets,
+      allowExternalTargets: parsed.allowExternalTargets || Boolean(current?.allowExternalTargets),
+      engagement: parsed.engagement,
+      active: true,
+    })
+
+    return {
+      scope: updated,
+      detectedFormat: parsed.detectedFormat,
+      importedAllowedCount: parsed.allowedTargets.length,
+      importedBlockedCount: parsed.blockedTargets.length,
+    }
+  }
+
+  async importArtifactToWorkspace(params: {
+    fileName: string
+    contentBase64: string
+    subdir?: string
+  }): Promise<{
+    fileName: string
+    relativePath: string
+    absolutePath: string
+    sizeBytes: number
+  }> {
+    await this.ensureInitialized()
+    const safeName = path
+      .basename(params.fileName || "artifact.bin")
+      .replace(/[^a-zA-Z0-9._-]/g, "_")
+      .slice(0, 140)
+    if (!safeName || safeName === "." || safeName === "..") {
+      throw new Error("Invalid artifact fileName")
+    }
+    const cleanSubdir = (params.subdir ?? "imports").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40) || "imports"
+    const cleanBase64 = params.contentBase64.includes(",")
+      ? params.contentBase64.slice(params.contentBase64.indexOf(",") + 1)
+      : params.contentBase64
+    const buf = Buffer.from(cleanBase64, "base64")
+    if (buf.byteLength > 48 * 1024 * 1024) {
+      throw new Error("Imported artifact exceeds 48 MB inline upload limit; add an external workspace_path in Scope instead")
+    }
+
+    const targetDir = path.join(this.workspaceRoot, ".cyberlab", cleanSubdir)
+    mkdirSync(targetDir, { recursive: true })
+    const absolutePath = path.join(targetDir, safeName)
+    writeFileSync(absolutePath, buf)
+    const relativePath = path.posix.join(".cyberlab", cleanSubdir, safeName)
+    return {
+      fileName: safeName,
+      relativePath,
+      absolutePath,
+      sizeBytes: buf.byteLength,
+    }
+  }
+
+  async listImportedArtifacts(): Promise<
+    Array<{ fileName: string; relativePath: string; sizeBytes: number; modifiedAt: string }>
+  > {
+    await this.ensureInitialized()
+    const targetDir = path.join(this.workspaceRoot, ".cyberlab", "imports")
+    if (!existsSync(targetDir)) return []
+    const items: Array<{ fileName: string; relativePath: string; sizeBytes: number; modifiedAt: string }> = []
+    for (const entry of readdirSync(targetDir, { withFileTypes: true })) {
+      if (!entry.isFile()) continue
+      const abs = path.join(targetDir, entry.name)
+      const st = statSync(abs, { throwIfNoEntry: false })
+      if (!st) continue
+      items.push({
+        fileName: entry.name,
+        relativePath: path.posix.join(".cyberlab", "imports", entry.name),
+        sizeBytes: st.size,
+        modifiedAt: st.mtime.toISOString(),
+      })
+    }
+    items.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt))
+    return items
   }
 
   async submitExecution(params: {
@@ -651,22 +840,89 @@ export class CyberLabWorkspace {
     }
   }
 
-  async getProxyOverview(): Promise<{ status: ProxyStatus; history: ProxyHistoryEntry[] }> {
+  async getProxyOverview(): Promise<{
+    status: ProxyStatus
+    history: ProxyHistoryEntry[]
+    interceptQueue: ProxyInterceptItem[]
+    matchReplaceRules: ProxyMatchReplaceRule[]
+    siteMap: { hosts: SiteMapHostNode[]; passiveAlerts: PassiveProxyAlert[] }
+    oastHits: OastCallbackHit[]
+    httpLogger: GlobalHttpTrafficEntry[]
+    browserLaunchResult?: LaunchProxyBrowserResult
+  }> {
     await this.ensureInitialized()
     return {
       status: this.httpProxy.getStatus(),
       history: this.httpProxy.listHistory(),
+      interceptQueue: this.httpProxy.listInterceptQueue(),
+      matchReplaceRules: this.httpProxy.listMatchReplaceRules(),
+      siteMap: this.httpProxy.getSiteMap(),
+      oastHits: this.httpProxy.listOastHits(),
+      httpLogger: EngagementRuntime.listTraffic(this.projectId, 250),
     }
   }
 
   async controlProxy(params: {
-    action: "start" | "stop" | "clear" | "set_scope_only" | "set_https_mode"
+    action:
+      | "start"
+      | "stop"
+      | "clear"
+      | "set_scope_only"
+      | "set_https_mode"
+      | "launch_browser"
+      | "configure_intercept"
+      | "resolve_intercept"
+      | "forward_all_intercepts"
+      | "drop_all_intercepts"
+      | "upsert_match_replace"
+      | "remove_match_replace"
+      | "start_oast"
+      | "stop_oast"
+      | "clear_oast"
+      | "clear_http_logger"
     port?: number
     scopeOnly?: boolean
     httpsMode?: ProxyHttpsMode
     allowSelfSignedUpstream?: boolean
-  }): Promise<{ status: ProxyStatus; history: ProxyHistoryEntry[] }> {
+    startUrl?: string
+    preferredBrowserId?: string
+    interceptEnabled?: boolean
+    interceptResponses?: boolean
+    interceptInScopeOnly?: boolean
+    skipStaticAssets?: boolean
+    interceptId?: string
+    decision?: "forward" | "drop"
+    method?: string
+    url?: string
+    headers?: Record<string, string>
+    body?: string
+    statusCode?: number
+    matchReplaceRule?: {
+      ruleId?: string
+      enabled: boolean
+      location: MatchReplaceLocation
+      headerName?: string
+      matchPattern: string
+      replaceWith: string
+      isRegex: boolean
+      comment?: string
+    }
+    ruleId?: string
+    oastPort?: number
+    externalOastDomain?: string
+  }): Promise<{
+    status: ProxyStatus
+    history: ProxyHistoryEntry[]
+    interceptQueue: ProxyInterceptItem[]
+    matchReplaceRules: ProxyMatchReplaceRule[]
+    siteMap: { hosts: SiteMapHostNode[]; passiveAlerts: PassiveProxyAlert[] }
+    oastHits: OastCallbackHit[]
+    httpLogger: GlobalHttpTrafficEntry[]
+    browserLaunchResult?: LaunchProxyBrowserResult
+  }> {
     await this.ensureInitialized()
+    let browserLaunchResult: LaunchProxyBrowserResult | undefined
+
     if (params.action === "start") {
       await this.httpProxy.start({
         ...(params.port !== undefined ? { port: params.port } : {}),
@@ -684,8 +940,63 @@ export class CyberLabWorkspace {
       this.httpProxy.setScopeOnly(params.scopeOnly ?? true)
     } else if (params.action === "set_https_mode") {
       this.httpProxy.setHttpsMode(params.httpsMode ?? "tls_intercept", params.allowSelfSignedUpstream)
+    } else if (params.action === "launch_browser") {
+      browserLaunchResult = await this.httpProxy.launchBrowser({
+        ...(params.startUrl ? { startUrl: params.startUrl } : {}),
+        ...(params.preferredBrowserId ? { preferredBrowserId: params.preferredBrowserId } : {}),
+        ...(params.port !== undefined ? { defaultPort: params.port } : {}),
+      })
+    } else if (params.action === "configure_intercept") {
+      this.httpProxy.configureIntercept({
+        ...(params.interceptEnabled !== undefined ? { enabled: params.interceptEnabled } : {}),
+        ...(params.interceptResponses !== undefined ? { interceptResponses: params.interceptResponses } : {}),
+        ...(params.interceptInScopeOnly !== undefined ? { inScopeOnly: params.interceptInScopeOnly } : {}),
+        ...(params.skipStaticAssets !== undefined ? { skipStaticAssets: params.skipStaticAssets } : {}),
+      })
+    } else if (params.action === "resolve_intercept") {
+      if (params.interceptId && params.decision) {
+        this.httpProxy.resolveIntercept({
+          interceptId: params.interceptId,
+          decision: params.decision,
+          ...(params.method ? { method: params.method } : {}),
+          ...(params.url ? { url: params.url } : {}),
+          ...(params.headers ? { headers: params.headers } : {}),
+          ...(params.body !== undefined ? { body: params.body } : {}),
+          ...(params.statusCode !== undefined ? { statusCode: params.statusCode } : {}),
+        })
+      }
+    } else if (params.action === "forward_all_intercepts") {
+      this.httpProxy.forwardAllIntercepts()
+    } else if (params.action === "drop_all_intercepts") {
+      this.httpProxy.dropAllIntercepts()
+    } else if (params.action === "upsert_match_replace") {
+      if (params.matchReplaceRule) {
+        this.httpProxy.upsertMatchReplaceRule(params.matchReplaceRule)
+      }
+    } else if (params.action === "remove_match_replace") {
+      if (params.ruleId) {
+        this.httpProxy.removeMatchReplaceRule(params.ruleId)
+      }
+    } else if (params.action === "start_oast") {
+      await this.httpProxy.startOastListener(params.oastPort ?? 0, params.externalOastDomain)
+    } else if (params.action === "stop_oast") {
+      await this.httpProxy.stopOastListener()
+    } else if (params.action === "clear_oast") {
+      this.httpProxy.clearOastHits()
+    } else if (params.action === "clear_http_logger") {
+      EngagementRuntime.clearTraffic(this.projectId)
     }
-    return this.getProxyOverview()
+
+    const overview = await this.getProxyOverview()
+    return {
+      ...overview,
+      ...(browserLaunchResult ? { browserLaunchResult } : {}),
+    }
+  }
+
+  async exportProxyEntryForReplay(entryId: string): Promise<ProxyReplayBundle> {
+    await this.ensureInitialized()
+    return this.httpProxy.exportEntryForReplay(entryId)
   }
 
   async persistProxyEntry(entryId: string, actor?: string): Promise<{ evidenceId: string; sha256: string }> {

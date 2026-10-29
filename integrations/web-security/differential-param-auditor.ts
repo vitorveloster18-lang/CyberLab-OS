@@ -1,6 +1,7 @@
 import crypto from "node:crypto"
 import { Schema } from "effect"
 import {
+  EngagementRuntime,
   capOutputBytes,
   normalizeRawOutputDraft,
   redactSensitiveContent,
@@ -115,10 +116,13 @@ export class DifferentialParamAuditorExecutor implements CyberLabExecutor {
       const ctrl = new AbortController()
       const timer = setTimeout(() => ctrl.abort(), timeoutMs)
       try {
-        const headers: Record<string, string> = { ...(parsed.headers ?? {}) }
+        const headers: Record<string, string> = EngagementRuntime.applyHeaders(context.projectId, {
+          ...(parsed.headers ?? {}),
+        })
         if (method === "POST" && bodyParams) {
           headers["Content-Type"] = "application/x-www-form-urlencoded"
         }
+        await EngagementRuntime.acquireRateSlot(context.projectId)
         const t0 = performance.now()
         const res = await fetch(probeUrl.toString(), {
           method,
@@ -128,9 +132,20 @@ export class DifferentialParamAuditorExecutor implements CyberLabExecutor {
           signal: ctrl.signal,
         })
         const text = capOutputBytes(await res.text(), 32_768).text
+        const elapsedMs = Math.round(performance.now() - t0)
+        EngagementRuntime.recordTraffic({
+          projectId: context.projectId,
+          sourceTool: "param-auditor",
+          method,
+          url: probeUrl.toString(),
+          host: probeUrl.host,
+          statusCode: res.status,
+          elapsedMs,
+          responseBytes: Buffer.byteLength(text, "utf8"),
+        })
         return {
           status: res.status,
-          elapsedMs: Math.round(performance.now() - t0),
+          elapsedMs,
           contentType: res.headers.get("content-type") ?? "",
           csp: res.headers.get("content-security-policy") ?? "",
           nosniff: res.headers.get("x-content-type-options") ?? "",

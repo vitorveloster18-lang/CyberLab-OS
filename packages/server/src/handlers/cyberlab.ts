@@ -247,7 +247,72 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
               ...(payload.allowExternalTargets !== undefined
                 ? { allowExternalTargets: payload.allowExternalTargets }
                 : {}),
+              ...(payload.engagement !== undefined
+                ? {
+                    engagement: {
+                      mode: payload.engagement.mode,
+                      platform: payload.engagement.platform,
+                      ...(payload.engagement.programName !== undefined
+                        ? { programName: payload.engagement.programName }
+                        : {}),
+                      ...(payload.engagement.researcherHandle !== undefined
+                        ? { researcherHandle: payload.engagement.researcherHandle }
+                        : {}),
+                      ...(payload.engagement.customUserAgent !== undefined
+                        ? { customUserAgent: payload.engagement.customUserAgent }
+                        : {}),
+                      maxRequestsPerSecond: payload.engagement.maxRequestsPerSecond,
+                      customHeaders: payload.engagement.customHeaders.map((h) => ({
+                        name: h.name,
+                        value: h.value,
+                        enabled: h.enabled,
+                      })),
+                    },
+                  }
+                : {}),
               ...(payload.active !== undefined ? { active: payload.active } : {}),
+            }),
+          )
+        }),
+      ),
+    )
+    .handle("cyberlab.scope.import", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() =>
+            ws.importBugBountyScope({
+              rawInput: payload.rawInput,
+              ...(payload.platformHint !== undefined ? { platformHint: payload.platformHint } : {}),
+              ...(payload.researcherHandle !== undefined ? { researcherHandle: payload.researcherHandle } : {}),
+              ...(payload.headerName !== undefined ? { headerName: payload.headerName } : {}),
+              ...(payload.headerValue !== undefined ? { headerValue: payload.headerValue } : {}),
+              ...(payload.maxRequestsPerSecond !== undefined
+                ? { maxRequestsPerSecond: payload.maxRequestsPerSecond }
+                : {}),
+              ...(payload.mergeWithExisting !== undefined ? { mergeWithExisting: payload.mergeWithExisting } : {}),
+            }),
+          )
+        }),
+      ),
+    )
+    .handle("cyberlab.artifacts.list", () =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* Effect.promise(() => ws.listImportedArtifacts())
+        }),
+      ),
+    )
+    .handle("cyberlab.artifacts.upload", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() =>
+            ws.importArtifactToWorkspace({
+              fileName: payload.fileName,
+              contentBase64: payload.contentBase64,
+              ...(payload.subdir !== undefined ? { subdir: payload.subdir } : {}),
             }),
           )
         }),
@@ -462,6 +527,44 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
               ...(payload.allowSelfSignedUpstream !== undefined
                 ? { allowSelfSignedUpstream: payload.allowSelfSignedUpstream }
                 : {}),
+              ...(payload.startUrl !== undefined ? { startUrl: payload.startUrl } : {}),
+              ...(payload.preferredBrowserId !== undefined ? { preferredBrowserId: payload.preferredBrowserId } : {}),
+              ...(payload.interceptEnabled !== undefined ? { interceptEnabled: payload.interceptEnabled } : {}),
+              ...(payload.interceptResponses !== undefined ? { interceptResponses: payload.interceptResponses } : {}),
+              ...(payload.interceptInScopeOnly !== undefined
+                ? { interceptInScopeOnly: payload.interceptInScopeOnly }
+                : {}),
+              ...(payload.skipStaticAssets !== undefined ? { skipStaticAssets: payload.skipStaticAssets } : {}),
+              ...(payload.interceptId !== undefined ? { interceptId: payload.interceptId } : {}),
+              ...(payload.decision !== undefined ? { decision: payload.decision } : {}),
+              ...(payload.method !== undefined ? { method: payload.method } : {}),
+              ...(payload.url !== undefined ? { url: payload.url } : {}),
+              ...(payload.headers !== undefined ? { headers: { ...payload.headers } } : {}),
+              ...(payload.body !== undefined ? { body: payload.body } : {}),
+              ...(payload.statusCode !== undefined ? { statusCode: payload.statusCode } : {}),
+              ...(payload.matchReplaceRule !== undefined
+                ? {
+                    matchReplaceRule: {
+                      ...(payload.matchReplaceRule.ruleId !== undefined
+                        ? { ruleId: payload.matchReplaceRule.ruleId }
+                        : {}),
+                      enabled: payload.matchReplaceRule.enabled,
+                      location: payload.matchReplaceRule.location,
+                      ...(payload.matchReplaceRule.headerName !== undefined
+                        ? { headerName: payload.matchReplaceRule.headerName }
+                        : {}),
+                      matchPattern: payload.matchReplaceRule.matchPattern,
+                      replaceWith: payload.matchReplaceRule.replaceWith,
+                      isRegex: payload.matchReplaceRule.isRegex,
+                      ...(payload.matchReplaceRule.comment !== undefined
+                        ? { comment: payload.matchReplaceRule.comment }
+                        : {}),
+                    },
+                  }
+                : {}),
+              ...(payload.ruleId !== undefined ? { ruleId: payload.ruleId } : {}),
+              ...(payload.oastPort !== undefined ? { oastPort: payload.oastPort } : {}),
+              ...(payload.externalOastDomain !== undefined ? { externalOastDomain: payload.externalOastDomain } : {}),
             }),
           )
         }),
@@ -472,6 +575,14 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
         Effect.gen(function* () {
           const ws = yield* resolveWorkspace
           return yield* runBadRequest(() => ws.persistProxyEntry(payload.entryId, "http-workbench"))
+        }),
+      ),
+    )
+    .handle("cyberlab.proxy.replay", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() => ws.exportProxyEntryForReplay(payload.entryId))
         }),
       ),
     )

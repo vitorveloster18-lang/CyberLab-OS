@@ -81,9 +81,9 @@ jobs:
           if (-not (Test-Path "packages/app/dist/index.html")) { throw "Missing dist/index.html" }
           if (-not (Test-Path "packages/app/dist/sw.js")) { throw "Missing dist/sw.js" }
 
-      - name: Verify CyberLab CDI autonomy & Training Labs on Windows NTFS
+      - name: Verify CyberLab CDI autonomy, v4.0 Bug Bounty & Burp Proxy, and Training Labs on Windows NTFS
         shell: pwsh
         run: |
           bun run script/check-cyberlab-licenses.ts
           bun --cwd cyberlab typecheck
-          bun test --cwd cyberlab ../tests/cyberlab/partners ../tests/cyberlab/labs
+          bun test --cwd cyberlab ../tests/cyberlab/partners ../tests/cyberlab/labs ../tests/cyberlab/proxy/burp-bounty-v4.test.ts ../tests/cyberlab/workbench/manual-workbench-catalog.test.ts

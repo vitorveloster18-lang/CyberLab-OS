@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import {
+  EngagementRuntime,
   capOutputBytes,
   normalizeRawOutputDraft,
   type CapabilityDefinition,
@@ -203,17 +204,29 @@ export class WebHttpSecurityInspectorExecutor implements CyberLabExecutor {
 
     try {
       await ctx.log("info", `Performing passive ${method} inspection against ${parsedUrl.origin}${parsedUrl.pathname}`)
+      await EngagementRuntime.acquireRateSlot(ctx.projectId)
+      const reqHeaders = EngagementRuntime.applyHeaders(ctx.projectId, {
+        "User-Agent": "CyberLab-OS-Passive-Inspector/4.0",
+        Accept: "text/html,application/json,*/*;q=0.8",
+      })
       const startedAt = Date.now()
       const response = await fetch(parsedUrl.toString(), {
         method,
         redirect: "manual",
-        headers: {
-          "User-Agent": "CyberLab-OS-Passive-Inspector/1.0",
-          Accept: "text/html,application/json,*/*;q=0.8",
-        },
+        headers: reqHeaders,
         signal: requestAbort.signal,
       })
       const elapsedMs = Date.now() - startedAt
+      EngagementRuntime.recordTraffic({
+        projectId: ctx.projectId,
+        sourceTool: "http-inspector",
+        method,
+        url: parsedUrl.toString(),
+        host: parsedUrl.host,
+        statusCode: response.status,
+        elapsedMs,
+        responseBytes: Number(response.headers.get("content-length") ?? 0),
+      })
 
       const setCookies = typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : []
 
