@@ -478,6 +478,7 @@ export interface MobileTriageDraft {
 }
 
 export type CdiInitiateModeDto =
+  | "full_autonomy"
   | "autonomous_in_scope"
   | "allow_readonly_and_low_propose_others"
   | "allow_readonly_propose_others"
@@ -501,6 +502,10 @@ export interface CdiHubDraft {
   editInitiateActions?: CdiInitiateModeDto
   editReadProjectState?: boolean
   editReadEvidenceAndFiles?: boolean
+  editWriteWorkspaceAndCode?: boolean
+  editFullRuntimeAndCodeAccess?: boolean
+  editManageProjectsAndScope?: boolean
+  editAccessTrainingLabs?: boolean
   editCreateArtifactsAndFindings?: boolean
   editEnabled?: boolean
   editSecretOverride?: string
@@ -517,7 +522,8 @@ export interface ExternalIngestDraft {
 }
 
 export interface ScopeGovernanceDraft {
-  subTab: "scope" | "approvals" | "evidence" | "findings" | "report"
+  subTab: "scope" | "labs" | "approvals" | "evidence" | "findings" | "report"
+  newProjectName?: string
   newRuleKind: "ip" | "cidr" | "domain" | "url_origin" | "workspace_path"
   newRuleValue: string
   newRuleNotes: string
@@ -750,9 +756,55 @@ export interface CdiPartnerDto {
   permissions: {
     readProjectState: boolean
     readEvidenceAndFiles: boolean
+    writeWorkspaceAndCode?: boolean
+    fullRuntimeAndCodeAccess?: boolean
+    manageProjectsAndScope?: boolean
+    accessTrainingLabs?: boolean
     createArtifactsAndFindings: boolean
     initiateActions: CdiInitiateModeDto
   }
+}
+
+export interface TrainingLabDto {
+  labId: string
+  title: string
+  category: string
+  difficulty: "beginner" | "intermediate" | "advanced"
+  hasLiveServer: boolean
+  provisioned: boolean
+  running: boolean
+  projectId: string
+  workspaceRoot: string
+  baseUrl?: string
+  port?: number
+  startedAt?: string
+  requestCount: number
+  recentRequests: Array<{ timestamp: string; method: string; url: string; statusCode: number }>
+  summary: string
+  challenges: Array<{
+    id: string
+    title: string
+    objective: string
+    recommendedCapabilities: string[]
+    remediationFile?: string
+  }>
+}
+
+export interface ManagedProjectDto {
+  projectId: string
+  name: string
+  workspaceRoot: string
+  isActive: boolean
+  createdBy: string
+  createdAt: string
+  isTrainingLab: boolean
+  labId?: string
+}
+
+export interface ProjectsAndLabsOverviewDto {
+  runtimeRoot: string
+  projects: ManagedProjectDto[]
+  labs: TrainingLabDto[]
 }
 
 export interface PartnersOverviewDto {

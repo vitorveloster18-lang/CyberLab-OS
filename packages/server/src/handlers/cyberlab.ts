@@ -1,4 +1,5 @@
 import {
+  CDI_CANONICAL_GATEWAY_ACTIONS,
   CyberLabWorkspaceManager,
   type CapabilityDefinition,
   type EvidenceRecord,
@@ -6,6 +7,8 @@ import {
   type SecurityFinding,
 } from "@cyberlab/core"
 import { Location } from "@opencode/core/location"
+import { Project } from "@opencode/core/project"
+import { AbsolutePath } from "@opencode/core/schema"
 import { InvalidRequestError } from "@opencode/protocol/errors"
 import { Effect } from "effect"
 import { HttpServerRequest } from "effect/http"
@@ -109,6 +112,17 @@ const resolveGatewayWorkspace = Effect.gen(function* () {
   )
 })
 
+const syncOpenCodeProject = (workspaceRoot: string, displayName?: string) =>
+  Project.Service.use((projectService) =>
+    Effect.gen(function* () {
+      const resolved = yield* projectService.resolve(AbsolutePath.make(workspaceRoot))
+      if (displayName && displayName.trim()) {
+        yield* projectService.update({ projectID: resolved.id, name: displayName.trim() })
+      }
+      yield* projectService.activate(resolved.id)
+    }),
+  ).pipe(Effect.ignore)
+
 const buildGatewayDiscoveryInfo = Effect.gen(function* () {
   const ws = yield* resolveGatewayWorkspace
   const overview = ws.cdiHub.getOverview()
@@ -121,18 +135,17 @@ const buildGatewayDiscoveryInfo = Effect.gen(function* () {
     methods: ["GET", "POST"],
     auth: "HMAC-SHA256 canonicalJson envelope (CYBERLAB_PARTNER_SECRET)",
     governanceModel: overview.governanceModel,
-    supportedActions: [
-      "project.state",
-      "evidence.list",
-      "evidence.read",
-      "workspace.list_files",
-      "workspace.read_file",
-      "artifact.create",
-      "finding.propose",
-      "action.initiate",
-      "action.status",
-    ],
+    runtimeRoot: CyberLabWorkspaceManager.global.runtimeRoot,
+    supportedActions: [...CDI_CANONICAL_GATEWAY_ACTIONS],
     secretConfigured: overview.secretConfigured,
+    managedProjectsCount: CyberLabWorkspaceManager.global.listManagedProjects().length,
+    trainingLabs: CyberLabWorkspaceManager.global.trainingLabs.listLabs().map((l) => ({
+      labId: l.labId,
+      title: l.title,
+      category: l.category,
+      running: l.running,
+      ...(l.baseUrl ? { baseUrl: l.baseUrl } : {}),
+    })),
     registeredPartners: overview.partners.map((p) => ({
       partnerId: p.partnerId,
       displayName: p.displayName,
@@ -156,7 +169,23 @@ const handleInboundGateway = (payload: unknown, fallbackAction?: string) =>
         ? { ...(payload as Record<string, unknown>), action: fallbackAction }
         : payload
     const res = yield* Effect.promise(() => ws.cdiHub.handleInboundGatewayRequest(normalizedPayload))
-    return res.body
+
+    // Automatically register & activate CDI-created/selected projects & training labs in OpenCode V2 Project.Service
+    if (res.body && typeof res.body === "object" && (res.body as Record<string, unknown>).ok === true) {
+      const data = (res.body as Record<string, unknown>).data as Record<string, unknown> | undefined
+      const projObj = data?.project as Record<string, unknown> | undefined
+      const labObj = data?.lab as Record<string, unknown> | undefined
+      if (projObj && typeof projObj.workspaceRoot === "string") {
+        yield* syncOpenCodeProject(
+          projObj.workspaceRoot,
+          typeof projObj.name === "string" ? projObj.name : undefined,
+        )
+      } else if (labObj && typeof labObj.workspaceRoot === "string" && typeof labObj.title === "string") {
+        yield* syncOpenCodeProject(labObj.workspaceRoot, `[Lab] ${labObj.title}`)
+      }
+    }
+
+    return JSON.parse(JSON.stringify(res.body)) as unknown
   })
 
 export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (handlers) =>
@@ -535,6 +564,86 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
     .handle("cyberlab.partners.gateway.alias.api.info", () => response(buildGatewayDiscoveryInfo))
     .handle("cyberlab.partners.gateway.alias.api.post", ({ payload }) => response(handleInboundGateway(payload)))
     .handle("cyberlab.partners.gateway.alias.root.info", () => response(buildGatewayDiscoveryInfo))
-    .handle("cyberlab.partners.gateway.alias.root.post", ({ payload }) => response(handleInboundGateway(payload))),
+    .handle("cyberlab.partners.gateway.alias.root.post", ({ payload }) => response(handleInboundGateway(payload)))
+    .handle("cyberlab.labs.list", () =>
+      response(Effect.sync(() => CyberLabWorkspaceManager.global.trainingLabs.listLabs())),
+    )
+    .handle("cyberlab.labs.control", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          if (payload.action === "start") {
+            const started = yield* runBadRequest(() =>
+              CyberLabWorkspaceManager.global.startTrainingLab({
+                labId: payload.labId,
+                ...(payload.preferredPort !== undefined ? { preferredPort: payload.preferredPort } : {}),
+                ...(payload.resetFiles !== undefined ? { resetFiles: payload.resetFiles } : {}),
+                setActive: payload.setActive !== false,
+                startedBy: "curator",
+                sourceHub: ws.cdiHub,
+              }),
+            )
+            yield* syncOpenCodeProject(started.workspaceRoot, `[Lab] ${started.title}`)
+            return started
+          }
+          if (payload.action === "reset") {
+            return yield* runBadRequest(() => CyberLabWorkspaceManager.global.resetTrainingLab(payload.labId))
+          }
+          return yield* runBadRequest(() => CyberLabWorkspaceManager.global.stopTrainingLab(payload.labId))
+        }),
+      ),
+    )
+    .handle("cyberlab.projects.list", () =>
+      response(
+        Effect.gen(function* () {
+          yield* resolveWorkspace
+          return {
+            runtimeRoot: CyberLabWorkspaceManager.global.runtimeRoot,
+            projects: CyberLabWorkspaceManager.global.listManagedProjects(),
+            labs: CyberLabWorkspaceManager.global.trainingLabs.listLabs(),
+          }
+        }),
+      ),
+    )
+    .handle("cyberlab.projects.manage", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          if (payload.operation === "create") {
+            if (!payload.name?.trim()) {
+              return yield* Effect.fail(new InvalidRequestError({ message: "Project name is required" }))
+            }
+            const created = yield* runBadRequest(() =>
+              CyberLabWorkspaceManager.global.createAutonomousProject({
+                name: payload.name!.trim(),
+                ...(payload.slug ? { slug: payload.slug } : {}),
+                ...(payload.directory ? { directory: payload.directory } : {}),
+                ...(payload.allowExternalTargets !== undefined
+                  ? { allowExternalTargets: payload.allowExternalTargets }
+                  : {}),
+                createdBy: "curator",
+                setActive: true,
+                sourceHub: ws.cdiHub,
+              }),
+            )
+            yield* syncOpenCodeProject(created.project.workspaceRoot, created.project.name)
+          } else {
+            const selected = yield* runBadRequest(() =>
+              CyberLabWorkspaceManager.global.selectProject({
+                ...(payload.projectId ? { projectId: payload.projectId } : {}),
+                ...(payload.directory ? { directory: payload.directory } : {}),
+                sourceHub: ws.cdiHub,
+              }),
+            )
+            yield* syncOpenCodeProject(selected.workspaceRoot, selected.name)
+          }
+          return {
+            runtimeRoot: CyberLabWorkspaceManager.global.runtimeRoot,
+            projects: CyberLabWorkspaceManager.global.listManagedProjects(),
+            labs: CyberLabWorkspaceManager.global.trainingLabs.listLabs(),
+          }
+        }),
+      ),
+    ),
 )
 

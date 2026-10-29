@@ -26,12 +26,14 @@ import type {
   ManualToolDraftMap,
   ManualToolId,
   PartnersOverviewDto,
+  ProjectsAndLabsOverviewDto,
   ProxyHistoryEntryDto,
   ProxyOverviewDto,
   ReadEvidenceDto,
   ScopeRuleDto,
   ToolHistoryEntry,
   ToolSuiteId,
+  TrainingLabDto,
   WorkbenchLayoutMode,
   WorkspaceStatusDto,
 } from "./types"
@@ -251,6 +253,7 @@ function createWorkbenchService() {
     proxy: ProxyOverviewDto | null
     partners: PartnersOverviewDto | null
     external: ExternalToolsOverviewDto | null
+    projectsAndLabs: ProjectsAndLabsOverviewDto | null
     reportMarkdown: string
     inspectedEvidence: ReadEvidenceDto | null
     revealedSecret: string
@@ -264,6 +267,7 @@ function createWorkbenchService() {
     proxy: null,
     partners: null,
     external: null,
+    projectsAndLabs: null,
     reportMarkdown: "",
     inspectedEvidence: null,
     revealedSecret: "",
@@ -552,16 +556,18 @@ function createWorkbenchService() {
     setBackend("loading", true)
     const target = serverTarget()
     try {
-      const [status, approvals, executions, evidence, findings, proxy, partners, external] = await Promise.all([
-        cyberlabFetch<WorkspaceStatusDto>(target, "/api/cyberlab/status").catch(() => null),
-        cyberlabFetch<ApprovalDto[]>(target, "/api/cyberlab/approvals").catch(() => []),
-        cyberlabFetch<ExecutionDto[]>(target, "/api/cyberlab/executions").catch(() => []),
-        cyberlabFetch<EvidenceDto[]>(target, "/api/cyberlab/evidence").catch(() => []),
-        cyberlabFetch<FindingDto[]>(target, "/api/cyberlab/findings").catch(() => []),
-        cyberlabFetch<ProxyOverviewDto>(target, "/api/cyberlab/proxy").catch(() => null),
-        cyberlabFetch<PartnersOverviewDto>(target, "/api/cyberlab/partners").catch(() => null),
-        cyberlabFetch<ExternalToolsOverviewDto>(target, "/api/cyberlab/external/tools").catch(() => null),
-      ])
+      const [status, approvals, executions, evidence, findings, proxy, partners, external, projectsAndLabs] =
+        await Promise.all([
+          cyberlabFetch<WorkspaceStatusDto>(target, "/api/cyberlab/status").catch(() => null),
+          cyberlabFetch<ApprovalDto[]>(target, "/api/cyberlab/approvals").catch(() => []),
+          cyberlabFetch<ExecutionDto[]>(target, "/api/cyberlab/executions").catch(() => []),
+          cyberlabFetch<EvidenceDto[]>(target, "/api/cyberlab/evidence").catch(() => []),
+          cyberlabFetch<FindingDto[]>(target, "/api/cyberlab/findings").catch(() => []),
+          cyberlabFetch<ProxyOverviewDto>(target, "/api/cyberlab/proxy").catch(() => null),
+          cyberlabFetch<PartnersOverviewDto>(target, "/api/cyberlab/partners").catch(() => null),
+          cyberlabFetch<ExternalToolsOverviewDto>(target, "/api/cyberlab/external/tools").catch(() => null),
+          cyberlabFetch<ProjectsAndLabsOverviewDto>(target, "/api/cyberlab/projects").catch(() => null),
+        ])
       batch(() => {
         if (status) setBackend("status", reconcile(status))
         setBackend("approvals", reconcile(approvals))
@@ -571,6 +577,7 @@ function createWorkbenchService() {
         if (proxy) setBackend("proxy", reconcile(proxy))
         if (partners) setBackend("partners", reconcile(partners))
         if (external) setBackend("external", reconcile(external))
+        if (projectsAndLabs) setBackend("projectsAndLabs", reconcile(projectsAndLabs))
       })
     } finally {
       setBackend("loading", false)
@@ -1270,8 +1277,13 @@ function createWorkbenchService() {
     permissions: {
       readProjectState: boolean
       readEvidenceAndFiles: boolean
+      writeWorkspaceAndCode?: boolean
+      fullRuntimeAndCodeAccess?: boolean
+      manageProjectsAndScope?: boolean
+      accessTrainingLabs?: boolean
       createArtifactsAndFindings: boolean
       initiateActions:
+        | "full_autonomy"
         | "autonomous_in_scope"
         | "allow_readonly_and_low_propose_others"
         | "allow_readonly_propose_others"
@@ -1290,6 +1302,10 @@ function createWorkbenchService() {
       editInitiateActions: partner.permissions.initiateActions,
       editReadProjectState: partner.permissions.readProjectState,
       editReadEvidenceAndFiles: partner.permissions.readEvidenceAndFiles,
+      editWriteWorkspaceAndCode: partner.permissions.writeWorkspaceAndCode !== false,
+      editFullRuntimeAndCodeAccess: partner.permissions.fullRuntimeAndCodeAccess !== false,
+      editManageProjectsAndScope: partner.permissions.manageProjectsAndScope !== false,
+      editAccessTrainingLabs: partner.permissions.accessTrainingLabs !== false,
       editCreateArtifactsAndFindings: partner.permissions.createArtifactsAndFindings,
       editEnabled: partner.enabled,
       editSecretOverride: "",
@@ -1323,14 +1339,65 @@ function createWorkbenchService() {
           permissions: {
             readProjectState: d.editReadProjectState !== false,
             readEvidenceAndFiles: d.editReadEvidenceAndFiles !== false,
+            writeWorkspaceAndCode: d.editWriteWorkspaceAndCode !== false,
+            fullRuntimeAndCodeAccess: d.editFullRuntimeAndCodeAccess !== false,
+            manageProjectsAndScope: d.editManageProjectsAndScope !== false,
+            accessTrainingLabs: d.editAccessTrainingLabs !== false,
             createArtifactsAndFindings: d.editCreateArtifactsAndFindings !== false,
-            initiateActions: d.editInitiateActions ?? "autonomous_in_scope",
+            initiateActions: d.editInitiateActions ?? "full_autonomy",
           },
         }),
       })
       setBackend("partners", reconcile(res))
       updateDraft("cdi-hub", (prev) => ({ ...prev, editingPartnerId: "", editSecretOverride: "" }))
       setNotice(`Perfil individual do parceiro CDI "${d.editDisplayName || partnerId}" atualizado com sucesso!`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function controlTrainingLab(action: "start" | "reset" | "stop", labId: string): Promise<void> {
+    try {
+      const lab = await cyberlabFetch<TrainingLabDto>(serverTarget(), "/api/cyberlab/labs/control", {
+        method: "POST",
+        body: JSON.stringify({ action, labId, setActive: action === "start" }),
+      })
+      if (action === "start" && lab.workspaceRoot) {
+        setDirectoryOverride(lab.workspaceRoot)
+      }
+      await refreshBackend()
+      setNotice(
+        action === "start"
+          ? `Laboratório "${lab.title}" iniciado${lab.baseUrl ? ` em ${lab.baseUrl}` : ""} e definido como projeto ativo!`
+          : action === "reset"
+            ? `Ficheiros originais de "${lab.title}" restaurados!`
+            : `Servidor do laboratório "${lab.title}" encerrado.`,
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function manageCyberLabProject(
+    operation: "create" | "select",
+    params: { name?: string; projectId?: string; directory?: string },
+  ): Promise<void> {
+    try {
+      const res = await cyberlabFetch<ProjectsAndLabsOverviewDto>(serverTarget(), "/api/cyberlab/projects/manage", {
+        method: "POST",
+        body: JSON.stringify({ operation, ...params }),
+      })
+      setBackend("projectsAndLabs", reconcile(res))
+      const active = res.projects.find((p) => p.isActive)
+      if (active?.workspaceRoot) {
+        setDirectoryOverride(active.workspaceRoot)
+      }
+      await refreshBackend()
+      setNotice(
+        operation === "create"
+          ? `Projeto "${active?.name ?? params.name}" criado e registado no CyberLab OS & OpenCode!`
+          : `Projeto ativo alterado para "${active?.name ?? params.projectId}"!`,
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -1440,6 +1507,8 @@ function createWorkbenchService() {
     loadFourCdiPreset,
     openPartnerProfileEditor,
     savePartnerProfile,
+    controlTrainingLab,
+    manageCyberLabProject,
     manageCdiSecret,
     attachToComposer,
     setNotice,

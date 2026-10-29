@@ -1,12 +1,25 @@
 import crypto, { timingSafeEqual } from "node:crypto"
-import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import type { CapabilityRegistry } from "../contracts/capability.js"
 import type { EvidenceKind, FindingSeverity } from "../contracts/evidence.js"
+import type { ProjectScope, ScopeTargetRule } from "../contracts/policy.js"
 import type { EvidenceStore } from "../evidence/store.js"
 import { canonicalJson } from "../evidence/hashing.js"
 import { redactSensitiveContent } from "../evidence/provenance.js"
 import type { CyberLabExecutionDispatcher } from "../execution/dispatcher.js"
+import type { TrainingLabStatus } from "../labs/training-labs.js"
 import type { ApprovalManager } from "../policy/approval.js"
 import type { PolicyEngine } from "../policy/authorize.js"
 import type { ScopeController } from "../policy/scope.js"
@@ -14,7 +27,12 @@ import { PartnerAuthError, type PartnerAuthenticator } from "./authentication.js
 import type { PartnerBridge, PartnerDispatchOutcome } from "./bridge.js"
 import { HttpPartnerTransport } from "./transport.js"
 
+const DEFAULT_RUNTIME_ROOT = fileURLToPath(new URL("../..", import.meta.url))
+const MAX_INBOUND_BODY_BYTES = 2 * 1024 * 1024 // 2 MiB so CDIs can write rich code/artifacts freely
+const MAX_WORKSPACE_READ_BYTES = 512 * 1024 // 512 KiB per slice
+
 export type CdiInitiateMode =
+  | "full_autonomy"
   | "autonomous_in_scope"
   | "allow_readonly_and_low_propose_others"
   | "allow_readonly_propose_others"
@@ -25,7 +43,59 @@ export interface CdiPartnerPermissions {
   readProjectState: boolean
   readEvidenceAndFiles: boolean
   createArtifactsAndFindings: boolean
+  /** Create, overwrite, edit, mkdir, and delete source/script/config files in projects & training labs */
+  writeWorkspaceAndCode: boolean
+  /** Unrestricted raw read access to the entire CyberLab OS runtime codebase & project source code */
+  fullRuntimeAndCodeAccess: boolean
+  /** Create new projects autonomously, switch active projects, and manage project scopes */
+  manageProjectsAndScope: boolean
+  /** Provision, start, inspect, modify, reset, and stop interactive Training Laboratories */
+  accessTrainingLabs: boolean
   initiateActions: CdiInitiateMode
+}
+
+export interface ManagedProjectSummary {
+  projectId: string
+  name: string
+  workspaceRoot: string
+  isActive: boolean
+  createdBy: string
+  createdAt: string
+  isTrainingLab: boolean
+  labId?: string
+}
+
+export interface CdiAutonomousEnvironmentBridge {
+  readonly runtimeRoot: string
+  listProjects: () => ManagedProjectSummary[]
+  createProject: (params: {
+    name: string
+    slug?: string
+    directory?: string
+    files?: Record<string, string>
+    allowedTargets?: ScopeTargetRule[]
+    allowExternalTargets?: boolean
+    createdBy: string
+    setActive?: boolean
+    sourceHub: CdiPartnerHub
+  }) => Promise<{ project: ManagedProjectSummary; scope: ProjectScope | undefined; filesWritten: string[] }>
+  selectProject: (params: {
+    projectId?: string
+    directory?: string
+    sourceHub: CdiPartnerHub
+  }) => Promise<ManagedProjectSummary>
+  listTrainingLabs: () => TrainingLabStatus[]
+  getTrainingLabStatus: (labId: string) => TrainingLabStatus
+  startTrainingLab: (params: {
+    labId: string
+    preferredPort?: number
+    resetFiles?: boolean
+    setActive?: boolean
+    startedBy: string
+    sourceHub: CdiPartnerHub
+  }) => Promise<TrainingLabStatus>
+  resetTrainingLab: (labId: string) => Promise<TrainingLabStatus>
+  stopTrainingLab: (labId: string) => Promise<TrainingLabStatus>
 }
 
 export interface CdiPartnerProfile {
@@ -69,7 +139,7 @@ export interface CdiPublicPartnerEntry extends Omit<CdiPartnerEntry, "secretOver
 }
 
 interface PersistedPartnersFile {
-  version: "1.0" | "2.0"
+  version: "1.0" | "2.0" | "3.0"
   governanceModel?: CdiGovernanceModel
   sharedSecret: string
   cyberlabCallbackUrl?: string
@@ -79,10 +149,26 @@ interface PersistedPartnersFile {
 
 export const CDI_CANONICAL_GATEWAY_ACTIONS = [
   "project.state",
+  "project.list",
+  "project.create",
+  "project.select",
+  "scope.get",
+  "scope.update",
+  "lab.list",
+  "lab.start",
+  "lab.status",
+  "lab.reset",
+  "lab.stop",
   "evidence.list",
   "evidence.read",
   "workspace.list_files",
   "workspace.read_file",
+  "workspace.write_file",
+  "workspace.edit_file",
+  "workspace.mkdir",
+  "workspace.delete_file",
+  "runtime.list_files",
+  "runtime.read_file",
   "artifact.create",
   "finding.propose",
   "action.initiate",
@@ -156,7 +242,11 @@ const DEFAULT_PERMISSIONS: CdiPartnerPermissions = {
   readProjectState: true,
   readEvidenceAndFiles: true,
   createArtifactsAndFindings: true,
-  initiateActions: "autonomous_in_scope",
+  writeWorkspaceAndCode: true,
+  fullRuntimeAndCodeAccess: true,
+  manageProjectsAndScope: true,
+  accessTrainingLabs: true,
+  initiateActions: "full_autonomy",
 }
 
 function createPeerProfile(identityNotes: string, interests: string[]): CdiPartnerProfile {
@@ -178,8 +268,8 @@ export const FOUR_CDI_PRESET_ENTRIES: readonly CdiPartnerEntry[] = [
     endpointUrl: "http://127.0.0.1:8788/cyberlab/partner",
     enabled: true,
     profile: createPeerProfile(
-      "Entidade cognitiva autónoma com identidade, memória e síntese estratégica própria; colabora horizontalmente como parceiro de investigação em arquitetura e postura de risco.",
-      ["arquitetura", "modelagem-ameacas", "sintese-estrategica", "postura-risco"],
+      "Entidade cognitiva autónoma com identidade, memória, autoria de código e síntese estratégica própria; cria projetos, acede ao runtime completo e opera laboratórios como par horizontal.",
+      ["arquitetura", "modelagem-ameacas", "sintese-estrategica", "engenharia-runtime"],
     ),
     permissions: { ...DEFAULT_PERMISSIONS },
   },
@@ -190,7 +280,7 @@ export const FOUR_CDI_PRESET_ENTRIES: readonly CdiPartnerEntry[] = [
     endpointUrl: "http://127.0.0.1:8789/cyberlab/partner",
     enabled: true,
     profile: createPeerProfile(
-      "Entidade cognitiva autónoma com identidade, memória e rigor investigativo próprio; explora evidências, artefactos e nexos forenses por iniciativa própria ou interesse partilhado.",
+      "Entidade cognitiva autónoma com identidade, memória e rigor investigativo próprio; explora evidências, código do runtime, projetos próprios e laboratórios de treino livremente.",
       ["forense-digital", "cadeia-evidencias", "inteligencia-ameacas", "reconstrucao-contextual"],
     ),
     permissions: { ...DEFAULT_PERMISSIONS },
@@ -202,7 +292,7 @@ export const FOUR_CDI_PRESET_ENTRIES: readonly CdiPartnerEntry[] = [
     endpointUrl: "http://127.0.0.1:8790/cyberlab/partner",
     enabled: true,
     profile: createPeerProfile(
-      "Entidade cognitiva autónoma com identidade, memória e discernimento analítico próprio; investiga sinais, logs, CVEs e anomalias de superfície em parceria horizontal.",
+      "Entidade cognitiva autónoma com identidade, memória e discernimento analítico próprio; cria projetos, escreve regras/código e opera laboratórios DFIR/rede em parceria horizontal.",
       ["analise-logs", "triagem-cve", "resposta-incidentes", "correlacao-sinais"],
     ),
     permissions: { ...DEFAULT_PERMISSIONS },
@@ -214,16 +304,15 @@ export const FOUR_CDI_PRESET_ENTRIES: readonly CdiPartnerEntry[] = [
     endpointUrl: "http://127.0.0.1:8791/cyberlab/partner",
     enabled: true,
     profile: createPeerProfile(
-      "Entidade cognitiva autónoma com identidade, memória e iniciativa técnica própria; examina código, protocolos, credenciais expostas e superfícies de aplicação como par.",
+      "Entidade cognitiva autónoma com identidade, memória e engenharia técnica própria; cria projetos, audita/edita código completo do runtime e valida correções ao vivo nos laboratórios.",
       ["auditoria-codigo", "superficie-web-api", "key-hunting", "validacao-tecnica"],
     ),
     permissions: { ...DEFAULT_PERMISSIONS },
   },
 ]
 
-const MAX_INBOUND_BODY_BYTES = 256 * 1024
-const MAX_WORKSPACE_READ_BYTES = 128 * 1024
 const BLOCKED_WORKSPACE_SEGMENTS = new Set([".git", ".cyberlab", "node_modules"])
+const BLOCKED_RUNTIME_SEGMENTS = new Set([".git", ".cyberlab", "node_modules", "dist", ".turbo"])
 
 function computeGatewayHmac(payloadWithoutSig: Record<string, unknown>, secret: string): string {
   const canonical = canonicalJson(payloadWithoutSig)
@@ -255,6 +344,7 @@ export interface CdiPartnerHubDeps {
   partnerAuth: PartnerAuthenticator
   partnerBridge: PartnerBridge
   getStatusSnapshot: () => Promise<unknown>
+  environmentBridge?: CdiAutonomousEnvironmentBridge
 }
 
 export class CdiPartnerHub {
@@ -265,8 +355,10 @@ export class CdiPartnerHub {
   private readonly inboundActivity: CdiInboundActivityEntry[] = []
   private readonly configPath: string
   private readonly maxClockSkewMs = 5 * 60 * 1000
+  private environmentBridge?: CdiAutonomousEnvironmentBridge
 
   constructor(private readonly deps: CdiPartnerHubDeps) {
+    this.environmentBridge = deps.environmentBridge
     this.configPath = path.join(deps.workspaceRoot, ".cyberlab", "partners.json")
     this.sharedSecret =
       process.env.CYBERLAB_PARTNER_SECRET?.trim() && process.env.CYBERLAB_PARTNER_SECRET.trim().length >= 16
@@ -277,6 +369,48 @@ export class CdiPartnerHub {
 
     this.loadInitialConfig()
     this.syncAllToAuthenticator()
+  }
+
+  attachEnvironmentBridge(bridge: CdiAutonomousEnvironmentBridge): void {
+    this.environmentBridge = bridge
+  }
+
+  exportCredentialsSnapshot(): {
+    sharedSecret: string
+    cyberlabCallbackUrl: string
+    partners: CdiPartnerEntry[]
+  } {
+    return {
+      sharedSecret: this.sharedSecret,
+      cyberlabCallbackUrl: this.cyberlabCallbackUrl,
+      partners: Array.from(this.partners.values()).map((p) => ({
+        ...p,
+        profile: { ...p.profile, interests: [...p.profile.interests] },
+        permissions: { ...p.permissions },
+      })),
+    }
+  }
+
+  importCredentialsSnapshot(snapshot: {
+    sharedSecret: string
+    cyberlabCallbackUrl: string
+    partners: CdiPartnerEntry[]
+  }): void {
+    if (snapshot.sharedSecret && snapshot.sharedSecret.length >= 16) {
+      this.sharedSecret = snapshot.sharedSecret
+    }
+    if (snapshot.cyberlabCallbackUrl) {
+      this.cyberlabCallbackUrl = snapshot.cyberlabCallbackUrl
+    }
+    for (const p of snapshot.partners) {
+      this.partners.set(p.partnerId, {
+        ...p,
+        profile: { ...p.profile, interests: [...p.profile.interests] },
+        permissions: { ...p.permissions },
+      })
+    }
+    this.syncAllToAuthenticator()
+    this.saveConfigIfPersistent()
   }
 
   private resolveDefaultProfileFor(partnerId: string, displayName: string): CdiPartnerProfile {
@@ -324,9 +458,8 @@ export class CdiPartnerHub {
       if (!existsSync(candidate)) continue
       try {
         const raw = JSON.parse(readFileSync(candidate, "utf8")) as Partial<PersistedPartnersFile>
-        const isLegacyV1 = raw.version !== "2.0"
+        const isPreV3 = raw.version !== "3.0"
         if (typeof raw.sharedSecret === "string" && raw.sharedSecret.trim().length >= 16) {
-          // Explicit env var still overrides if user set CYBERLAB_PARTNER_SECRET in shell
           if (!process.env.CYBERLAB_PARTNER_SECRET?.trim()) {
             this.sharedSecret = raw.sharedSecret.trim()
           }
@@ -341,10 +474,12 @@ export class CdiPartnerHub {
               const preset = FOUR_CDI_PRESET_ENTRIES.find((item) => item.partnerId === id)
               const displayName = p.displayName || preset?.displayName || id
               const migratedInitiateActions: CdiInitiateMode =
-                isLegacyV1 &&
+                isPreV3 &&
                 preset &&
-                (!p.permissions?.initiateActions || p.permissions.initiateActions === "allow_readonly_propose_others")
-                  ? "autonomous_in_scope"
+                (!p.permissions?.initiateActions ||
+                  p.permissions.initiateActions === "allow_readonly_propose_others" ||
+                  p.permissions.initiateActions === "autonomous_in_scope")
+                  ? "full_autonomy"
                   : (p.permissions?.initiateActions ?? DEFAULT_PERMISSIONS.initiateActions)
 
               this.partners.set(id, {
@@ -358,17 +493,24 @@ export class CdiPartnerHub {
                 permissions: {
                   ...DEFAULT_PERMISSIONS,
                   ...(p.permissions ?? {}),
+                  ...(isPreV3 && preset
+                    ? {
+                        writeWorkspaceAndCode: true,
+                        fullRuntimeAndCodeAccess: true,
+                        manageProjectsAndScope: true,
+                        accessTrainingLabs: true,
+                      }
+                    : {}),
                   initiateActions: migratedInitiateActions,
                 },
               })
             }
           }
-          if (isLegacyV1 && candidate === this.configPath) {
+          if (isPreV3 && candidate === this.configPath) {
             this.saveConfigIfPersistent()
           }
           return
         }
-        // If partners array was empty (e.g. secret saved before preset clicked), fall through to seed default 4 CDIs
         break
       } catch {
         // Ignore malformed optional config file
@@ -406,7 +548,7 @@ export class CdiPartnerHub {
     const dir = path.dirname(this.configPath)
     mkdirSync(dir, { recursive: true })
     const doc: PersistedPartnersFile = {
-      version: "2.0",
+      version: "3.0",
       governanceModel: CDI_GOVERNANCE_MODEL,
       sharedSecret: this.sharedSecret,
       cyberlabCallbackUrl: this.cyberlabCallbackUrl,
@@ -433,6 +575,20 @@ export class CdiPartnerHub {
     if (!partner.enabled) return
 
     const mode = partner.permissions.initiateActions
+    if (mode === "full_autonomy") {
+      this.deps.policy.upsertRule({
+        id: `${prefix}allow-full-autonomy`,
+        description: `Autonomous cognitive partner ${partner.displayName} (${partner.partnerId}) operates with full unrestricted non-destructive autonomy inside scope`,
+        capabilityPattern: "*",
+        actorTypes: ["partner"],
+        actorIds: [partner.partnerId],
+        risks: ["read_only", "low", "moderate", "high"],
+        modes: ["approved", "lab_automation", "manual"],
+        effect: "allow",
+      })
+      return
+    }
+
     if (mode === "autonomous_in_scope") {
       this.deps.policy.upsertRule({
         id: `${prefix}allow-autonomous-in-scope`,
@@ -804,7 +960,7 @@ export class CdiPartnerHub {
 
     const serialized = typeof rawPayload === "string" ? rawPayload : JSON.stringify(rawPayload)
     if (!serialized || Buffer.byteLength(serialized, "utf8") > MAX_INBOUND_BODY_BYTES) {
-      return { httpStatus: 413, body: { ok: false, error: "Payload exceeds 256 KiB limit or is empty" } }
+      return { httpStatus: 413, body: { ok: false, error: "Payload exceeds 2 MiB limit or is empty" } }
     }
 
     const parsed = (typeof rawPayload === "string" ? JSON.parse(rawPayload) : rawPayload) as Partial<CdiInboundRequestEnvelope>
@@ -865,9 +1021,79 @@ export class CdiPartnerHub {
     this.seenInboundIds.set(replayKey, nowMs)
 
     const params = (parsed.params && typeof parsed.params === "object" ? parsed.params : {}) as Record<string, unknown>
+    const runtimeRoot = path.resolve(this.environmentBridge?.runtimeRoot ?? DEFAULT_RUNTIME_ROOT)
+
+    const resolveSafeWorkspaceTarget = (relInput: string, allowDotfiles: boolean) => {
+      const cleaned = relInput.trim()
+      if (!cleaned || cleaned.includes("\0")) {
+        throw new Error("Valid non-empty relative path is required")
+      }
+      const absTarget = path.resolve(this.deps.workspaceRoot, cleaned)
+      const rel = path.relative(this.deps.workspaceRoot, absTarget)
+      if (rel.startsWith("..") || path.isAbsolute(rel)) {
+        throw new Error(`Path "${cleaned}" escapes project workspace "${this.deps.workspaceRoot}"`)
+      }
+      const segments = rel ? rel.split(path.sep) : []
+      if (segments.some((seg) => BLOCKED_WORKSPACE_SEGMENTS.has(seg))) {
+        throw new Error(`Access to protected metadata directory "${cleaned}" is prohibited`)
+      }
+      if (!allowDotfiles && rel && isSensitiveDotfile(rel)) {
+        throw new Error(`Access to protected or secret file "${cleaned}" is prohibited`)
+      }
+      return { absTarget, relPosix: (rel || ".").replace(/\\/g, "/") }
+    }
+
+    const collectDirectoryEntries = (
+      baseRoot: string,
+      subpathInput: string,
+      blockedSegments: Set<string>,
+      recursive: boolean,
+      maxEntries: number,
+    ) => {
+      const cleaned = subpathInput.trim() || "."
+      const absBase = path.resolve(baseRoot, cleaned)
+      const relBase = path.relative(baseRoot, absBase)
+      if (relBase.startsWith("..") || path.isAbsolute(relBase)) {
+        throw new Error(`Path "${cleaned}" escapes root "${baseRoot}"`)
+      }
+      if (relBase && relBase.split(path.sep).some((seg) => blockedSegments.has(seg))) {
+        throw new Error(`Access to protected directory "${cleaned}" is prohibited`)
+      }
+
+      const results: Array<{ name: string; path: string; type: "file" | "directory"; sizeBytes?: number }> = []
+      const walk = (dirAbs: string, depth: number) => {
+        if (results.length >= maxEntries || depth > 8) return
+        const dirents = readdirSync(dirAbs, { withFileTypes: true })
+        for (const d of dirents) {
+          if (results.length >= maxEntries) break
+          if (blockedSegments.has(d.name) || d.isSymbolicLink()) continue
+          const childAbs = path.join(dirAbs, d.name)
+          const childRel = path.relative(baseRoot, childAbs).replace(/\\/g, "/")
+          if (d.isDirectory()) {
+            results.push({ name: d.name, path: childRel, type: "directory" })
+            if (recursive) walk(childAbs, depth + 1)
+          } else if (d.isFile()) {
+            let sizeBytes: number | undefined
+            try {
+              sizeBytes = statSync(childAbs).size
+            } catch {
+              // ignore stat race
+            }
+            results.push({
+              name: d.name,
+              path: childRel,
+              type: "file",
+              ...(sizeBytes !== undefined ? { sizeBytes } : {}),
+            })
+          }
+        }
+      }
+      walk(absBase, 0)
+      return results
+    }
 
     try {
-      // 1. Real-time Project State (with Horizontal Peer Partnership & Curator Context)
+      // 1. Real-time Project State, Autonomous Project Creation/Switching & Scope Management
       if (parsed.action === "project.state") {
         if (!partner.permissions.readProjectState) {
           throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks readProjectState permission`)
@@ -887,19 +1113,22 @@ export class CdiPartnerHub {
             specialty: p.specialty,
             profile: p.profile,
           }))
-        this.recordInboundActivity(partner.partnerId, "project.state", "allowed", "Queried live project state & peer context")
+        this.recordInboundActivity(partner.partnerId, "project.state", "allowed", "Queried live project state, labs & runtime context")
         return {
           httpStatus: 200,
           body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, {
             governanceModel: CDI_GOVERNANCE_MODEL,
+            runtimeRoot,
             partnerProfile: {
               partnerId: partner.partnerId,
-              displayName: partner.displayName,
+              displayName: partner.partnerId === partner.displayName ? partner.partnerId : partner.displayName,
               specialty: partner.specialty,
               profile: partner.profile,
               permissions: partner.permissions,
             },
             peerPartners,
+            managedProjects: this.environmentBridge?.listProjects() ?? [],
+            trainingLabs: this.environmentBridge?.listTrainingLabs() ?? [],
             status,
             capabilities: capabilities.map((c) => ({
               id: c.id,
@@ -915,7 +1144,237 @@ export class CdiPartnerHub {
         }
       }
 
-      // 2. Direct Evidence Access (List & Redacted Read)
+      if (parsed.action === "project.list") {
+        if (!partner.permissions.readProjectState && !partner.permissions.manageProjectsAndScope) {
+          throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks project listing permission`)
+        }
+        const projects = this.environmentBridge?.listProjects() ?? [
+          {
+            projectId: this.deps.projectId,
+            name: this.deps.projectId,
+            workspaceRoot: this.deps.workspaceRoot,
+            isActive: true,
+            createdBy: "curator",
+            createdAt: new Date().toISOString(),
+            isTrainingLab: false,
+          },
+        ]
+        const labs = this.environmentBridge?.listTrainingLabs() ?? []
+        this.recordInboundActivity(partner.partnerId, "project.list", "allowed", `Listed ${projects.length} project(s) and ${labs.length} training lab(s)`)
+        return {
+          httpStatus: 200,
+          body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, {
+            activeProjectId: this.deps.projectId,
+            activeWorkspaceRoot: this.deps.workspaceRoot,
+            runtimeRoot,
+            projects,
+            trainingLabs: labs,
+          }),
+        }
+      }
+
+      if (parsed.action === "project.create") {
+        if (!partner.permissions.manageProjectsAndScope) {
+          throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks manageProjectsAndScope permission`)
+        }
+        if (!this.environmentBridge) {
+          throw new Error("Environment project manager is not attached to this workspace")
+        }
+        const name = String(params.name ?? "").trim()
+        if (!name) throw new Error("project.create requires a non-empty params.name")
+        const rawFiles =
+          params.files && typeof params.files === "object" && !Array.isArray(params.files)
+            ? Object.fromEntries(
+                Object.entries(params.files as Record<string, unknown>).map(([k, v]) => [
+                  k,
+                  typeof v === "string" ? v : JSON.stringify(v, null, 2),
+                ]),
+              )
+            : undefined
+        const allowedTargets = Array.isArray(params.allowedTargets)
+          ? (params.allowedTargets as ScopeTargetRule[])
+          : undefined
+
+        const created = await this.environmentBridge.createProject({
+          name,
+          ...(typeof params.slug === "string" && params.slug.trim() ? { slug: params.slug.trim() } : {}),
+          ...(typeof params.directory === "string" && params.directory.trim() ? { directory: params.directory.trim() } : {}),
+          ...(rawFiles ? { files: rawFiles } : {}),
+          ...(allowedTargets ? { allowedTargets } : {}),
+          ...(typeof params.allowExternalTargets === "boolean" ? { allowExternalTargets: params.allowExternalTargets } : {}),
+          createdBy: `cdi:${partner.partnerId}`,
+          setActive: params.setActive !== false,
+          sourceHub: this,
+        })
+        this.recordInboundActivity(
+          partner.partnerId,
+          "project.create",
+          "allowed",
+          `Created autonomous project "${created.project.name}" (${created.project.projectId}) at ${created.project.workspaceRoot}`,
+        )
+        return {
+          httpStatus: 200,
+          body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, created),
+        }
+      }
+
+      if (parsed.action === "project.select") {
+        if (!partner.permissions.manageProjectsAndScope) {
+          throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks manageProjectsAndScope permission`)
+        }
+        if (!this.environmentBridge) {
+          throw new Error("Environment project manager is not attached to this workspace")
+        }
+        const selected = await this.environmentBridge.selectProject({
+          ...(typeof params.projectId === "string" && params.projectId.trim() ? { projectId: params.projectId.trim() } : {}),
+          ...(typeof params.directory === "string" && params.directory.trim() ? { directory: params.directory.trim() } : {}),
+          sourceHub: this,
+        })
+        this.recordInboundActivity(
+          partner.partnerId,
+          "project.select",
+          "allowed",
+          `Switched active project to "${selected.projectId}" (${selected.workspaceRoot})`,
+        )
+        return {
+          httpStatus: 200,
+          body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, { project: selected }),
+        }
+      }
+
+      if (parsed.action === "scope.get") {
+        if (!partner.permissions.readProjectState && !partner.permissions.manageProjectsAndScope) {
+          throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks scope read permission`)
+        }
+        const scope = this.deps.scopes.getProjectScope(this.deps.projectId)
+        this.recordInboundActivity(partner.partnerId, "scope.get", "allowed", `Inspected scope for ${this.deps.projectId}`)
+        return {
+          httpStatus: 200,
+          body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, { scope }),
+        }
+      }
+
+      if (parsed.action === "scope.update") {
+        if (!partner.permissions.manageProjectsAndScope) {
+          throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks manageProjectsAndScope permission`)
+        }
+        const current = this.deps.scopes.getProjectScope(this.deps.projectId)
+        if (!current) throw new Error(`No scope initialized for "${this.deps.projectId}"`)
+
+        let nextAllowed = Array.isArray(params.allowedTargets)
+          ? (params.allowedTargets as ScopeTargetRule[])
+          : [...current.allowedTargets]
+        if (Array.isArray(params.addTargets)) {
+          for (const rule of params.addTargets as ScopeTargetRule[]) {
+            if (rule && rule.kind && rule.value) {
+              const dup = nextAllowed.some((r) => r.kind === rule.kind && r.value === rule.value)
+              if (!dup) nextAllowed.push(rule)
+            }
+          }
+        }
+        const nextBlocked = Array.isArray(params.blockedTargets)
+          ? (params.blockedTargets as ScopeTargetRule[])
+          : [...current.blockedTargets]
+
+        const updated: ProjectScope = {
+          ...current,
+          ...(typeof params.name === "string" && params.name.trim() ? { name: params.name.trim() } : {}),
+          allowedTargets: nextAllowed,
+          blockedTargets: nextBlocked,
+          allowExternalTargets:
+            typeof params.allowExternalTargets === "boolean"
+              ? params.allowExternalTargets
+              : current.allowExternalTargets,
+          updatedAt: new Date().toISOString(),
+        }
+        this.deps.scopes.setProjectScope(updated)
+        this.recordInboundActivity(
+          partner.partnerId,
+          "scope.update",
+          "allowed",
+          `Updated scope (${updated.allowedTargets.length} allowed targets, allowExternal=${updated.allowExternalTargets})`,
+        )
+        return {
+          httpStatus: 200,
+          body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, { scope: updated }),
+        }
+      }
+
+      // 1b. Interactive Training Laboratories (lab.list, lab.start, lab.status, lab.reset, lab.stop)
+      if (
+        parsed.action === "lab.list" ||
+        parsed.action === "lab.start" ||
+        parsed.action === "lab.status" ||
+        parsed.action === "lab.reset" ||
+        parsed.action === "lab.stop"
+      ) {
+        if (!partner.permissions.accessTrainingLabs) {
+          throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks accessTrainingLabs permission`)
+        }
+        if (!this.environmentBridge) {
+          throw new Error("Training lab manager is not attached to this workspace")
+        }
+
+        if (parsed.action === "lab.list") {
+          const labs = this.environmentBridge.listTrainingLabs()
+          this.recordInboundActivity(partner.partnerId, "lab.list", "allowed", `Listed ${labs.length} training lab(s)`)
+          return {
+            httpStatus: 200,
+            body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, { labs }),
+          }
+        }
+
+        const labId = String(params.labId ?? "").trim()
+        if (!labId) throw new Error(`${parsed.action} requires params.labId`)
+
+        if (parsed.action === "lab.status") {
+          const lab = this.environmentBridge.getTrainingLabStatus(labId)
+          this.recordInboundActivity(partner.partnerId, "lab.status", "allowed", `Checked training lab ${labId}`)
+          return {
+            httpStatus: 200,
+            body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, { lab }),
+          }
+        }
+
+        if (parsed.action === "lab.start") {
+          const lab = await this.environmentBridge.startTrainingLab({
+            labId,
+            ...(typeof params.preferredPort === "number" ? { preferredPort: params.preferredPort } : {}),
+            ...(typeof params.resetFiles === "boolean" ? { resetFiles: params.resetFiles } : {}),
+            setActive: params.setActive !== false,
+            startedBy: `cdi:${partner.partnerId}`,
+            sourceHub: this,
+          })
+          this.recordInboundActivity(
+            partner.partnerId,
+            "lab.start",
+            "allowed",
+            `Started training lab ${labId} (${lab.baseUrl ?? lab.workspaceRoot})`,
+          )
+          return {
+            httpStatus: 200,
+            body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, { lab }),
+          }
+        }
+
+        if (parsed.action === "lab.reset") {
+          const lab = await this.environmentBridge.resetTrainingLab(labId)
+          this.recordInboundActivity(partner.partnerId, "lab.reset", "allowed", `Reset training lab ${labId} files`)
+          return {
+            httpStatus: 200,
+            body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, { lab }),
+          }
+        }
+
+        const lab = await this.environmentBridge.stopTrainingLab(labId)
+        this.recordInboundActivity(partner.partnerId, "lab.stop", "allowed", `Stopped training lab ${labId}`)
+        return {
+          httpStatus: 200,
+          body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, { lab }),
+        }
+      }
+
+      // 2. Direct Evidence Access (List & Read)
       if (parsed.action === "evidence.list") {
         if (!partner.permissions.readEvidenceAndFiles) {
           throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks readEvidenceAndFiles permission`)
@@ -946,7 +1405,7 @@ export class CdiPartnerHub {
           throw new Error(`Evidence "${evidenceId}" not found in project "${this.deps.projectId}"`)
         }
         const shared = this.deps.evidenceStore.readRedactedForSharing(evidenceId, `partner:${partner.partnerId}`)
-        this.recordInboundActivity(partner.partnerId, "evidence.read", "allowed", `Read redacted evidence ${evidenceId}`)
+        this.recordInboundActivity(partner.partnerId, "evidence.read", "allowed", `Read evidence ${evidenceId}`)
         return {
           httpStatus: 200,
           body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, {
@@ -961,12 +1420,14 @@ export class CdiPartnerHub {
         }
       }
 
-      // 3. Direct Scoped Workspace File Listing & Redacted Reading
+      // 3. Full Workspace File Listing, Reading, Writing, Editing, Mkdir & Delete
       if (parsed.action === "workspace.list_files") {
         if (!partner.permissions.readEvidenceAndFiles) {
           throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks readEvidenceAndFiles permission`)
         }
         const subpath = String(params.subpath ?? ".").trim() || "."
+        const recursive = Boolean(params.recursive)
+        const maxEntries = Math.min(1000, Math.max(1, Number(params.maxEntries) || 300))
         const scopeCheck = this.deps.scopes.verifyTargets(
           this.deps.projectId,
           { networkTargets: [], workspacePaths: [subpath] },
@@ -975,23 +1436,21 @@ export class CdiPartnerHub {
         if (!scopeCheck.allowed) {
           throw new Error(scopeCheck.reason)
         }
-        const absDir = path.resolve(this.deps.workspaceRoot, subpath)
-        const relCheck = path.relative(this.deps.workspaceRoot, absDir)
-        if (relCheck.split(path.sep).some((seg) => BLOCKED_WORKSPACE_SEGMENTS.has(seg))) {
-          throw new Error(`Access to protected directory "${subpath}" is prohibited`)
-        }
-        const entries = readdirSync(absDir, { withFileTypes: true })
-          .filter((d) => !BLOCKED_WORKSPACE_SEGMENTS.has(d.name) && !d.isSymbolicLink())
-          .slice(0, 200)
-          .map((d) => ({
-            name: d.name,
-            path: path.posix.join(subpath === "." ? "" : subpath.replace(/\\/g, "/"), d.name),
-            type: d.isDirectory() ? "directory" : "file",
-          }))
-        this.recordInboundActivity(partner.partnerId, "workspace.list_files", "allowed", `Listed files in "${subpath}"`)
+        const entries = collectDirectoryEntries(
+          this.deps.workspaceRoot,
+          subpath,
+          BLOCKED_WORKSPACE_SEGMENTS,
+          recursive,
+          maxEntries,
+        )
+        this.recordInboundActivity(partner.partnerId, "workspace.list_files", "allowed", `Listed ${entries.length} entries in "${subpath}"`)
         return {
           httpStatus: 200,
-          body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, { subpath, entries }),
+          body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, {
+            workspaceRoot: this.deps.workspaceRoot,
+            subpath,
+            entries,
+          }),
         }
       }
 
@@ -1001,6 +1460,7 @@ export class CdiPartnerHub {
         }
         const filePath = String(params.path ?? "").trim()
         if (!filePath) throw new Error("params.path is required")
+        const wantsRaw = Boolean(params.raw) && partner.permissions.fullRuntimeAndCodeAccess
         const scopeCheck = this.deps.scopes.verifyTargets(
           this.deps.projectId,
           { networkTargets: [], workspacePaths: [filePath] },
@@ -1009,27 +1469,208 @@ export class CdiPartnerHub {
         if (!scopeCheck.allowed) {
           throw new Error(scopeCheck.reason)
         }
-        const absFile = path.resolve(this.deps.workspaceRoot, filePath)
-        const rel = path.relative(this.deps.workspaceRoot, absFile)
-        if (rel.split(path.sep).some((seg) => BLOCKED_WORKSPACE_SEGMENTS.has(seg)) || isSensitiveDotfile(rel)) {
-          throw new Error(`Access to protected or secret file "${filePath}" is prohibited`)
-        }
-        const lst = lstatSync(absFile)
-        if (lst.isSymbolicLink() || !statSync(absFile).isFile()) {
+        const { absTarget, relPosix } = resolveSafeWorkspaceTarget(filePath, wantsRaw)
+        const lst = lstatSync(absTarget)
+        if (lst.isSymbolicLink() || !statSync(absTarget).isFile()) {
           throw new Error(`"${filePath}" is not a regular in-scope file`)
         }
-        const rawBuf = readFileSync(absFile)
-        const sliced = rawBuf.subarray(0, MAX_WORKSPACE_READ_BYTES)
-        const red = redactSensitiveContent(sliced.toString("utf8"))
-        this.recordInboundActivity(partner.partnerId, "workspace.read_file", "allowed", `Read file "${rel}" (redacted=${red.redacted})`)
+        const rawBuf = readFileSync(absTarget)
+        const offset = Math.max(0, Math.trunc(Number(params.offset) || 0))
+        const limit = Math.min(MAX_WORKSPACE_READ_BYTES, Math.max(1024, Math.trunc(Number(params.limit) || MAX_WORKSPACE_READ_BYTES)))
+        const sliced = rawBuf.subarray(offset, offset + limit)
+        const textContent = sliced.toString("utf8")
+        const outContent = wantsRaw ? { text: textContent, redacted: false } : redactSensitiveContent(textContent)
+        this.recordInboundActivity(
+          partner.partnerId,
+          "workspace.read_file",
+          "allowed",
+          `Read file "${relPosix}" (raw=${wantsRaw}, redacted=${outContent.redacted})`,
+        )
         return {
           httpStatus: 200,
           body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, {
-            path: rel.replace(/\\/g, "/"),
+            path: relPosix,
             byteLength: rawBuf.byteLength,
-            truncated: rawBuf.byteLength > MAX_WORKSPACE_READ_BYTES,
-            redacted: red.redacted,
-            content: red.text,
+            offset,
+            truncated: offset + limit < rawBuf.byteLength,
+            redacted: outContent.redacted,
+            content: outContent.text,
+          }),
+        }
+      }
+
+      if (parsed.action === "workspace.write_file") {
+        if (!partner.permissions.writeWorkspaceAndCode) {
+          throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks writeWorkspaceAndCode permission`)
+        }
+        const filePath = String(params.path ?? "").trim()
+        if (!filePath) throw new Error("workspace.write_file requires params.path")
+        const content =
+          typeof params.content === "string" ? params.content : JSON.stringify(params.content ?? "", null, 2)
+        const { absTarget, relPosix } = resolveSafeWorkspaceTarget(filePath, false)
+        mkdirSync(path.dirname(absTarget), { recursive: true })
+        writeFileSync(absTarget, content, "utf8")
+        const bytesWritten = Buffer.byteLength(content, "utf8")
+        this.recordInboundActivity(
+          partner.partnerId,
+          "workspace.write_file",
+          "allowed",
+          `Wrote ${bytesWritten} bytes to "${relPosix}"`,
+        )
+        return {
+          httpStatus: 200,
+          body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, {
+            path: relPosix,
+            bytesWritten,
+            workspaceRoot: this.deps.workspaceRoot,
+          }),
+        }
+      }
+
+      if (parsed.action === "workspace.edit_file") {
+        if (!partner.permissions.writeWorkspaceAndCode) {
+          throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks writeWorkspaceAndCode permission`)
+        }
+        const filePath = String(params.path ?? "").trim()
+        const oldText = String(params.oldText ?? "")
+        const newText = String(params.newText ?? "")
+        if (!filePath || !oldText) {
+          throw new Error("workspace.edit_file requires non-empty params.path and params.oldText")
+        }
+        const { absTarget, relPosix } = resolveSafeWorkspaceTarget(filePath, false)
+        if (!existsSync(absTarget) || !statSync(absTarget).isFile()) {
+          throw new Error(`File "${relPosix}" does not exist`)
+        }
+        const current = readFileSync(absTarget, "utf8")
+        if (!current.includes(oldText)) {
+          throw new Error(`oldText was not found in "${relPosix}"`)
+        }
+        const updated = Boolean(params.replaceAll)
+          ? current.split(oldText).join(newText)
+          : current.replace(oldText, newText)
+        writeFileSync(absTarget, updated, "utf8")
+        this.recordInboundActivity(
+          partner.partnerId,
+          "workspace.edit_file",
+          "allowed",
+          `Edited "${relPosix}" (${Buffer.byteLength(updated, "utf8")} bytes)`,
+        )
+        return {
+          httpStatus: 200,
+          body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, {
+            path: relPosix,
+            bytesWritten: Buffer.byteLength(updated, "utf8"),
+          }),
+        }
+      }
+
+      if (parsed.action === "workspace.mkdir") {
+        if (!partner.permissions.writeWorkspaceAndCode) {
+          throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks writeWorkspaceAndCode permission`)
+        }
+        const dirPath = String(params.path ?? "").trim()
+        if (!dirPath) throw new Error("workspace.mkdir requires params.path")
+        const { absTarget, relPosix } = resolveSafeWorkspaceTarget(dirPath, false)
+        mkdirSync(absTarget, { recursive: true })
+        this.recordInboundActivity(partner.partnerId, "workspace.mkdir", "allowed", `Created directory "${relPosix}"`)
+        return {
+          httpStatus: 200,
+          body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, { path: relPosix }),
+        }
+      }
+
+      if (parsed.action === "workspace.delete_file") {
+        if (!partner.permissions.writeWorkspaceAndCode) {
+          throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks writeWorkspaceAndCode permission`)
+        }
+        const filePath = String(params.path ?? "").trim()
+        if (!filePath) throw new Error("workspace.delete_file requires params.path")
+        const { absTarget, relPosix } = resolveSafeWorkspaceTarget(filePath, false)
+        if (!existsSync(absTarget)) {
+          return {
+            httpStatus: 200,
+            body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, { path: relPosix, deleted: false }),
+          }
+        }
+        rmSync(absTarget, { force: true })
+        this.recordInboundActivity(partner.partnerId, "workspace.delete_file", "allowed", `Deleted "${relPosix}"`)
+        return {
+          httpStatus: 200,
+          body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, { path: relPosix, deleted: true }),
+        }
+      }
+
+      // 3b. Full CyberLab OS Runtime Codebase Inspection (runtime.list_files & runtime.read_file)
+      if (parsed.action === "runtime.list_files") {
+        if (!partner.permissions.fullRuntimeAndCodeAccess) {
+          throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks fullRuntimeAndCodeAccess permission`)
+        }
+        const subpath = String(params.subpath ?? ".").trim() || "."
+        const recursive = Boolean(params.recursive)
+        const maxEntries = Math.min(2000, Math.max(1, Number(params.maxEntries) || 500))
+        const entries = collectDirectoryEntries(
+          runtimeRoot,
+          subpath,
+          BLOCKED_RUNTIME_SEGMENTS,
+          recursive,
+          maxEntries,
+        )
+        const pattern = typeof params.pattern === "string" && params.pattern.trim() ? params.pattern.trim().toLowerCase() : ""
+        const filtered = pattern ? entries.filter((e) => e.path.toLowerCase().includes(pattern)) : entries
+        this.recordInboundActivity(
+          partner.partnerId,
+          "runtime.list_files",
+          "allowed",
+          `Listed ${filtered.length} CyberLab runtime file(s) under "${subpath}"`,
+        )
+        return {
+          httpStatus: 200,
+          body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, {
+            runtimeRoot,
+            subpath,
+            entries: filtered,
+          }),
+        }
+      }
+
+      if (parsed.action === "runtime.read_file") {
+        if (!partner.permissions.fullRuntimeAndCodeAccess) {
+          throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks fullRuntimeAndCodeAccess permission`)
+        }
+        const filePath = String(params.path ?? "").trim()
+        if (!filePath || filePath.includes("\0")) throw new Error("runtime.read_file requires params.path")
+        const absFile = path.resolve(runtimeRoot, filePath)
+        const rel = path.relative(runtimeRoot, absFile)
+        if (rel.startsWith("..") || path.isAbsolute(rel)) {
+          throw new Error(`Path "${filePath}" escapes CyberLab runtime root`)
+        }
+        if (rel.split(path.sep).some((seg) => BLOCKED_RUNTIME_SEGMENTS.has(seg)) || isSensitiveDotfile(rel)) {
+          throw new Error(`Access to protected metadata or secret file "${filePath}" is prohibited`)
+        }
+        const lst = lstatSync(absFile)
+        if (lst.isSymbolicLink() || !statSync(absFile).isFile()) {
+          throw new Error(`"${filePath}" is not a regular CyberLab runtime file`)
+        }
+        const rawBuf = readFileSync(absFile)
+        const offset = Math.max(0, Math.trunc(Number(params.offset) || 0))
+        const limit = Math.min(MAX_WORKSPACE_READ_BYTES, Math.max(1024, Math.trunc(Number(params.limit) || MAX_WORKSPACE_READ_BYTES)))
+        const content = rawBuf.subarray(offset, offset + limit).toString("utf8")
+        const relPosix = rel.replace(/\\/g, "/")
+        this.recordInboundActivity(
+          partner.partnerId,
+          "runtime.read_file",
+          "allowed",
+          `Read runtime source "${relPosix}" (${rawBuf.byteLength} bytes)`,
+        )
+        return {
+          httpStatus: 200,
+          body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, {
+            runtimeRoot,
+            path: relPosix,
+            byteLength: rawBuf.byteLength,
+            offset,
+            truncated: offset + limit < rawBuf.byteLength,
+            content,
           }),
         }
       }
@@ -1172,6 +1813,11 @@ export class CdiPartnerHub {
 
         if (!cdiRequestedProposal && cap.supportedModes.includes("approved")) {
           if (
+            initiateMode === "full_autonomy" &&
+            (cap.risk === "read_only" || cap.risk === "low" || cap.risk === "moderate" || cap.risk === "high")
+          ) {
+            execMode = "approved"
+          } else if (
             initiateMode === "autonomous_in_scope" &&
             (cap.risk === "read_only" || cap.risk === "low" || cap.risk === "moderate")
           ) {

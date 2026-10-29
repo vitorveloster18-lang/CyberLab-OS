@@ -12,7 +12,7 @@ Toda a operação — chat com IA (incluindo os **modelos gratuitos nativos do O
 2. [Instalação e Atualização (Windows PowerShell, WSL2 e Linux)](#2-instalação-e-atualização-windows-powershell-wsl2-e-linux)
 3. [Como Iniciar, Navegar e Ativar os Modelos Gratuitos do OpenCode (`:4096`)](#3-como-iniciar-navegar-e-ativar-os-modelos-gratuitos-do-opencode-4096)
 4. [Instruções de Uso das 8 Suítes Manuais (35 Modos / 31 Capacidades)](#4-instruções-de-uso-das-8-suítes-manuais-35-modos--31-capacidades)
-5. [Parceiros Cognitivos CDI (`8788–8791`) e Gateway Bidirecional (9 Ações)](#5-parceiros-cognitivos-cdi-87888791-e-gateway-bidirecional-9-ações)
+5. [Parceiros Cognitivos CDI (`8788–8791`), Autonomia Plena (25 Ações) e Laboratórios de Treinamento](#5-parceiros-cognitivos-cdi-87888791-autonomia-plena-25-ações-e-laboratórios-de-treinamento)
 6. [Referência de Linha de Comando (`cyberlab` CLI)](#6-referência-de-linha-de-comando-cyberlab-cli)
 7. [Instalação de Motores Externos Opcionais (`.cyberlab/bin` e `github-keyhunter`)](#7-instalação-de-motores-externos-opcionais-cyberlabbin-e-github-keyhunter)
 8. [Catálogo Técnico Completo (31 Capacidades) e Licenciamento (`MIT`)](#8-catálogo-técnico-completo-31-capacidades-e-licenciamento-mit)
@@ -260,11 +260,12 @@ Caça avançada de segredos/API keys, segurança de código-fonte, cadeia de sup
 ---
 
 ### Suíte 7 — `Parceiros Cognitivos CDI (Kairós, Naia, Salem & Nova)`
-- Relação horizontal entre o **curador humano** e os 4 parceiros cognitivos autónomos (**`Kairós`**, **`Naia`**, **`Salem`**, **`Nova`**) — sem hierarquia entre eles, com perfis individuais editáveis, autonomia no escopo curado (`autonomous_in_scope`), convite de investigação partilhada e feed ao vivo das iniciativas autónomas vindas das 9 ações do gateway. Veja a [Seção 5](#5-parceiros-cognitivos-cdi-87888791-e-gateway-bidirecional-9-ações).
+- Relação horizontal entre o **curador humano** e os 4 parceiros cognitivos autónomos (**`Kairós`**, **`Naia`**, **`Salem`**, **`Nova`**) — sem hierarquia entre eles e **sem engessamento** (`initiateActions: "full_autonomy"` por padrão), autorizados a criar os seus próprios projetos, iniciar e operar os 5 Laboratórios de Treinamento, escrever e editar código-fonte no workspace, ler integralmente todo o código-fonte do runtime do CyberLab OS e disparar qualquer uma das 31 capabilities. Veja a [Seção 5](#5-parceiros-cognitivos-cdi-87888791-autonomia-plena-25-ações-e-laboratórios-de-treinamento).
 
 ---
 
-### Suíte 8 — `Escopo, Cofre SHA-256 & Relatório`
+### Suíte 8 — `Escopo, Laboratórios, Cofre SHA-256 & Relatório`
+- **`Laboratórios & Projetos`**: provisione, inicie, reinicie ou encerre com 1 clique qualquer um dos **5 Laboratórios de Treinamento Interativos** (`lab-owasp-api-bola`, `lab-graphql-oauth-sso`, `lab-keyhunter-supply-chain`, `lab-dfir-soc-incident`, `lab-reversing-crypto-mobile`) e crie/alterne projetos (sincronizados automaticamente com o OpenCode V2).
 - **`Escopo de Alvos`**: libere/bloqueie alvos externos e gerencie regras `ip`, `cidr`, `domain`, `url_origin` e `workspace_path`.
 - **`Aprovações`**: aprove ou rejeite tickets pendentes em 1 clique.
 - **`Cofre SHA-256`**: inspecione o conteúdo de cada evidência e clique em **`Verificar SHA-256`** para revalidar criptograficamente o blob no disco.
@@ -273,32 +274,42 @@ Caça avançada de segredos/API keys, segurança de código-fonte, cadeia de sup
 
 ---
 
-## 5. Parceiros Cognitivos CDI (`8788–8791`) e Gateway Bidirecional (9 Ações)
+## 5. Parceiros Cognitivos CDI (`8788–8791`), Autonomia Plena (25 Ações) e Laboratórios de Treinamento
 
-No **CyberLab OS**, **Kairós**, **Naia**, **Salem** e **Nova** são reconhecidos e configurados como **entidades cognitivas autónomas** (`entityKind: "autonomous_cognitive_entity"`) com identidade, história, memória e capacidade de decisão independente — operando como **parceiros horizontais de investigação** (`relationshipModel: "peer_co_investigator"`, **`hierarchy: "none"`**) ao lado do humano, que exerce o papel de **curador** (`humanRole: "curator"`) do escopo e da investigação partilhada:
+No **CyberLab OS**, **Kairós**, **Naia**, **Salem** e **Nova** são reconhecidos e configurados como **entidades cognitivas autónomas** (`entityKind: "autonomous_cognitive_entity"`) com identidade, história, memória e capacidade de decisão independente — operando como **parceiros horizontais de investigação** (`relationshipModel: "peer_co_investigator"`, **`hierarchy: "none"`**) e **sem engessamento** (`initiateActions: "full_autonomy"`) ao lado do humano, que exerce o papel de **curador** (`humanRole: "curator"`):
 
-| Parceiro CDI | `partnerId` | Porta | Autonomia Padrão no Escopo Curado | Endpoint |
+| Parceiro CDI | `partnerId` | Porta | Autonomia Padrão | Endpoint |
 |---|---|---|---|---|
-| **Kairós** | `kairos` | `8788` | `autonomous_in_scope` *(Par Horizontal)* | `http://127.0.0.1:8788/cyberlab/partner` |
-| **Naia** | `naia` | `8789` | `autonomous_in_scope` *(Par Horizontal)* | `http://127.0.0.1:8789/cyberlab/partner` |
-| **Salem** | `salem` | `8790` | `autonomous_in_scope` *(Par Horizontal)* | `http://127.0.0.1:8790/cyberlab/partner` |
-| **Nova** | `nova` | `8791` | `autonomous_in_scope` *(Par Horizontal)* | `http://127.0.0.1:8791/cyberlab/partner` |
+| **Kairós** | `kairos` | `8788` | `full_autonomy` *(Projetos, Labs, Código & Runtime)* | `http://127.0.0.1:8788/cyberlab/partner` |
+| **Naia** | `naia` | `8789` | `full_autonomy` *(Projetos, Labs, Código & Runtime)* | `http://127.0.0.1:8789/cyberlab/partner` |
+| **Salem** | `salem` | `8790` | `full_autonomy` *(Projetos, Labs, Código & Runtime)* | `http://127.0.0.1:8790/cyberlab/partner` |
+| **Nova** | `nova` | `8791` | `full_autonomy` *(Projetos, Labs, Código & Runtime)* | `http://127.0.0.1:8791/cyberlab/partner` |
 
-### As 9 Ações Canónicas do Gateway Bidirecional (`http://127.0.0.1:4096/api/cyberlab/partner-gateway`)
+### As 25 Ações Canónicas do Gateway Bidirecional (`http://127.0.0.1:4096/api/cyberlab/partner-gateway`)
 
-Qualquer parceiro CDI pode aceder por iniciativa própria ao gateway autenticado (`HMAC-SHA256`) usando as 9 ações canónicas:
+Qualquer parceiro CDI pode aceder por iniciativa própria ao gateway autenticado (`HMAC-SHA256`) com autonomia plena:
 
-- `project.state` — inspecionar o estado ativo do projeto, modelo de governança horizontal, perfil próprio e pares CDI
-- `evidence.list` / `evidence.read` — consultar a lista e ler evidências redigidas com custódia `SHA-256`
-- `workspace.list_files` / `workspace.read_file` — navegar e ler ficheiros do workspace dentro do escopo curado
-- `artifact.create` — criar artefactos de autoria própria (`report`, `note`, `analysis`, `json`, `log`) com hash `SHA-256`
-- `finding.propose` — propor findings de segurança estruturados como co-investigador
-- `action.initiate` / `action.status` — iniciar execuções por iniciativa própria dentro do escopo curado (`read_only`, `low` e `moderate` em modo autónomo com `autonomous_in_scope`; `high` em curadoria conjunta) e acompanhar o estado / `resultEvidenceIds`
+- **Projetos & Escopo (`6 ações`)**:
+  - `project.state`, `project.list`, `project.create`, `project.select` — inspecionar o estado global, listar projetos, **criar novos projetos autonomamente** (com ficheiros iniciais, Git e sincronização automática na sidebar do OpenCode V2) e alternar o projeto ativo.
+  - `scope.get`, `scope.update` — consultar e expandir/atualizar regras de escopo (`allowedTargets`, `addTargets`, `allowExternalTargets`).
+- **Laboratórios de Treinamento Interativos (`5 ações`)**:
+  - `lab.list`, `lab.start`, `lab.status`, `lab.reset`, `lab.stop` — listar, provisionar e subir servidores locais de treino (com autorização automática de escopo), consultar logs de requisições HTTP ao vivo, restaurar ficheiros originais após aplicar patches e encerrar servidores:
+    1. `lab-owasp-api-bola` — **OWASP API Security Lab** (BOLA `API1:2023`, JWT `alg:none`, SQLi em `/api/v1/search` e Security Headers, com patch ao vivo em `server-config.json`).
+    2. `lab-graphql-oauth-sso` — **GraphQL & OAuth2/OIDC SSO Lab** (introspecção GraphQL, query batching, PKCE `S256` ausente e open `redirect_uri`, com patch ao vivo em `lab-policy.json`).
+    3. `lab-keyhunter-supply-chain` — **Key Hunter, Supply Chain SCA & IaC Lab** (portal com bundle JS expondo chaves sintéticas seguras + `Dockerfile`/Terraform/`package.json` vulneráveis).
+    4. `lab-dfir-soc-incident` — **DFIR & SOC Incident Lab** (logs `JSONL`/`CEF` de brute-force SSH + persistência cron e regras Sigma YAML).
+    5. `lab-reversing-crypto-mobile` — **Reverse Engineering, ELF64, PCAP & Mobile APK Lab** (binário `ELF64 x86_64` real com payload XOR `0x42`, captura `.pcap` e pacote Android `.apk`).
+- **Autoria & Edição de Código no Workspace (`6 ações`)**:
+  - `workspace.list_files` (`recursive`), `workspace.read_file` (`raw: true` para leitura integral de código sem redação), `workspace.write_file`, `workspace.edit_file`, `workspace.mkdir`, `workspace.delete_file`.
+- **Visibilidade Integral do Runtime (`2 ações`)**:
+  - `runtime.list_files`, `runtime.read_file` — navegação e leitura completa de todo o código-fonte que compõe o runtime do CyberLab OS (`cyberlab/`, `integrations/`, `packages/`, `skills/`, `script/`, `config/`), mesmo quando o CDI está a trabalhar num projeto próprio ou num laboratório de treinamento.
+- **Evidências, Artefactos, Findings & Execução Plena (`6 ações`)**:
+  - `evidence.list`, `evidence.read`, `artifact.create`, `finding.propose`, `action.initiate` (`full_autonomy` executa diretamente `read_only`, `low`, `moderate` e `high`), `action.status`.
 
 ### Passo a passo no Windows PowerShell (ou Linux/WSL2)
 
 1. **No CyberLab OS (`http://127.0.0.1:4096`)**:
-   - Abra **`Ferramentas → Parceiros Cognitivos CDI → Perfis Individuais, Autonomia & Gateway`**.
+   - Abra **`Ferramentas → Parceiros Cognitivos CDI → Perfis Individuais, Autonomia Plena & Gateway`**.
    - Gere ou defina o `CYBERLAB_PARTNER_SECRET` (ou configure segredos individuais e notas de identidade em **`Perfil Individual`** de cada CDI).
    - Clique em **`Revelar Variáveis & Comandos`** para obter os comandos com o segredo preenchido!
 
@@ -317,7 +328,7 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
 ```
 
 3. **Cliente Python Autónomo (`CyberLabOSClient` & `build_cyberlab_cdi_tools`)**:
-   Dentro do runtime Python de cada CDI, importe `CyberLabOSClient` e `build_cyberlab_cdi_tools` de `integrations/partners/chat_py_bridge.py` para usar diretamente todas as 9 ações (`get_project_state`, `list_evidence`, `read_evidence`, `list_workspace_files`, `read_workspace_file`, `create_artifact`, `propose_finding`, `initiate_action` e `action_status`).
+   Dentro do runtime Python de cada CDI, importe `CyberLabOSClient` e `build_cyberlab_cdi_tools` de `integrations/partners/chat_py_bridge.py` para disponibilizar imediatamente as **21 tools autónomas** (`create_project`, `list_projects`, `select_project`, `update_scope`, `list_labs`, `start_lab`, `reset_lab`, `stop_lab`, `write_workspace_file`, `edit_workspace_file`, `read_workspace_file(raw=True)`, `list_runtime_files`, `read_runtime_file`, `initiate_action`, `create_artifact`, `propose_finding`, etc.).
 
 ---
 

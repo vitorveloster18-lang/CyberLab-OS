@@ -476,6 +476,66 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
       error: [InvalidRequestError],
     }),
   )
+  .add(
+    HttpApiEndpoint.get("cyberlab.labs.list", "/api/cyberlab/labs", {
+      query: LocationQuery,
+      success: Location.response(Schema.Array(CyberLab.TrainingLabInfo)),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.labs.list",
+          summary: "List interactive CyberLab OS Training Laboratories and their live status",
+          description: "Returns all built-in training laboratories, ports, URLs, and remediation challenges.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.labs.control", "/api/cyberlab/labs/control", {
+      query: LocationQuery,
+      payload: CyberLab.TrainingLabControlInput,
+      success: Location.response(CyberLab.TrainingLabInfo),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.labs.control",
+          summary: "Start, reset, or stop an interactive Training Laboratory",
+          description: "Provisions workspace fixtures, launches the loopback server, and syncs project scope.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("cyberlab.projects.list", "/api/cyberlab/projects", {
+      query: LocationQuery,
+      success: Location.response(CyberLab.ProjectsAndLabsOverview),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.projects.list",
+          summary: "List managed CyberLab OS projects, runtimeRoot, and training laboratories",
+          description: "Includes projects created by curator or autonomous CDIs plus active training labs.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.projects.manage", "/api/cyberlab/projects/manage", {
+      query: LocationQuery,
+      payload: CyberLab.ProjectManageInput,
+      success: Location.response(CyberLab.ProjectsAndLabsOverview),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.projects.manage",
+          summary: "Create or select a CyberLab OS project and register it in OpenCode V2",
+          description: "Creates or switches active projects and syncs with OpenCode Project.Service.",
+        }),
+      ),
+  )
   .annotateMerge(
     OpenApi.annotations({
       title: "cyberlab",

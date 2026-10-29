@@ -304,6 +304,7 @@ export namespace CyberLab {
   })
 
   export const CdiInitiateModeSchema = Schema.Literals([
+    "full_autonomy",
     "autonomous_in_scope",
     "allow_readonly_and_low_propose_others",
     "allow_readonly_propose_others",
@@ -314,8 +315,23 @@ export namespace CyberLab {
   export const CdiPermissionsInfo = Schema.Struct({
     readProjectState: Schema.Boolean,
     readEvidenceAndFiles: Schema.Boolean,
+    writeWorkspaceAndCode: Schema.Boolean,
+    fullRuntimeAndCodeAccess: Schema.Boolean,
+    manageProjectsAndScope: Schema.Boolean,
+    accessTrainingLabs: Schema.Boolean,
     createArtifactsAndFindings: Schema.Boolean,
     initiateActions: CdiInitiateModeSchema,
+  })
+
+  export const CdiPermissionsInput = Schema.Struct({
+    readProjectState: optional(Schema.Boolean),
+    readEvidenceAndFiles: optional(Schema.Boolean),
+    writeWorkspaceAndCode: optional(Schema.Boolean),
+    fullRuntimeAndCodeAccess: optional(Schema.Boolean),
+    manageProjectsAndScope: optional(Schema.Boolean),
+    accessTrainingLabs: optional(Schema.Boolean),
+    createArtifactsAndFindings: optional(Schema.Boolean),
+    initiateActions: optional(CdiInitiateModeSchema),
   })
 
   export const CdiPartnerProfileInfo = Schema.Struct({
@@ -381,7 +397,81 @@ export namespace CyberLab {
     secretOverride: optional(Schema.String),
     baseHost: optional(Schema.String),
     profile: optional(CdiPartnerProfileInput),
-    permissions: optional(CdiPermissionsInfo),
+    permissions: optional(CdiPermissionsInput),
+  })
+
+  export const TrainingLabChallengeInfo = Schema.Struct({
+    id: Schema.String,
+    title: Schema.String,
+    objective: Schema.String,
+    recommendedCapabilities: Schema.Array(Schema.String),
+    remediationFile: optional(Schema.String),
+  })
+
+  export const TrainingLabRequestLogInfo = Schema.Struct({
+    timestamp: Schema.String,
+    method: Schema.String,
+    url: Schema.String,
+    statusCode: Schema.Number,
+  })
+
+  export const TrainingLabInfo = Schema.Struct({
+    labId: Schema.String,
+    title: Schema.String,
+    category: Schema.Literals([
+      "web_api_security",
+      "graphql_oauth",
+      "secrets_supply_chain_iac",
+      "dfir_soc_sigma",
+      "reversing_crypto_mobile",
+    ]),
+    difficulty: Schema.Literals(["beginner", "intermediate", "advanced"]),
+    hasLiveServer: Schema.Boolean,
+    provisioned: Schema.Boolean,
+    running: Schema.Boolean,
+    projectId: Schema.String,
+    workspaceRoot: Schema.String,
+    baseUrl: optional(Schema.String),
+    port: optional(Schema.Number),
+    startedAt: optional(Schema.String),
+    requestCount: Schema.Number,
+    recentRequests: Schema.Array(TrainingLabRequestLogInfo),
+    summary: Schema.String,
+    challenges: Schema.Array(TrainingLabChallengeInfo),
+  })
+
+  export const TrainingLabControlInput = Schema.Struct({
+    action: Schema.Literals(["start", "reset", "stop"]),
+    labId: Schema.String,
+    preferredPort: optional(Schema.Number),
+    resetFiles: optional(Schema.Boolean),
+    setActive: optional(Schema.Boolean),
+  })
+
+  export const ManagedProjectInfo = Schema.Struct({
+    projectId: Schema.String,
+    name: Schema.String,
+    workspaceRoot: Schema.String,
+    isActive: Schema.Boolean,
+    createdBy: Schema.String,
+    createdAt: Schema.String,
+    isTrainingLab: Schema.Boolean,
+    labId: optional(Schema.String),
+  })
+
+  export const ProjectsAndLabsOverview = Schema.Struct({
+    runtimeRoot: Schema.String,
+    projects: Schema.Array(ManagedProjectInfo),
+    labs: Schema.Array(TrainingLabInfo),
+  })
+
+  export const ProjectManageInput = Schema.Struct({
+    operation: Schema.Literals(["create", "select"]),
+    name: optional(Schema.String),
+    slug: optional(Schema.String),
+    directory: optional(Schema.String),
+    projectId: optional(Schema.String),
+    allowExternalTargets: optional(Schema.Boolean),
   })
 
   export const CdiSecretManageInput = Schema.Struct({

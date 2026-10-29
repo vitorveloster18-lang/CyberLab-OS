@@ -988,15 +988,15 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
       },
       {
         id: "setup",
-        label: "Perfis Individuais, Autonomia & Gateway",
-        description: "Configure os perfis individuais de Kairós, Naia, Salem e Nova, nível de autonomia no escopo, HMAC secret e as 9 ações do gateway",
+        label: "Perfis Individuais, Autonomia Plena & Gateway",
+        description: "Configure os perfis individuais de Kairós, Naia, Salem e Nova, autonomia plena (projetos, laboratórios, escrita de código e runtime) e as 25 ações do gateway",
         cdiSubTab: "setup",
         engines: [
           {
             toolId: "cdi-hub",
             label: "Perfis Autónomos & Gateway :4096",
-            badge: "9 Ações Gateway",
-            description: "Perfis individuais sem hierarquia + feed de iniciativas autónomas",
+            badge: "25 Ações Gateway",
+            description: "Autonomia plena sem engessamento + projetos, labs, código e runtime",
           },
         ],
       },
@@ -1004,12 +1004,19 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
   },
   {
     id: "governance-suite",
-    title: "Escopo, Cofre SHA-256 & Relatório",
-    shortTitle: "Escopo & Evidências",
-    subtitle: "Controle de alvos permitidos, aprovações humanas, evidências SHA-256, importação externa, Findings e Relatório .md",
+    title: "Escopo, Laboratórios, Cofre SHA-256 & Relatório",
+    shortTitle: "Escopo, Labs & Evidências",
+    subtitle: "Laboratórios de Treinamento interativos, criação de projetos, controle de alvos permitidos, aprovações, evidências SHA-256, Findings e Relatório .md",
     icon: "shield",
-    keywords: ["escopo", "alvo", "aprovacao", "evidencia", "sha256", "finding", "relatorio", "markdown", "inbox", "importar"],
+    keywords: ["escopo", "laboratorio", "treino", "training", "lab", "projeto", "alvo", "aprovacao", "evidencia", "sha256", "finding", "relatorio", "markdown", "inbox", "importar"],
     functions: [
+      {
+        id: "labs",
+        label: "Laboratórios & Projetos",
+        description: "Inicie, reinicie ou encerre os 5 Laboratórios de Treinamento locais (Web/API BOLA, GraphQL/OAuth, Key Hunter, DFIR/SOC e Reversing ELF64) e crie/alterne projetos",
+        governanceSubTab: "labs",
+        engines: [{ toolId: "scope-governance", label: "Laboratórios de Treinamento & Projetos", badge: "5 Labs Locais", description: "Servidores locais + escopo automático" }],
+      },
       {
         id: "scope",
         label: "Escopo de Alvos",

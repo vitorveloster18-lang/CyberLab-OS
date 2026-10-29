@@ -1809,21 +1809,22 @@ export function ManualToolConfigForm(props: { wb: CyberLabWorkbenchService }) {
           const partners = () => wb.backend.partners?.partners ?? []
           const inboundActivity = () => wb.backend.partners?.inboundActivity ?? []
           const gatewayActions = [
-            { id: "project.state", desc: "Estado ativo do projeto & pares" },
-            { id: "evidence.list", desc: "Listar evidências SHA-256" },
-            { id: "evidence.read", desc: "Ler evidência redigida" },
-            { id: "workspace.list_files", desc: "Navegar ficheiros no escopo" },
-            { id: "workspace.read_file", desc: "Ler ficheiro no escopo" },
-            { id: "artifact.create", desc: "Criar relatórios, notas & análises" },
-            { id: "finding.propose", desc: "Propor findings de segurança" },
-            { id: "action.initiate", desc: "Iniciar execuções autonomamente" },
-            { id: "action.status", desc: "Acompanhar estado de execuções" },
+            { id: "project.state / list / create / select", desc: "Criar, listar & alternar projetos" },
+            { id: "scope.get / scope.update", desc: "Ler & atualizar escopo de alvos" },
+            { id: "lab.list / start / status / reset / stop", desc: "5 Laboratórios de Treinamento ao vivo" },
+            { id: "workspace.list / read(raw) / write / edit / mkdir / delete", desc: "Leitura & escrita integral de código" },
+            { id: "runtime.list_files / runtime.read_file", desc: "Inspeção completa do runtime CyberLab OS" },
+            { id: "evidence.list / evidence.read", desc: "Evidências com custódia SHA-256" },
+            { id: "artifact.create / finding.propose", desc: "Relatórios, análises & findings" },
+            { id: "action.initiate / action.status", desc: "Disparo autónomo pleno (31 capabilities)" },
           ] as const
 
           const autonomyLabel = (mode: string) => {
             switch (mode) {
+              case "full_autonomy":
+                return "Autonomia Plena Sem Engessamento (Projetos, Labs, Código & Runtime)"
               case "autonomous_in_scope":
-                return "Autónomo no Escopo Curado (Par Horizontal)"
+                return "Autónomo no Escopo Curado (Moderate Direto; High sob Curadoria)"
               case "allow_readonly_and_low_propose_others":
                 return "Autónomo em Read-Only + Low; Curadoria em Moderate"
               case "allow_readonly_propose_others":
@@ -2039,7 +2040,7 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
                         <div>
                           <label class={LABEL_CLS}>Autonomia para Iniciar Execuções (action.initiate)</label>
                           <select
-                            value={d().editInitiateActions ?? "autonomous_in_scope"}
+                            value={d().editInitiateActions ?? "full_autonomy"}
                             class={INPUT_CLS}
                             onChange={(e) =>
                               wb.updateDraft("cdi-hub", (p) => ({
@@ -2048,6 +2049,9 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
                               }))
                             }
                           >
+                            <option value="full_autonomy">
+                              Autonomia Plena Sem Engessamento (read_only, low, moderate & high diretos)
+                            </option>
                             <option value="autonomous_in_scope">
                               Autónomo no Escopo Curado (read_only, low e moderate diretos; high sob curadoria)
                             </option>
@@ -2072,7 +2076,59 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
                               wb.updateDraft("cdi-hub", (p) => ({ ...p, editEnabled: e.currentTarget.checked }))
                             }
                           />
-                          <span>Parceiro Ativo no Gateway</span>
+                          <span>Parceiro Ativo</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={d().editWriteWorkspaceAndCode !== false}
+                            onChange={(e) =>
+                              wb.updateDraft("cdi-hub", (p) => ({
+                                ...p,
+                                editWriteWorkspaceAndCode: e.currentTarget.checked,
+                              }))
+                            }
+                          />
+                          <span>Escrita & Edição de Código (workspace.write/edit)</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={d().editFullRuntimeAndCodeAccess !== false}
+                            onChange={(e) =>
+                              wb.updateDraft("cdi-hub", (p) => ({
+                                ...p,
+                                editFullRuntimeAndCodeAccess: e.currentTarget.checked,
+                              }))
+                            }
+                          />
+                          <span>Código Integral do Runtime (runtime.*)</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={d().editManageProjectsAndScope !== false}
+                            onChange={(e) =>
+                              wb.updateDraft("cdi-hub", (p) => ({
+                                ...p,
+                                editManageProjectsAndScope: e.currentTarget.checked,
+                              }))
+                            }
+                          />
+                          <span>Criar Projetos & Escopo (project.create)</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={d().editAccessTrainingLabs !== false}
+                            onChange={(e) =>
+                              wb.updateDraft("cdi-hub", (p) => ({
+                                ...p,
+                                editAccessTrainingLabs: e.currentTarget.checked,
+                              }))
+                            }
+                          />
+                          <span>Laboratórios de Treinamento (lab.*)</span>
                         </label>
                         <label class="flex items-center gap-1.5 cursor-pointer">
                           <input
@@ -2098,7 +2154,7 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
                               }))
                             }
                           />
-                          <span>evidence.* & workspace.*</span>
+                          <span>evidence.* & workspace.read</span>
                         </label>
                         <label class="flex items-center gap-1.5 cursor-pointer">
                           <input
@@ -2135,7 +2191,7 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
                   <div class="rounded border border-v2-border-border-base bg-v2-background-bg-base p-2.5 flex flex-col gap-1.5">
                     <div class="flex flex-wrap items-center justify-between gap-2">
                       <span class={LABEL_CLS}>
-                        9 Ações Canónicas do Gateway Bidirecional (CDI → CyberLab OS)
+                        25 Ações Canónicas do Gateway Bidirecional (CDI → CyberLab OS · Autonomia Plena)
                       </span>
                       <span class="font-mono text-[11px] text-emerald-400">
                         {wb.backend.partners?.cyberlabCallbackUrl || "http://127.0.0.1:4096/api/cyberlab/partner-gateway"}
@@ -2145,7 +2201,7 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
                       <For each={gatewayActions}>
                         {(act) => (
                           <div class="rounded bg-v2-background-bg-deep/60 px-2 py-1 text-[11px] flex items-center justify-between gap-1.5">
-                            <span class="font-mono text-v2-text-text-strong">{act.id}</span>
+                            <span class="font-mono text-v2-text-text-strong truncate">{act.id}</span>
                             <span class="text-v2-text-text-muted truncate">{act.desc}</span>
                           </div>
                         )}
@@ -2182,7 +2238,11 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
                                 {partner.displayName} ({partner.partnerId})
                               </span>
                               <span class="font-mono text-[10px] text-emerald-400">
-                                {partner.permissions.initiateActions === "autonomous_in_scope" ? "autónomo" : partner.permissions.initiateActions}
+                                {partner.permissions.initiateActions === "full_autonomy"
+                                  ? "autonomia plena"
+                                  : partner.permissions.initiateActions === "autonomous_in_scope"
+                                    ? "autónomo"
+                                    : partner.permissions.initiateActions}
                               </span>
                             </div>
                             <span class="text-[11px] text-v2-text-text-muted truncate">{partner.specialty}</span>
@@ -2431,6 +2491,166 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
 
           return (
             <div class="flex flex-col gap-3">
+              <Show when={d().subTab === "labs"}>
+                <div class="flex flex-col gap-3">
+                  <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/50 p-2.5 flex flex-col gap-2">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <span class={LABEL_CLS}>Criar Novo Projeto (Curador ou Parceiros CDI)</span>
+                        <div class="text-[11px] text-v2-text-text-muted">
+                          Kairós, Naia, Salem e Nova também podem criar projetos autonomamente via{" "}
+                          <code class="font-mono text-emerald-400">project.create</code> e inspecionar todo o runtime em{" "}
+                          <code class="font-mono text-emerald-400">{wb.backend.projectsAndLabs?.runtimeRoot || "."}</code>.
+                        </div>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={d().newProjectName ?? ""}
+                        placeholder="Nome do novo projeto (ex.: Auditoria OAuth Produção)..."
+                        class={INPUT_CLS}
+                        onInput={(e) =>
+                          wb.updateDraft("scope-governance", (p) => ({ ...p, newProjectName: e.currentTarget.value }))
+                        }
+                      />
+                      <button
+                        type="button"
+                        class={BTN_PRIMARY}
+                        onClick={() => {
+                          const name = (d().newProjectName ?? "").trim()
+                          if (!name) return
+                          wb.updateDraft("scope-governance", (p) => ({ ...p, newProjectName: "" }))
+                          void wb.manageCyberLabProject("create", { name })
+                        }}
+                      >
+                        + Criar Projeto
+                      </button>
+                    </div>
+
+                    <Show when={(wb.backend.projectsAndLabs?.projects ?? []).length > 0}>
+                      <div class="flex flex-wrap gap-1.5 pt-1">
+                        <For each={wb.backend.projectsAndLabs?.projects ?? []}>
+                          {(proj) => (
+                            <button
+                              type="button"
+                              class={
+                                proj.isActive
+                                  ? "rounded border border-emerald-500/60 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-medium text-emerald-300 cursor-pointer"
+                                  : CHIP_CLS
+                              }
+                              onClick={() => void wb.manageCyberLabProject("select", { projectId: proj.projectId })}
+                            >
+                              {proj.isActive ? "● " : ""}
+                              {proj.name} ({proj.createdBy})
+                            </button>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
+                  </div>
+
+                  <div class="flex flex-col gap-2">
+                    <span class={LABEL_CLS}>
+                      Laboratórios de Treinamento Interativos ({(wb.backend.projectsAndLabs?.labs ?? []).length}) — Livres para Curador & CDIs
+                    </span>
+                    <div class="grid grid-cols-1 gap-2">
+                      <For each={wb.backend.projectsAndLabs?.labs ?? []}>
+                        {(lab) => (
+                          <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/40 p-3 flex flex-col gap-2 text-[12px]">
+                            <div class="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <div class="font-semibold text-v2-text-text-strong flex items-center gap-2 flex-wrap">
+                                  <span>{lab.title}</span>
+                                  <span class="font-mono text-[10px] rounded bg-v2-background-bg-base px-1.5 py-0.5 text-v2-text-text-muted">
+                                    {lab.labId}
+                                  </span>
+                                  <span
+                                    class={
+                                      lab.running
+                                        ? "rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400"
+                                        : lab.provisioned
+                                          ? "rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-medium text-sky-300"
+                                          : "rounded bg-v2-background-bg-base px-1.5 py-0.5 text-[10px] text-v2-text-text-muted"
+                                    }
+                                  >
+                                    {lab.running
+                                      ? `ONLINE · ${lab.baseUrl}`
+                                      : lab.provisioned
+                                        ? "PROVISIONADO (OFFLINE)"
+                                        : "PRONTO PARA INICIAR"}
+                                  </span>
+                                </div>
+                                <div class="text-[11px] text-v2-text-text-muted mt-0.5">{lab.summary}</div>
+                              </div>
+
+                              <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  class={BTN_PRIMARY}
+                                  onClick={() => void wb.controlTrainingLab("start", lab.labId)}
+                                >
+                                  {lab.running ? "Focar Lab" : "Iniciar Lab"}
+                                </button>
+                                <Show when={lab.provisioned}>
+                                  <button
+                                    type="button"
+                                    class={CHIP_CLS}
+                                    onClick={() => void wb.controlTrainingLab("reset", lab.labId)}
+                                  >
+                                    Resetar Código
+                                  </button>
+                                </Show>
+                                <Show when={lab.running}>
+                                  <button
+                                    type="button"
+                                    class={CHIP_CLS}
+                                    onClick={() => void wb.controlTrainingLab("stop", lab.labId)}
+                                  >
+                                    Parar Servidor
+                                  </button>
+                                  <Show when={lab.baseUrl}>
+                                    <button
+                                      type="button"
+                                      class={CHIP_CLS}
+                                      onClick={() => {
+                                        if (lab.baseUrl) {
+                                          wb.sendUrlAcrossWebSuite(lab.baseUrl, "headers")
+                                          wb.selectTool("http-repeater")
+                                          wb.updateDraft("http-repeater", (p) => ({ ...p, url: lab.baseUrl! }))
+                                        }
+                                      }}
+                                    >
+                                      Abrir no Repeater
+                                    </button>
+                                  </Show>
+                                </Show>
+                              </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                              <For each={lab.challenges}>
+                                {(ch) => (
+                                  <div class="rounded bg-v2-background-bg-base px-2.5 py-1.5 text-[11px]">
+                                    <div class="font-medium text-v2-text-text-strong">{ch.title}</div>
+                                    <div class="text-v2-text-text-muted">{ch.objective}</div>
+                                    <Show when={ch.remediationFile}>
+                                      <div class="font-mono text-[10px] text-emerald-400 mt-0.5">
+                                        Ficheiro de patch/regra: {ch.remediationFile}
+                                      </div>
+                                    </Show>
+                                  </div>
+                                )}
+                              </For>
+                            </div>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                </div>
+              </Show>
+
               <Show when={d().subTab === "scope"}>
                 <div class="flex flex-col gap-2.5">
                   <label class="flex items-center justify-between gap-2 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/50 p-2.5 text-[12px] cursor-pointer">

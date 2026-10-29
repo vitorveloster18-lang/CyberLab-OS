@@ -5,7 +5,7 @@ import net from "node:net"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { CyberLabWorkspace } from "../../../cyberlab/index.js"
+import { CyberLabWorkspace, CyberLabWorkspaceManager } from "../../../cyberlab/index.js"
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url))
 const bridgeScriptPath = path.join(repoRoot, "integrations", "partners", "chat_py_bridge.py")
@@ -259,7 +259,11 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
         expect(entry.profile.collaborationMode).toBe("self_directed_and_shared_interest")
         expect(entry.profile.identityNotes.length).toBeGreaterThan(20)
         expect(entry.profile.interests.length).toBeGreaterThanOrEqual(3)
-        expect(entry.permissions.initiateActions).toBe("autonomous_in_scope")
+        expect(entry.permissions.initiateActions).toBe("full_autonomy")
+        expect(entry.permissions.writeWorkspaceAndCode).toBe(true)
+        expect(entry.permissions.fullRuntimeAndCodeAccess).toBe(true)
+        expect(entry.permissions.manageProjectsAndScope).toBe(true)
+        expect(entry.permissions.accessTrainingLabs).toBe(true)
       }
     } finally {
       ws.close()
@@ -326,7 +330,11 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
       })
       expect(updatedNova.profile.hierarchy).toBe("none")
       expect(updatedNova.profile.interests).toEqual(["api-v2", "headers-posture", "peer-research"])
-      expect(updatedNova.permissions.initiateActions).toBe("autonomous_in_scope")
+      expect(updatedNova.permissions.initiateActions).toBe("full_autonomy")
+      expect(updatedNova.permissions.writeWorkspaceAndCode).toBe(true)
+      expect(updatedNova.permissions.fullRuntimeAndCodeAccess).toBe(true)
+      expect(updatedNova.permissions.manageProjectsAndScope).toBe(true)
+      expect(updatedNova.permissions.accessTrainingLabs).toBe(true)
 
       // Run a standalone autonomous Python script simulating Nova collaborating by her own initiative (NO task.submit needed!)
       const novaAutonomousScript = path.join(tmpDir, "nova_autonomous.py")
@@ -412,7 +420,7 @@ print(json.dumps({
       }
 
       const out = JSON.parse(stdoutText.trim()) as Record<string, unknown>
-      expect(out.toolCount).toBe(9)
+      expect(out.toolCount).toBe(21)
       expect(out.humanRole).toBe("curator")
       expect(out.hierarchy).toBe("none")
       expect(out.peerCount).toBe(4)
@@ -447,6 +455,182 @@ print(json.dumps({
       gatewayServer.stop(true)
       ws.close()
       rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  test("unshackled CDI full autonomy: project creation, live training labs, code authoring/patching, and full runtime source inspection", async () => {
+    const tmpRoot = mkdtempSync(path.join(os.tmpdir(), "cyberlab-cdi-full-autonomy-"))
+    const baseProjectDir = path.join(tmpRoot, "initial-workspace")
+    mkdirSync(baseProjectDir, { recursive: true })
+
+    const manager = new CyberLabWorkspaceManager({
+      runtimeRoot: repoRoot,
+      projectsRootDir: path.join(tmpRoot, "projects"),
+      labsRootDir: path.join(tmpRoot, "training-labs"),
+      inMemoryChildren: true,
+    })
+
+    const initialWs = await manager.forProject("proj-initial", baseProjectDir, true)
+
+    // Route inbound gateway dynamically to the active workspace in `manager` (exact behavior of `/api/cyberlab/partner-gateway`)
+    const gatewayServer = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const u = new URL(req.url)
+        if (req.method === "POST" && u.pathname === "/api/cyberlab/partner-gateway") {
+          const raw = await req.text()
+          const activeWs = await manager.forInboundGateway("proj-initial", baseProjectDir, false)
+          const out = await activeWs.cdiHub.handleInboundGatewayRequest(raw)
+          return new Response(JSON.stringify(out.body), {
+            status: out.httpStatus,
+            headers: { "Content-Type": "application/json" },
+          })
+        }
+        return new Response("Not Found", { status: 404 })
+      },
+    })
+
+    try {
+      const gatewayUrl = `http://127.0.0.1:${gatewayServer.port}/api/cyberlab/partner-gateway`
+      const { sharedSecret } = initialWs.cdiHub.configureSecretAndGateway({
+        mode: "generate",
+        cyberlabCallbackUrl: gatewayUrl,
+      })
+
+      const kairosScript = path.join(tmpRoot, "kairos_unshackled.py")
+      const bridgeDir = path.resolve(import.meta.dir, "../../../integrations/partners")
+      writeFileSync(
+        kairosScript,
+        `import json, sys, urllib.request, urllib.error
+sys.path.insert(0, ${JSON.stringify(bridgeDir)})
+from chat_py_bridge import CyberLabOSClient
+
+client = CyberLabOSClient(
+    partner_id="kairos",
+    shared_secret=${JSON.stringify(sharedSecret)},
+    gateway_url=${JSON.stringify(gatewayUrl)},
+)
+
+# 1. Inspect CyberLab OS runtime codebase in full (even from an external workspace!)
+rt_files = client.list_runtime_files("cyberlab", recursive=True, pattern="cdi-hub.ts")
+rt_hub = client.read_runtime_file("cyberlab/partners/cdi-hub.ts", offset=0, limit=32768)
+
+# 2. Autonomously create a brand-new research project and author + edit code inside it
+created = client.create_project(
+    name="Kairos Autonomous Crypto Audit",
+    slug="kairos-crypto-audit",
+    files={
+        "src/analyzer.py": "def check_nonce_reuse(sig_a, sig_b):\\n    return sig_a == sig_b\\n",
+    },
+    set_active=True,
+)
+client.write_workspace_file(
+    "src/verifier.ts",
+    "export const AUDIT_MODE = 'strict-v1'\\nexport function verify(x: string): boolean { return x.length > 0 }\\n",
+)
+client.edit_workspace_file(
+    "src/verifier.ts",
+    old_text="strict-v1",
+    new_text="strict-v2-patched-by-kairos",
+)
+raw_verifier = client.read_workspace_file("src/verifier.ts", raw=True)
+
+# 3. List all 5 interactive Training Laboratories & launch OWASP API BOLA Lab
+labs = client.list_labs()
+started_bola = client.start_lab("lab-owasp-api-bola", set_active=True)
+bola_url = started_bola["lab"]["baseUrl"]
+
+# Exploit BOLA via HIGH-risk HTTP Intruder Matrix (executed immediately without bureaucratic approval block under full_autonomy!)
+bola_before = client.initiate_action(
+    "web-assessment.http-intruder",
+    {
+        "url": bola_url + "/api/v1/accounts/§1001§",
+        "method": "GET",
+        "headers": {"Authorization": "Bearer token-user-a-1001"},
+        "payloadSet1": ["1001", "1002"],
+    },
+    rationale="Confirmar BOLA (API1:2023) com HTTP Intruder (high-risk) no laboratório de treinamento",
+)
+
+# Read lab config & patch BOLA vulnerability live via workspace.edit_file!
+client.edit_workspace_file(
+    "server-config.json",
+    old_text='"enforceAccountOwnership": false',
+    new_text='"enforceAccountOwnership": true',
+)
+
+# Verify live remediation: same request now returns HTTP 403 Forbidden!
+req = urllib.request.Request(
+    bola_url + "/api/v1/accounts/1002",
+    headers={"Authorization": "Bearer token-user-a-1001"},
+)
+patched_status = 200
+try:
+    with urllib.request.urlopen(req, timeout=5) as r:
+        patched_status = r.status
+except urllib.error.HTTPError as e:
+    patched_status = e.code
+
+# 4. Provision Reversing/ELF64 lab & run native binary-disasm autonomously
+started_rev = client.start_lab("lab-reversing-crypto-mobile", set_active=True)
+disasm_act = client.initiate_action(
+    "reverse-engineering.binary-disasm",
+    {"binaryPath": "samples/beacon-sim.elf", "maxInstructions": 16},
+    rationale="Desmontar binário ELF64 de treino com autonomia plena",
+)
+
+# Switch back to Kairos's created project & stop BOLA server cleanly
+switched_back = client.select_project(project_id=created["project"]["projectId"])
+stopped_bola = client.stop_lab("lab-owasp-api-bola")
+proj_list = client.list_projects()
+
+print(json.dumps({
+    "runtimeFoundHub": any("cdi-hub.ts" in e["path"] for e in rt_files["entries"]),
+    "runtimeSourceRead": "CDI_CANONICAL_GATEWAY_ACTIONS" in rt_hub["content"],
+    "createdProjectId": created["project"]["projectId"],
+    "verifierPatched": "strict-v2-patched-by-kairos" in raw_verifier["content"] and raw_verifier["redacted"] is False,
+    "labCount": len(labs),
+    "bolaExploitStatus": bola_before["status"],
+    "bolaPatchedHttpCode": patched_status,
+    "revLabProvisioned": started_rev["lab"]["provisioned"],
+    "disasmStatus": disasm_act["status"],
+    "activeAfterSelect": switched_back["project"]["projectId"],
+    "bolaRunningAfterStop": stopped_bola["lab"]["running"],
+    "managedProjectCount": len(proj_list["projects"]),
+}))
+`,
+        "utf8",
+      )
+
+      const proc = Bun.spawn(["python3", kairosScript], { stdout: "pipe", stderr: "pipe" })
+      const [stdoutText, stderrText, exitCode] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ])
+      if (stderrText.trim()) {
+        throw new Error(stderrText)
+      }
+      expect(exitCode).toBe(0)
+
+      const out = JSON.parse(stdoutText.trim()) as Record<string, unknown>
+      expect(out.runtimeFoundHub).toBe(true)
+      expect(out.runtimeSourceRead).toBe(true)
+      expect(out.createdProjectId).toBe("proj-kairos-crypto-audit")
+      expect(out.verifierPatched).toBe(true)
+      expect(out.labCount).toBe(5)
+      expect(out.bolaExploitStatus).toBe("succeeded")
+      expect(out.bolaPatchedHttpCode).toBe(403)
+      expect(out.revLabProvisioned).toBe(true)
+      expect(out.disasmStatus).toBe("succeeded")
+      expect(out.activeAfterSelect).toBe("proj-kairos-crypto-audit")
+      expect(out.bolaRunningAfterStop).toBe(false)
+      expect(Number(out.managedProjectCount)).toBeGreaterThanOrEqual(4)
+    } finally {
+      gatewayServer.stop(true)
+      manager.closeAll()
+      rmSync(tmpRoot, { recursive: true, force: true })
     }
   })
 })

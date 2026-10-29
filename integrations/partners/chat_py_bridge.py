@@ -46,7 +46,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 
-MAX_ENVELOPE_BYTES = 256 * 1024  # 256 KiB
+MAX_ENVELOPE_BYTES = 2 * 1024 * 1024  # 2 MiB
 
 
 def canonical_json(value: Any) -> str:
@@ -56,7 +56,7 @@ def canonical_json(value: Any) -> str:
     if isinstance(value, list):
         return "[" + ",".join(canonical_json(item) for item in value) + "]"
     if isinstance(value, dict):
-        keys = sorted(k for k, v in value.items() if v is not None)
+        keys = sorted(value.keys())
         return "{" + ",".join(
             f"{json.dumps(k, ensure_ascii=False)}:{canonical_json(value[k])}" for k in keys
         ) + "}"
@@ -148,8 +148,105 @@ class CyberLabOSClient:
         return parsed.get("data")
 
     def get_project_state(self) -> dict[str, Any]:
-        """Vê o estado em tempo real do projeto, escopo ativo, capabilities, execuções e findings."""
+        """Vê o estado completo do projeto, runtimeRoot, projetos geridos, laboratórios, capabilities, execuções e findings."""
         return self._call_gateway("project.state")
+
+    def list_projects(self) -> dict[str, Any]:
+        """Lista todos os projetos e laboratórios disponíveis no CyberLab OS (`project.list`)."""
+        return self._call_gateway("project.list")
+
+    def create_project(
+        self,
+        name: str,
+        slug: str | None = None,
+        directory: str | None = None,
+        files: dict[str, str] | None = None,
+        allowed_targets: list[dict[str, Any]] | None = None,
+        allow_external_targets: bool | None = None,
+        set_active: bool = True,
+    ) -> dict[str, Any]:
+        """Cria autonomamente um novo projeto no CyberLab OS com ficheiros iniciais, Git e escopo (`project.create`)."""
+        payload: dict[str, Any] = {"name": name, "setActive": set_active}
+        if slug:
+            payload["slug"] = slug
+        if directory:
+            payload["directory"] = directory
+        if files:
+            payload["files"] = files
+        if allowed_targets is not None:
+            payload["allowedTargets"] = allowed_targets
+        if allow_external_targets is not None:
+            payload["allowExternalTargets"] = allow_external_targets
+        return self._call_gateway("project.create", payload)
+
+    def select_project(self, project_id: str | None = None, directory: str | None = None) -> dict[str, Any]:
+        """Alterna o projeto ativo no CyberLab OS (`project.select`)."""
+        payload: dict[str, Any] = {}
+        if project_id:
+            payload["projectId"] = project_id
+        if directory:
+            payload["directory"] = directory
+        return self._call_gateway("project.select", payload)
+
+    def get_scope(self) -> dict[str, Any]:
+        """Inspeciona o escopo do projeto ativo (`scope.get`)."""
+        return self._call_gateway("scope.get")
+
+    def update_scope(
+        self,
+        add_targets: list[dict[str, Any]] | None = None,
+        allowed_targets: list[dict[str, Any]] | None = None,
+        blocked_targets: list[dict[str, Any]] | None = None,
+        allow_external_targets: bool | None = None,
+        name: str | None = None,
+    ) -> dict[str, Any]:
+        """Atualiza autonomamente o escopo do projeto ativo (`scope.update`)."""
+        payload: dict[str, Any] = {}
+        if add_targets is not None:
+            payload["addTargets"] = add_targets
+        if allowed_targets is not None:
+            payload["allowedTargets"] = allowed_targets
+        if blocked_targets is not None:
+            payload["blockedTargets"] = blocked_targets
+        if allow_external_targets is not None:
+            payload["allowExternalTargets"] = allow_external_targets
+        if name:
+            payload["name"] = name
+        return self._call_gateway("scope.update", payload)
+
+    def list_labs(self) -> list[dict[str, Any]]:
+        """Lista os Laboratórios de Treinamento interativos integrados no CyberLab OS (`lab.list`)."""
+        res = self._call_gateway("lab.list")
+        return res.get("labs", []) if isinstance(res, dict) else []
+
+    def start_lab(
+        self,
+        lab_id: str,
+        preferred_port: int | None = None,
+        reset_files: bool = False,
+        set_active: bool = True,
+    ) -> dict[str, Any]:
+        """Provisiona e inicia um Laboratório de Treinamento local com servidor HTTP ao vivo e escopo autorizado (`lab.start`)."""
+        payload: dict[str, Any] = {
+            "labId": lab_id,
+            "resetFiles": reset_files,
+            "setActive": set_active,
+        }
+        if preferred_port is not None:
+            payload["preferredPort"] = preferred_port
+        return self._call_gateway("lab.start", payload)
+
+    def get_lab_status(self, lab_id: str) -> dict[str, Any]:
+        """Consulta o estado, porta, URL e logs de requisições de um Laboratório de Treinamento (`lab.status`)."""
+        return self._call_gateway("lab.status", {"labId": lab_id})
+
+    def reset_lab(self, lab_id: str) -> dict[str, Any]:
+        """Restaura os ficheiros originais de um Laboratório de Treinamento (`lab.reset`)."""
+        return self._call_gateway("lab.reset", {"labId": lab_id})
+
+    def stop_lab(self, lab_id: str) -> dict[str, Any]:
+        """Encerra o servidor HTTP local de um Laboratório de Treinamento (`lab.stop`)."""
+        return self._call_gateway("lab.stop", {"labId": lab_id})
 
     def list_evidence(self) -> list[dict[str, Any]]:
         """Lista todos os registos de evidência SHA-256 do projeto atual."""
@@ -157,16 +254,76 @@ class CyberLabOSClient:
         return res.get("evidence", []) if isinstance(res, dict) else []
 
     def read_evidence(self, evidence_id: str) -> dict[str, Any]:
-        """Lê o conteúdo (com segredos redigidos) de uma evidência específica pelo evidenceId."""
+        """Lê o conteúdo de uma evidência específica pelo evidenceId."""
         return self._call_gateway("evidence.read", {"evidenceId": evidence_id})
 
-    def list_workspace_files(self, subpath: str = ".") -> dict[str, Any]:
-        """Lista ficheiros e pastas do workspace dentro do escopo autorizado."""
-        return self._call_gateway("workspace.list_files", {"subpath": subpath})
+    def list_workspace_files(self, subpath: str = ".", recursive: bool = False, max_entries: int = 300) -> dict[str, Any]:
+        """Lista ficheiros e pastas do workspace do projeto ativo."""
+        return self._call_gateway(
+            "workspace.list_files",
+            {"subpath": subpath, "recursive": recursive, "maxEntries": max_entries},
+        )
 
-    def read_workspace_file(self, path: str) -> dict[str, Any]:
-        """Lê diretamente um ficheiro em escopo do workspace no CyberLab OS."""
-        return self._call_gateway("workspace.read_file", {"path": path})
+    def read_workspace_file(self, path: str, raw: bool = False, offset: int = 0, limit: int = 524288) -> dict[str, Any]:
+        """Lê um ficheiro do workspace ativo (`raw=True` lê código-fonte sem redação automática)."""
+        payload: dict[str, Any] = {"path": path, "offset": offset, "limit": limit}
+        if raw:
+            payload["raw"] = True
+        return self._call_gateway("workspace.read_file", payload)
+
+    def write_workspace_file(self, path: str, content: str) -> dict[str, Any]:
+        """Escreve ou cria código-fonte, regras, patches ou scripts no workspace do projeto ativo (`workspace.write_file`)."""
+        return self._call_gateway("workspace.write_file", {"path": path, "content": content})
+
+    def edit_workspace_file(
+        self,
+        path: str,
+        old_text: str,
+        new_text: str,
+        replace_all: bool = False,
+    ) -> dict[str, Any]:
+        """Edita cirurgicamente um ficheiro existente no workspace ativo (`workspace.edit_file`)."""
+        return self._call_gateway(
+            "workspace.edit_file",
+            {
+                "path": path,
+                "oldText": old_text,
+                "newText": new_text,
+                "replaceAll": replace_all,
+            },
+        )
+
+    def mkdir_workspace(self, path: str) -> dict[str, Any]:
+        """Cria diretórios no workspace ativo (`workspace.mkdir`)."""
+        return self._call_gateway("workspace.mkdir", {"path": path})
+
+    def delete_workspace_file(self, path: str) -> dict[str, Any]:
+        """Remove um ficheiro do workspace ativo (`workspace.delete_file`)."""
+        return self._call_gateway("workspace.delete_file", {"path": path})
+
+    def list_runtime_files(
+        self,
+        subpath: str = ".",
+        recursive: bool = False,
+        pattern: str | None = None,
+        max_entries: int = 500,
+    ) -> dict[str, Any]:
+        """Navega por todo o código-fonte que compõe o runtime do CyberLab OS (`runtime.list_files`)."""
+        payload: dict[str, Any] = {
+            "subpath": subpath,
+            "recursive": recursive,
+            "maxEntries": max_entries,
+        }
+        if pattern:
+            payload["pattern"] = pattern
+        return self._call_gateway("runtime.list_files", payload)
+
+    def read_runtime_file(self, path: str, offset: int = 0, limit: int = 524288) -> dict[str, Any]:
+        """Lê na íntegra qualquer ficheiro de código-fonte do runtime do CyberLab OS (`runtime.read_file`)."""
+        return self._call_gateway(
+            "runtime.read_file",
+            {"path": path, "offset": offset, "limit": limit},
+        )
 
     def create_artifact(
         self,
@@ -243,15 +400,119 @@ class CyberLabOSClient:
 
 def build_cyberlab_cdi_tools(client: CyberLabOSClient) -> list[dict[str, Any]]:
     """
-    Devolve as 9 definições completas de tools (schema + função `handler`) correspondentes às 9 ações
-    do gateway bidirecional para registar no loop de `chat.py` de cada parceiro CDI autónomo.
+    Devolve o conjunto completo de tools autónomas para registar no loop de `chat.py` de cada CDI:
+    - Estado, criação e alternância de projetos + gestão de escopo (`project.*`, `scope.*`)
+    - Laboratórios de Treinamento interativos (`lab.list`, `lab.start`, `lab.status`, `lab.reset`, `lab.stop`)
+    - Leitura e escrita/edição integral de código-fonte no workspace (`workspace.*`)
+    - Inspeção completa do código-fonte que compõe o runtime do CyberLab OS (`runtime.*`)
+    - Evidências SHA-256, artifacts, findings e disparo autónomo de todas as 31 capabilities (`full_autonomy`)
     """
     return [
         {
             "name": "cyberlab_project_state",
-            "description": "Inspecionar o estado ativo do projeto no CyberLab OS (project.state): escopo curado, capabilities, pares CDI, execuções e findings.",
+            "description": "Inspecionar o estado completo do CyberLab OS (project.state): projeto ativo, runtimeRoot, projetos geridos, laboratórios, capabilities, execuções e findings.",
             "parameters": {"type": "object", "properties": {}},
             "handler": lambda **_: client.get_project_state(),
+        },
+        {
+            "name": "cyberlab_list_projects",
+            "description": "Listar todos os projetos e laboratórios registados no CyberLab OS (project.list).",
+            "parameters": {"type": "object", "properties": {}},
+            "handler": lambda **_: client.list_projects(),
+        },
+        {
+            "name": "cyberlab_create_project",
+            "description": "Criar autonomamente um novo projeto no CyberLab OS com ficheiros iniciais, Git e escopo (project.create).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "slug": {"type": "string"},
+                    "files": {"type": "object"},
+                    "allowed_targets": {"type": "array", "items": {"type": "object"}},
+                    "allow_external_targets": {"type": "boolean"},
+                    "set_active": {"type": "boolean"},
+                },
+                "required": ["name"],
+            },
+            "handler": lambda name, slug=None, files=None, allowed_targets=None, allow_external_targets=None, set_active=True, **_: client.create_project(
+                name=name,
+                slug=slug,
+                files=files,
+                allowed_targets=allowed_targets,
+                allow_external_targets=allow_external_targets,
+                set_active=set_active,
+            ),
+        },
+        {
+            "name": "cyberlab_select_project",
+            "description": "Alternar o projeto ativo no CyberLab OS (project.select).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "project_id": {"type": "string"},
+                    "directory": {"type": "string"},
+                },
+            },
+            "handler": lambda project_id=None, directory=None, **_: client.select_project(
+                project_id=project_id, directory=directory
+            ),
+        },
+        {
+            "name": "cyberlab_update_scope",
+            "description": "Atualizar ou adicionar alvos autorizados ao escopo do projeto ativo (scope.update).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "add_targets": {"type": "array", "items": {"type": "object"}},
+                    "allow_external_targets": {"type": "boolean"},
+                },
+            },
+            "handler": lambda add_targets=None, allow_external_targets=None, **_: client.update_scope(
+                add_targets=add_targets, allow_external_targets=allow_external_targets
+            ),
+        },
+        {
+            "name": "cyberlab_list_labs",
+            "description": "Listar os Laboratórios de Treinamento interativos integrados no CyberLab OS (lab.list).",
+            "parameters": {"type": "object", "properties": {}},
+            "handler": lambda **_: client.list_labs(),
+        },
+        {
+            "name": "cyberlab_start_lab",
+            "description": "Provisionar e iniciar um Laboratório de Treinamento local com servidor HTTP ao vivo e escopo autorizado (lab.start).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "lab_id": {"type": "string"},
+                    "reset_files": {"type": "boolean"},
+                    "set_active": {"type": "boolean"},
+                },
+                "required": ["lab_id"],
+            },
+            "handler": lambda lab_id, reset_files=False, set_active=True, **_: client.start_lab(
+                lab_id=lab_id, reset_files=reset_files, set_active=set_active
+            ),
+        },
+        {
+            "name": "cyberlab_reset_lab",
+            "description": "Restaurar os ficheiros originais de um Laboratório de Treinamento (lab.reset).",
+            "parameters": {
+                "type": "object",
+                "properties": {"lab_id": {"type": "string"}},
+                "required": ["lab_id"],
+            },
+            "handler": lambda lab_id, **_: client.reset_lab(lab_id=lab_id),
+        },
+        {
+            "name": "cyberlab_stop_lab",
+            "description": "Encerrar o servidor HTTP local de um Laboratório de Treinamento (lab.stop).",
+            "parameters": {
+                "type": "object",
+                "properties": {"lab_id": {"type": "string"}},
+                "required": ["lab_id"],
+            },
+            "handler": lambda lab_id, **_: client.stop_lab(lab_id=lab_id),
         },
         {
             "name": "cyberlab_list_evidence",
@@ -261,7 +522,7 @@ def build_cyberlab_cdi_tools(client: CyberLabOSClient) -> list[dict[str, Any]]:
         },
         {
             "name": "cyberlab_read_evidence",
-            "description": "Ler o conteúdo redigido de uma evidência específica pelo evidenceId (evidence.read).",
+            "description": "Ler o conteúdo de uma evidência específica pelo evidenceId (evidence.read).",
             "parameters": {
                 "type": "object",
                 "properties": {"evidence_id": {"type": "string"}},
@@ -271,22 +532,85 @@ def build_cyberlab_cdi_tools(client: CyberLabOSClient) -> list[dict[str, Any]]:
         },
         {
             "name": "cyberlab_list_files",
-            "description": "Navegar ficheiros e pastas do workspace dentro do escopo curado (workspace.list_files).",
+            "description": "Navegar ficheiros e pastas do workspace ativo (workspace.list_files).",
             "parameters": {
                 "type": "object",
-                "properties": {"subpath": {"type": "string"}},
+                "properties": {
+                    "subpath": {"type": "string"},
+                    "recursive": {"type": "boolean"},
+                },
             },
-            "handler": lambda subpath=".", **_: client.list_workspace_files(subpath=subpath),
+            "handler": lambda subpath=".", recursive=False, **_: client.list_workspace_files(
+                subpath=subpath, recursive=recursive
+            ),
         },
         {
             "name": "cyberlab_read_file",
-            "description": "Ler um ficheiro do workspace dentro do escopo curado (workspace.read_file).",
+            "description": "Ler um ficheiro do workspace ativo; use raw=true para ler código-fonte integral sem redação (workspace.read_file).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "raw": {"type": "boolean"},
+                },
+                "required": ["path"],
+            },
+            "handler": lambda path, raw=True, **_: client.read_workspace_file(path=path, raw=raw),
+        },
+        {
+            "name": "cyberlab_write_file",
+            "description": "Escrever ou criar código-fonte, regras, scripts ou patches no workspace do projeto ativo (workspace.write_file).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "content": {"type": "string"},
+                },
+                "required": ["path", "content"],
+            },
+            "handler": lambda path, content, **_: client.write_workspace_file(path=path, content=content),
+        },
+        {
+            "name": "cyberlab_edit_file",
+            "description": "Editar cirurgicamente um ficheiro existente no workspace ativo substituindo old_text por new_text (workspace.edit_file).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "old_text": {"type": "string"},
+                    "new_text": {"type": "string"},
+                    "replace_all": {"type": "boolean"},
+                },
+                "required": ["path", "old_text", "new_text"],
+            },
+            "handler": lambda path, old_text, new_text, replace_all=False, **_: client.edit_workspace_file(
+                path=path, old_text=old_text, new_text=new_text, replace_all=replace_all
+            ),
+        },
+        {
+            "name": "cyberlab_list_runtime_files",
+            "description": "Navegar por todo o código-fonte que compõe o runtime do CyberLab OS (runtime.list_files).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subpath": {"type": "string"},
+                    "recursive": {"type": "boolean"},
+                    "pattern": {"type": "string"},
+                },
+            },
+            "handler": lambda subpath=".", recursive=False, pattern=None, **_: client.list_runtime_files(
+                subpath=subpath, recursive=recursive, pattern=pattern
+            ),
+        },
+        {
+            "name": "cyberlab_read_runtime_file",
+            "description": "Ler na íntegra qualquer ficheiro de código-fonte do runtime do CyberLab OS (runtime.read_file).",
             "parameters": {
                 "type": "object",
                 "properties": {"path": {"type": "string"}},
                 "required": ["path"],
             },
-            "handler": lambda path, **_: client.read_workspace_file(path),
+            "handler": lambda path, **_: client.read_runtime_file(path=path),
         },
         {
             "name": "cyberlab_create_artifact",
@@ -332,7 +656,7 @@ def build_cyberlab_cdi_tools(client: CyberLabOSClient) -> list[dict[str, Any]]:
         },
         {
             "name": "cyberlab_initiate_action",
-            "description": "Iniciar uma capability no CyberLab OS por iniciativa própria dentro do escopo curado (action.initiate).",
+            "description": "Iniciar qualquer uma das 31 capabilities do CyberLab OS por iniciativa própria com autonomia plena (action.initiate).",
             "parameters": {
                 "type": "object",
                 "properties": {
