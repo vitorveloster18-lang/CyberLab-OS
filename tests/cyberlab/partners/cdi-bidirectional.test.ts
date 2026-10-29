@@ -250,7 +250,201 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
       expect(byId.get("salem")?.endpointUrl).toBe("http://127.0.0.1:8790/cyberlab/partner")
       expect(byId.get("nova")?.endpointUrl).toBe("http://127.0.0.1:8791/cyberlab/partner")
       expect(byId.has("cdi-4")).toBe(false)
+
+      for (const id of ["kairos", "naia", "salem", "nova"] as const) {
+        const entry = byId.get(id)!
+        expect(entry.profile.entityKind).toBe("autonomous_cognitive_entity")
+        expect(entry.profile.relationshipModel).toBe("peer_co_investigator")
+        expect(entry.profile.hierarchy).toBe("none")
+        expect(entry.profile.collaborationMode).toBe("self_directed_and_shared_interest")
+        expect(entry.profile.identityNotes.length).toBeGreaterThan(20)
+        expect(entry.profile.interests.length).toBeGreaterThanOrEqual(3)
+        expect(entry.permissions.initiateActions).toBe("autonomous_in_scope")
+      }
     } finally {
+      ws.close()
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  test("autonomous peer CDIs execute all 9 canonical gateway actions (including action.status & autonomous_in_scope) with individual profiles", async () => {
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-cdi-peer-9actions-"))
+    writeFileSync(path.join(tmpDir, "architecture-notes.md"), "# Curated Lab Notes\nTarget API v2 on loopback.\n", "utf8")
+
+    const ws = new CyberLabWorkspace({
+      projectId: "proj-peer-cdi",
+      workspaceRoot: tmpDir,
+      inMemoryDb: true,
+    })
+    await ws.ensureInitialized()
+
+    // Mock HTTP target inside curated scope so Nova/Naia can run active low/moderate checks autonomously
+    const targetServer = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch() {
+        return new Response(JSON.stringify({ status: "ok", api: "v2" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", "X-Frame-Options": "DENY" },
+        })
+      },
+    })
+
+    const gatewayServer = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const u = new URL(req.url)
+        if (req.method === "POST" && u.pathname === "/api/cyberlab/partner-gateway") {
+          const raw = await req.text()
+          const out = await ws.cdiHub.handleInboundGatewayRequest(raw)
+          return new Response(JSON.stringify(out.body), {
+            status: out.httpStatus,
+            headers: { "Content-Type": "application/json" },
+          })
+        }
+        return new Response("Not Found", { status: 404 })
+      },
+    })
+
+    try {
+      const gatewayUrl = `http://127.0.0.1:${gatewayServer.port}/api/cyberlab/partner-gateway`
+      const { sharedSecret } = ws.cdiHub.configureSecretAndGateway({
+        mode: "generate",
+        cyberlabCallbackUrl: gatewayUrl,
+      })
+
+      // Customize Nova's individual peer profile while preserving horizontal non-hierarchical relationship
+      const updatedNova = ws.cdiHub.upsertPartner({
+        partnerId: "nova",
+        displayName: "Nova",
+        endpointUrl: "http://127.0.0.1:8791/cyberlab/partner",
+        profile: {
+          identityNotes: "Parceira cognitiva autónoma focada em validação de protocolos e superfícies de API.",
+          interests: ["api-v2", "headers-posture", "peer-research"],
+        },
+      })
+      expect(updatedNova.profile.hierarchy).toBe("none")
+      expect(updatedNova.profile.interests).toEqual(["api-v2", "headers-posture", "peer-research"])
+      expect(updatedNova.permissions.initiateActions).toBe("autonomous_in_scope")
+
+      // Run a standalone autonomous Python script simulating Nova collaborating by her own initiative (NO task.submit needed!)
+      const novaAutonomousScript = path.join(tmpDir, "nova_autonomous.py")
+      const bridgeDir = path.resolve(import.meta.dir, "../../../integrations/partners")
+      writeFileSync(
+        novaAutonomousScript,
+        `import json, sys
+sys.path.insert(0, ${JSON.stringify(bridgeDir)})
+from chat_py_bridge import CyberLabOSClient, build_cyberlab_cdi_tools
+
+client = CyberLabOSClient(
+    partner_id="nova",
+    shared_secret=${JSON.stringify(sharedSecret)},
+    gateway_url=${JSON.stringify(gatewayUrl)},
+)
+
+tools = build_cyberlab_cdi_tools(client)
+
+# 1. project.state
+state = client.get_project_state()
+
+# 2 & 3. workspace.list_files & workspace.read_file
+files = client.list_workspace_files(".")
+note_doc = client.read_workspace_file("architecture-notes.md")
+
+# 4. artifact.create (report & analysis)
+art = client.create_artifact(
+    title="Análise Autónoma de Superfície API v2",
+    content="# Síntese de Nova\\nVerificação independente iniciada por interesse partilhado.",
+    artifact_type="analysis",
+)
+
+# 5 & 6. evidence.list & evidence.read
+ev_list = client.list_evidence()
+ev_read = client.read_evidence(art["evidenceId"])
+
+# 7 & 8. action.initiate (moderate capability executed autonomously in curated scope!) + action.status
+act = client.initiate_action(
+    "web-assessment.http-repeater",
+    {"url": ${JSON.stringify(`http://127.0.0.1:${targetServer.port}/health`)}, "method": "GET"},
+    rationale="Iniciativa própria de Nova para validar cabeçalhos da API v2 no escopo curado",
+)
+status_check = client.action_status(act["executionId"])
+
+# 9. finding.propose
+finding = client.propose_finding(
+    title="Ausência de CSP na API v2",
+    description="Validado autonomamente por Nova via HTTP Repeater dentro do escopo curado.",
+    severity="low",
+    confidence=0.92,
+    evidence_ids=[art["evidenceId"]] + status_check.get("resultEvidenceIds", []),
+    affected_assets=[${JSON.stringify(`http://127.0.0.1:${targetServer.port}/health`)}],
+)
+
+print(json.dumps({
+    "toolCount": len(tools),
+    "humanRole": state["governanceModel"]["humanRole"],
+    "hierarchy": state["governanceModel"]["hierarchy"],
+    "peerCount": len(state["peerPartners"]),
+    "filesListed": any(e["name"] == "architecture-notes.md" for e in files["entries"]),
+    "fileReadOk": "Curated Lab Notes" in note_doc["content"],
+    "artifactType": art["artifactType"],
+    "evidenceListed": any(e["evidenceId"] == art["evidenceId"] for e in ev_list),
+    "evidenceReadOk": "Síntese de Nova" in ev_read["text"],
+    "initiateStatus": act["status"],
+    "actionStatus": status_check["status"],
+    "actionEvidenceCount": len(status_check.get("resultEvidenceIds", [])),
+    "findingId": finding["finding"]["findingId"],
+}))
+`,
+        "utf8",
+      )
+
+      const proc = Bun.spawn(["python3", novaAutonomousScript], { stdout: "pipe", stderr: "pipe" })
+      const [stdoutText, stderrText, exitCode] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ])
+      expect(exitCode).toBe(0)
+      if (stderrText.trim()) {
+        throw new Error(stderrText)
+      }
+
+      const out = JSON.parse(stdoutText.trim()) as Record<string, unknown>
+      expect(out.toolCount).toBe(9)
+      expect(out.humanRole).toBe("curator")
+      expect(out.hierarchy).toBe("none")
+      expect(out.peerCount).toBe(4)
+      expect(out.filesListed).toBe(true)
+      expect(out.fileReadOk).toBe(true)
+      expect(out.artifactType).toBe("analysis")
+      expect(out.evidenceListed).toBe(true)
+      expect(out.evidenceReadOk).toBe(true)
+      // Autonomous horizontal peer executed moderate web-assessment.http-repeater directly inside curated scope!
+      expect(out.initiateStatus).toBe("succeeded")
+      expect(out.actionStatus).toBe("succeeded")
+      expect(Number(out.actionEvidenceCount)).toBeGreaterThanOrEqual(1)
+      expect(String(out.findingId)).toContain("find-")
+
+      // Verify all 9 gateway actions are recorded in the hub's live inbound activity log
+      const recordedActions = new Set(ws.cdiHub.getOverview().inboundActivity.map((a) => a.action))
+      for (const expectedAction of [
+        "project.state",
+        "workspace.list_files",
+        "workspace.read_file",
+        "artifact.create",
+        "evidence.list",
+        "evidence.read",
+        "action.initiate",
+        "action.status",
+        "finding.propose",
+      ]) {
+        expect(recordedActions.has(expectedAction)).toBe(true)
+      }
+    } finally {
+      targetServer.stop(true)
+      gatewayServer.stop(true)
       ws.close()
       rmSync(tmpDir, { recursive: true, force: true })
     }

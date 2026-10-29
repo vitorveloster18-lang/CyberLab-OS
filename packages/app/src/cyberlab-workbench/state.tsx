@@ -977,11 +977,11 @@ function createWorkbenchService() {
   async function dispatchCdiMission(): Promise<void> {
     const d = drafts["cdi-hub"]
     if (d.selectedPartnerIds.length === 0) {
-      setError("Selecione ao menos um Agente CDI (ex.: Kairós, Naia, Salem ou Nova).")
+      setError("Selecione ao menos um parceiro CDI (ex.: Kairós, Naia, Salem ou Nova).")
       return
     }
     if (!d.objective.trim()) {
-      setError("Informe o objetivo da missão para os Agentes CDI.")
+      setError("Informe o tema, hipótese ou questão para colaboração partilhada com os parceiros CDI.")
       return
     }
     const startedAt = Date.now()
@@ -994,7 +994,7 @@ function createWorkbenchService() {
       targetSummary: `${d.selectedPartnerIds.join(", ")} — ${d.objective.trim().slice(0, 60)}`,
       status: "running",
       evidenceIds: [],
-      summaryText: "Aguardando resposta assinada HMAC-SHA256 dos CDIs...",
+      summaryText: "Aguardando perspetivas assinadas HMAC-SHA256 dos parceiros CDI...",
       outputText: "",
       draftSnapshot: snapshot,
     })
@@ -1014,8 +1014,8 @@ function createWorkbenchService() {
       const formatted = res.results
         .map(
           (r) =>
-            `### ${r.displayName} (${r.partnerId}) — ${r.ok ? "OK" : "FALHA"} (${r.durationMs} ms)\n${
-              r.ok ? r.outcome?.result?.summary || "(sem resumo textual)" : r.error || "Falha de conexão"
+            `### ${r.displayName} (${r.partnerId}) — ${r.ok ? "PARCERIA OK" : "OFFLINE / FALHA"} (${r.durationMs} ms)\n${
+              r.ok ? r.outcome?.result?.summary || "(sem síntese textual)" : r.error || "Falha de conexão"
             }`,
         )
         .join("\n\n")
@@ -1023,10 +1023,10 @@ function createWorkbenchService() {
         status: res.succeededCount > 0 ? "succeeded" : "failed",
         durationMs: Date.now() - startedAt,
         evidenceIds: evIds,
-        summaryText: `${res.succeededCount}/${res.totalDispatched} CDI(s) responderam (${res.mode})`,
+        summaryText: `${res.succeededCount}/${res.totalDispatched} parceiro(s) CDI colaboraram (${res.mode})`,
         outputText: formatted || JSON.stringify(res, null, 2),
       })
-      setNotice(`Despacho CDI concluído: ${res.succeededCount}/${res.totalDispatched} com sucesso.`)
+      setNotice(`Colaboração CDI concluída: ${res.succeededCount}/${res.totalDispatched} parceiro(s) responderam.`)
       await refreshBackend()
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -1254,7 +1254,83 @@ function createWorkbenchService() {
         body: JSON.stringify({ operation: "preset_4" }),
       })
       setBackend("partners", reconcile(res))
-      setNotice("Preset dos 4 CDIs (Kairós 8788, Naia 8789, Salem 8790, Nova 8791) ativado!")
+      setNotice("Perfis autónomos dos 4 parceiros CDI (Kairós 8788, Naia 8789, Salem 8790, Nova 8791 — sem hierarquia) ativados!")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  function openPartnerProfileEditor(partner: {
+    partnerId: string
+    displayName: string
+    specialty: string
+    endpointUrl: string
+    enabled: boolean
+    profile?: { identityNotes: string; interests: string[] }
+    permissions: {
+      readProjectState: boolean
+      readEvidenceAndFiles: boolean
+      createArtifactsAndFindings: boolean
+      initiateActions:
+        | "autonomous_in_scope"
+        | "allow_readonly_and_low_propose_others"
+        | "allow_readonly_propose_others"
+        | "propose_only"
+        | "disabled"
+    }
+  }): void {
+    updateDraft("cdi-hub", (prev) => ({
+      ...prev,
+      editingPartnerId: prev.editingPartnerId === partner.partnerId ? "" : partner.partnerId,
+      editDisplayName: partner.displayName,
+      editSpecialty: partner.specialty,
+      editEndpointUrl: partner.endpointUrl,
+      editIdentityNotes: partner.profile?.identityNotes ?? "",
+      editInterestsText: (partner.profile?.interests ?? []).join(", "),
+      editInitiateActions: partner.permissions.initiateActions,
+      editReadProjectState: partner.permissions.readProjectState,
+      editReadEvidenceAndFiles: partner.permissions.readEvidenceAndFiles,
+      editCreateArtifactsAndFindings: partner.permissions.createArtifactsAndFindings,
+      editEnabled: partner.enabled,
+      editSecretOverride: "",
+    }))
+  }
+
+  async function savePartnerProfile(): Promise<void> {
+    const d = drafts["cdi-hub"]
+    const partnerId = (d.editingPartnerId ?? "").trim()
+    if (!partnerId) return
+    try {
+      const interests = (d.editInterestsText ?? "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+      const secretTrimmed = (d.editSecretOverride ?? "").trim()
+      const res = await cyberlabFetch<PartnersOverviewDto>(serverTarget(), "/api/cyberlab/partners/manage", {
+        method: "POST",
+        body: JSON.stringify({
+          operation: "upsert",
+          partnerId,
+          displayName: (d.editDisplayName ?? "").trim() || partnerId,
+          specialty: (d.editSpecialty ?? "").trim() || undefined,
+          endpointUrl: (d.editEndpointUrl ?? "").trim() || undefined,
+          enabled: d.editEnabled !== false,
+          ...(secretTrimmed.length >= 16 ? { secretOverride: secretTrimmed } : {}),
+          profile: {
+            identityNotes: (d.editIdentityNotes ?? "").trim() || undefined,
+            interests,
+          },
+          permissions: {
+            readProjectState: d.editReadProjectState !== false,
+            readEvidenceAndFiles: d.editReadEvidenceAndFiles !== false,
+            createArtifactsAndFindings: d.editCreateArtifactsAndFindings !== false,
+            initiateActions: d.editInitiateActions ?? "autonomous_in_scope",
+          },
+        }),
+      })
+      setBackend("partners", reconcile(res))
+      updateDraft("cdi-hub", (prev) => ({ ...prev, editingPartnerId: "", editSecretOverride: "" }))
+      setNotice(`Perfil individual do parceiro CDI "${d.editDisplayName || partnerId}" atualizado com sucesso!`)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -1263,14 +1339,15 @@ function createWorkbenchService() {
   async function manageCdiSecret(operation: "generate" | "set" | "reveal"): Promise<void> {
     try {
       const customSecret = drafts["cdi-hub"].customSecretInput.trim()
+      const apiOp = operation === "set" ? "custom" : operation
       const res = await cyberlabFetch<{ sharedSecret: string; cyberlabCallbackUrl: string }>(
         serverTarget(),
         "/api/cyberlab/partners/secret",
         {
           method: "POST",
           body: JSON.stringify({
-            operation,
-            customSecret: operation === "set" ? customSecret : undefined,
+            operation: apiOp,
+            customSecret: apiOp === "custom" ? customSecret : undefined,
           }),
         },
       )
@@ -1361,6 +1438,8 @@ function createWorkbenchService() {
     reviewFindingDecision,
     generateReportMarkdown,
     loadFourCdiPreset,
+    openPartnerProfileEditor,
+    savePartnerProfile,
     manageCdiSecret,
     attachToComposer,
     setNotice,

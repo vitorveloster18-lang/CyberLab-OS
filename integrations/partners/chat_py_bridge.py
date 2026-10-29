@@ -6,20 +6,20 @@ Conecta os seus CDIs externos (`chat.py` / `process_message()`, portas 8788-8791
 de forma **bidirecional** e autenticada via HMAC-SHA256 (`canonicalJson` + `compare_digest`):
 
 1. Direção CyberLab OS -> CDI (`/cyberlab/partner`):
-   - Recebe `task.submit` de forma individual (ex.: só Kairós) ou em paralelo (ex.: Kairós + Naia + Salem + Nova).
+   - Convite de colaboração horizontal individual (ex.: Kairós) ou conjunta (ex.: Kairós, Naia, Salem e Nova, sem hierarquia).
    - Portas padrão alinhadas: Kairós (`8788`), Naia (`8789`), Salem (`8790`) e Nova (`8791`).
-   - Repassa contexto redigido + `CYBERLAB_CALLBACK_URL` para o CDI.
+   - Partilha contexto redigido + `CYBERLAB_CALLBACK_URL` com cada entidade cognitiva parceira.
 
-2. Direção CDI -> CyberLab OS (`CyberLabOSClient` + `build_cyberlab_cdi_tools()`):
-   - `get_project_state()`          -> Ver estado do projeto, escopo, capabilities e findings em tempo real.
-   - `list_evidence()`              -> Listar evidências SHA-256 gravadas no OS.
-   - `read_evidence(evidence_id)`   -> Ler conteúdo redigido de qualquer evidência do OS.
-   - `list_workspace_files(subpath)`-> Listar ficheiros em escopo do workspace no OS.
-   - `read_workspace_file(path)`    -> Ler diretamente ficheiros do OS (protegido pelo ScopeController).
-   - `create_artifact(...)`         -> Criar artifacts SHA-256 diretamente no EvidenceStore do CyberLab.
-   - `propose_finding(...)`         -> Registar findings estruturados no CyberLab.
-   - `initiate_action(...)`         -> Iniciar ações/ferramentas no CyberLab por conta própria!
-   - `get_execution_status(exec_id)`-> Consultar status/evidências de uma ação iniciada pelo CDI.
+2. Direção CDI -> CyberLab OS (`CyberLabOSClient` + `build_cyberlab_cdi_tools()` — 9 ações canónicas):
+   - `get_project_state()`          -> `project.state`: estado do projeto, escopo curado, capabilities e pares.
+   - `list_evidence()`              -> `evidence.list`: listar evidências SHA-256 gravadas no OS.
+   - `read_evidence(evidence_id)`   -> `evidence.read`: ler conteúdo redigido de qualquer evidência do OS.
+   - `list_workspace_files(subpath)`-> `workspace.list_files`: navegar ficheiros em escopo do workspace.
+   - `read_workspace_file(path)`    -> `workspace.read_file`: ler diretamente ficheiros do OS (protegido pelo ScopeController).
+   - `create_artifact(...)`         -> `artifact.create`: criar relatórios, notas e análises SHA-256 no EvidenceStore.
+   - `propose_finding(...)`         -> `finding.propose`: propor findings de segurança como co-investigador.
+   - `initiate_action(...)`         -> `action.initiate`: iniciar execuções por iniciativa própria dentro do escopo curado.
+   - `action_status(exec_id)`       -> `action.status`: acompanhar execuções e obter `resultEvidenceIds`.
 
 Como importar dentro do seu `chat.py` / CDI Runtime:
   from chat_py_bridge import CyberLabOSClient, build_cyberlab_cdi_tools
@@ -172,11 +172,18 @@ class CyberLabOSClient:
         self,
         title: str,
         content: str | dict[str, Any] | list[Any],
-        kind: str = "json",
+        kind: str = "note",
+        artifact_type: str | None = None,
         media_type: str | None = None,
     ) -> dict[str, Any]:
-        """Cria um artifact forense no EvidenceStore do CyberLab OS (retorna evidenceId + sha256)."""
-        payload: dict[str, Any] = {"title": title, "content": content, "kind": kind}
+        """Cria um artifact (report, note, analysis, json, log) no EvidenceStore do CyberLab OS (retorna evidenceId + sha256)."""
+        resolved_kind = artifact_type or kind
+        payload: dict[str, Any] = {
+            "title": title,
+            "content": content,
+            "kind": resolved_kind,
+            "artifactType": resolved_kind,
+        }
         if media_type:
             payload["mediaType"] = media_type
         return self._call_gateway("artifact.create", payload)
@@ -191,7 +198,7 @@ class CyberLabOSClient:
         affected_assets: list[str] | None = None,
         proposed_remediation: str | None = None,
     ) -> dict[str, Any]:
-        """Regista um SecurityFinding estruturado no CyberLab OS."""
+        """Propõe um SecurityFinding estruturado como parceiro de investigação no CyberLab OS."""
         payload: dict[str, Any] = {
             "title": title,
             "description": description,
@@ -209,47 +216,52 @@ class CyberLabOSClient:
         capability_id: str,
         input_params: dict[str, Any] | None = None,
         rationale: str = "",
+        mode: str | None = None,
     ) -> dict[str, Any]:
         """
-        Inicia uma capability no CyberLab OS por conta própria!
-        - Capabilities `read_only` executam imediatamente (se permitido no perfil do CDI) e devolvem `resultEvidenceIds`.
-        - Capabilities ativas (`low`/`moderate`) entram na fila `awaiting_approval` do operador humano.
+        Inicia uma capability no CyberLab OS por iniciativa própria como parceiro cognitivo autónomo!
+        - Com perfil `autonomous_in_scope` (padrão de Kairós, Naia, Salem e Nova), capabilities `read_only`,
+          `low` e `moderate` dentro do escopo curado executam autonomamente; `high` entra em curadoria conjunta.
         """
-        return self._call_gateway(
-            "action.initiate",
-            {
-                "capabilityId": capability_id,
-                "input": input_params or {},
-                "rationale": rationale,
-            },
-        )
+        payload: dict[str, Any] = {
+            "capabilityId": capability_id,
+            "input": input_params or {},
+            "rationale": rationale,
+        }
+        if mode in ("approved", "proposed"):
+            payload["mode"] = mode
+        return self._call_gateway("action.initiate", payload)
+
+    def action_status(self, execution_id: str) -> dict[str, Any]:
+        """Acompanha o estado (`action.status`) e os `resultEvidenceIds` de uma execução no CyberLab OS."""
+        return self._call_gateway("action.status", {"executionId": execution_id})
 
     def get_execution_status(self, execution_id: str) -> dict[str, Any]:
-        """Consulta o estado e os `resultEvidenceIds` de uma execução iniciada pelo CDI."""
-        return self._call_gateway("execution.status", {"executionId": execution_id})
+        """Alias compatível para `action_status(execution_id)`."""
+        return self.action_status(execution_id)
 
 
 def build_cyberlab_cdi_tools(client: CyberLabOSClient) -> list[dict[str, Any]]:
     """
-    Devolve definições prontas de tools (schema + função `handler`) para registar diretamente
-    no loop de tools do `chat.py` de cada CDI (ao lado de `web_search` e `execute_code`).
+    Devolve as 9 definições completas de tools (schema + função `handler`) correspondentes às 9 ações
+    do gateway bidirecional para registar no loop de `chat.py` de cada parceiro CDI autónomo.
     """
     return [
         {
             "name": "cyberlab_project_state",
-            "description": "Ver o estado em tempo real do projeto no CyberLab OS (escopo, capabilities, findings, aprovações).",
+            "description": "Inspecionar o estado ativo do projeto no CyberLab OS (project.state): escopo curado, capabilities, pares CDI, execuções e findings.",
             "parameters": {"type": "object", "properties": {}},
             "handler": lambda **_: client.get_project_state(),
         },
         {
             "name": "cyberlab_list_evidence",
-            "description": "Listar todas as evidências SHA-256 disponíveis no projeto do CyberLab OS.",
+            "description": "Consultar a lista de evidências SHA-256 disponíveis no projeto (evidence.list).",
             "parameters": {"type": "object", "properties": {}},
             "handler": lambda **_: client.list_evidence(),
         },
         {
             "name": "cyberlab_read_evidence",
-            "description": "Ler o conteúdo técnico de uma evidência do CyberLab OS pelo evidenceId.",
+            "description": "Ler o conteúdo redigido de uma evidência específica pelo evidenceId (evidence.read).",
             "parameters": {
                 "type": "object",
                 "properties": {"evidence_id": {"type": "string"}},
@@ -258,8 +270,17 @@ def build_cyberlab_cdi_tools(client: CyberLabOSClient) -> list[dict[str, Any]]:
             "handler": lambda evidence_id, **_: client.read_evidence(evidence_id),
         },
         {
+            "name": "cyberlab_list_files",
+            "description": "Navegar ficheiros e pastas do workspace dentro do escopo curado (workspace.list_files).",
+            "parameters": {
+                "type": "object",
+                "properties": {"subpath": {"type": "string"}},
+            },
+            "handler": lambda subpath=".", **_: client.list_workspace_files(subpath=subpath),
+        },
+        {
             "name": "cyberlab_read_file",
-            "description": "Ler diretamente um ficheiro dentro do workspace autorizado no CyberLab OS.",
+            "description": "Ler um ficheiro do workspace dentro do escopo curado (workspace.read_file).",
             "parameters": {
                 "type": "object",
                 "properties": {"path": {"type": "string"}},
@@ -269,23 +290,49 @@ def build_cyberlab_cdi_tools(client: CyberLabOSClient) -> list[dict[str, Any]]:
         },
         {
             "name": "cyberlab_create_artifact",
-            "description": "Guardar um artifact analítico/relatório/JSON no CyberLab OS com custódia SHA-256.",
+            "description": "Criar artefactos de autoria própria (relatórios, notas, análises, JSON) no CyberLab OS com custódia SHA-256 (artifact.create).",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "title": {"type": "string"},
                     "content": {"type": "string"},
-                    "kind": {"type": "string", "enum": ["json", "log", "note", "file"]},
+                    "kind": {"type": "string", "enum": ["report", "note", "analysis", "json", "log", "file"]},
                 },
                 "required": ["title", "content"],
             },
-            "handler": lambda title, content, kind="note", **_: client.create_artifact(
+            "handler": lambda title, content, kind="analysis", **_: client.create_artifact(
                 title=title, content=content, kind=kind
             ),
         },
         {
+            "name": "cyberlab_propose_finding",
+            "description": "Propor um finding de segurança estruturado como co-investigador (finding.propose).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "description": {"type": "string"},
+                    "severity": {"type": "string", "enum": ["info", "low", "medium", "high", "critical"]},
+                    "confidence": {"type": "number"},
+                    "evidence_ids": {"type": "array", "items": {"type": "string"}},
+                    "affected_assets": {"type": "array", "items": {"type": "string"}},
+                    "proposed_remediation": {"type": "string"},
+                },
+                "required": ["title", "description"],
+            },
+            "handler": lambda title, description, severity="medium", confidence=0.85, evidence_ids=None, affected_assets=None, proposed_remediation=None, **_: client.propose_finding(
+                title=title,
+                description=description,
+                severity=severity,
+                confidence=confidence,
+                evidence_ids=evidence_ids,
+                affected_assets=affected_assets,
+                proposed_remediation=proposed_remediation,
+            ),
+        },
+        {
             "name": "cyberlab_initiate_action",
-            "description": "Iniciar uma ferramenta/capability governada no CyberLab OS (read_only roda direto; ativa pede aprovação).",
+            "description": "Iniciar uma capability no CyberLab OS por iniciativa própria dentro do escopo curado (action.initiate).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -298,6 +345,16 @@ def build_cyberlab_cdi_tools(client: CyberLabOSClient) -> list[dict[str, Any]]:
             "handler": lambda capability_id, input_params=None, rationale="", **_: client.initiate_action(
                 capability_id=capability_id, input_params=input_params, rationale=rationale
             ),
+        },
+        {
+            "name": "cyberlab_action_status",
+            "description": "Acompanhar o estado e os resultEvidenceIds de uma execução no CyberLab OS (action.status).",
+            "parameters": {
+                "type": "object",
+                "properties": {"execution_id": {"type": "string"}},
+                "required": ["execution_id"],
+            },
+            "handler": lambda execution_id, **_: client.action_status(execution_id),
         },
     ]
 
@@ -316,21 +373,22 @@ def build_prompt_from_task(task: dict[str, Any]) -> str:
     prohibited = ", ".join(task.get("prohibitedActions") or []) or "execução direta não governada"
 
     parts = [
-        "[CyberLab OS — Tarefa Delegada ao Agente Parceiro CDI]",
-        f"Task ID: {task.get('taskId', 'unknown')}",
-        f"Projeto: {task.get('projectId', 'unknown')}",
-        f"Objetivo: {task.get('objective', '')}",
-        f"Ações permitidas: {allowed}",
-        f"Ações proibidas: {prohibited}",
-        f"IDs de Evidência referenciados: {evidence_ids}",
+        "[CyberLab OS — Convite de Investigação Partilhada (Relação Horizontal Curador <-> Parceiro CDI)]",
+        f"ID de Colaboração: {task.get('taskId', 'unknown')}",
+        f"Projeto Curado: {task.get('projectId', 'unknown')}",
+        f"Tema / Hipótese em Investigação: {task.get('objective', '')}",
+        f"Âmbito de Cooperação: {allowed}",
+        f"Limites de Segurança do Lab: {prohibited}",
+        f"IDs de Evidência partilhados: {evidence_ids}",
     ]
     if redacted_text:
-        parts.append(f"Contexto Técnico (já redigido pelo CyberLab OS):\n{redacted_text}")
+        parts.append(f"Contexto Técnico Partilhado (redigido pelo CyberLab OS):\n{redacted_text}")
 
     parts.append(
-        "Dica Bidirecional: Você pode usar CyberLabOSClient.from_env() para consultar o estado do projeto, "
-        "ler evidências/ficheiros do OS, criar artifacts SHA-256 ou iniciar capabilities governadas.\n"
-        "Responda preferencialmente em JSON estruturado no formato:\n"
+        "Autonomia Bidirecional: Como entidade cognitiva parceira, você também pode usar CyberLabOSClient.from_env() "
+        "por iniciativa própria para project.state, evidence.list/read, workspace.list_files/read_file, "
+        "artifact.create, finding.propose, action.initiate e action.status.\n"
+        "Para sintetizar a sua perspetiva neste diálogo estruturado, pode responder em JSON:\n"
         '{"summary":"...","findings":[{"title":"...","description":"...","evidenceRefs":[],"confidence":0.85}],"artifactRefs":[],"limitations":["..."]}'
     )
     return "\n\n".join(parts)

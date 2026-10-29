@@ -303,11 +303,42 @@ export namespace CyberLab {
     sha256: Schema.String,
   })
 
+  export const CdiInitiateModeSchema = Schema.Literals([
+    "autonomous_in_scope",
+    "allow_readonly_and_low_propose_others",
+    "allow_readonly_propose_others",
+    "propose_only",
+    "disabled",
+  ])
+
   export const CdiPermissionsInfo = Schema.Struct({
     readProjectState: Schema.Boolean,
     readEvidenceAndFiles: Schema.Boolean,
     createArtifactsAndFindings: Schema.Boolean,
-    initiateActions: Schema.Literals(["disabled", "propose_only", "allow_readonly_propose_others"]),
+    initiateActions: CdiInitiateModeSchema,
+  })
+
+  export const CdiPartnerProfileInfo = Schema.Struct({
+    entityKind: Schema.Literals(["autonomous_cognitive_entity"]),
+    relationshipModel: Schema.Literals(["peer_co_investigator"]),
+    hierarchy: Schema.Literals(["none"]),
+    collaborationMode: Schema.Literals(["self_directed_and_shared_interest"]),
+    identityNotes: Schema.String,
+    interests: Schema.Array(Schema.String),
+  })
+
+  export const CdiPartnerProfileInput = Schema.Struct({
+    identityNotes: optional(Schema.String),
+    interests: optional(Schema.Array(Schema.String)),
+  })
+
+  export const CdiGovernanceModelInfo = Schema.Struct({
+    relationship: Schema.Literals(["horizontal_peer_partnership"]),
+    humanRole: Schema.Literals(["curator"]),
+    cdiNature: Schema.Literals(["autonomous_cognitive_entities"]),
+    hierarchy: Schema.Literals(["none"]),
+    collaborationBasis: Schema.Literals(["self_initiative_or_shared_interest"]),
+    supportedGatewayActions: Schema.Array(Schema.String),
   })
 
   export const CdiPartnerInfo = Schema.Struct({
@@ -317,6 +348,7 @@ export namespace CyberLab {
     endpointUrl: Schema.String,
     enabled: Schema.Boolean,
     usesCustomSecret: Schema.Boolean,
+    profile: CdiPartnerProfileInfo,
     permissions: CdiPermissionsInfo,
   })
 
@@ -330,6 +362,7 @@ export namespace CyberLab {
   })
 
   export const CdiHubOverview = Schema.Struct({
+    governanceModel: optional(CdiGovernanceModelInfo),
     secretConfigured: Schema.Boolean,
     secretPreview: Schema.String,
     cyberlabCallbackUrl: Schema.String,
@@ -347,6 +380,7 @@ export namespace CyberLab {
     enabled: optional(Schema.Boolean),
     secretOverride: optional(Schema.String),
     baseHost: optional(Schema.String),
+    profile: optional(CdiPartnerProfileInput),
     permissions: optional(CdiPermissionsInfo),
   })
 

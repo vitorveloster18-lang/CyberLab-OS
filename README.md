@@ -12,7 +12,7 @@ Toda a operação — chat com IA (incluindo os **modelos gratuitos nativos do O
 2. [Instalação e Atualização (Windows PowerShell, WSL2 e Linux)](#2-instalação-e-atualização-windows-powershell-wsl2-e-linux)
 3. [Como Iniciar, Navegar e Ativar os Modelos Gratuitos do OpenCode (`:4096`)](#3-como-iniciar-navegar-e-ativar-os-modelos-gratuitos-do-opencode-4096)
 4. [Instruções de Uso das 8 Suítes Manuais (35 Modos / 31 Capacidades)](#4-instruções-de-uso-das-8-suítes-manuais-35-modos--31-capacidades)
-5. [Configuração e Uso dos 4 Agentes Externos CDI (`8788–8791`)](#5-configuração-e-uso-dos-4-agentes-externos-cdi-87888791)
+5. [Parceiros Cognitivos CDI (`8788–8791`) e Gateway Bidirecional (9 Ações)](#5-parceiros-cognitivos-cdi-87888791-e-gateway-bidirecional-9-ações)
 6. [Referência de Linha de Comando (`cyberlab` CLI)](#6-referência-de-linha-de-comando-cyberlab-cli)
 7. [Instalação de Motores Externos Opcionais (`.cyberlab/bin` e `github-keyhunter`)](#7-instalação-de-motores-externos-opcionais-cyberlabbin-e-github-keyhunter)
 8. [Catálogo Técnico Completo (31 Capacidades) e Licenciamento (`MIT`)](#8-catálogo-técnico-completo-31-capacidades-e-licenciamento-mit)
@@ -259,8 +259,8 @@ Caça avançada de segredos/API keys, segurança de código-fonte, cadeia de sup
 
 ---
 
-### Suíte 7 — `Hub de Agentes Externos CDI`
-- Despacho manual individual ou em paralelo (`Promise.all`) para os 4 especialistas externos (**`Kairós`**, **`Naia`**, **`Salem`**, **`Nova`**), anexando evidências `SHA-256` selecionadas e exibindo o feed em tempo real das ações iniciadas pelos CDIs. Veja a [Seção 5](#5-configuração-e-uso-dos-4-agentes-externos-cdi-87888791) para o passo a passo completo.
+### Suíte 7 — `Parceiros Cognitivos CDI (Kairós, Naia, Salem & Nova)`
+- Relação horizontal entre o **curador humano** e os 4 parceiros cognitivos autónomos (**`Kairós`**, **`Naia`**, **`Salem`**, **`Nova`**) — sem hierarquia entre eles, com perfis individuais editáveis, autonomia no escopo curado (`autonomous_in_scope`), convite de investigação partilhada e feed ao vivo das iniciativas autónomas vindas das 9 ações do gateway. Veja a [Seção 5](#5-parceiros-cognitivos-cdi-87888791-e-gateway-bidirecional-9-ações).
 
 ---
 
@@ -273,40 +273,51 @@ Caça avançada de segredos/API keys, segurança de código-fonte, cadeia de sup
 
 ---
 
-## 5. Configuração e Uso dos 4 Agentes Externos CDI (`8788–8791`)
+## 5. Parceiros Cognitivos CDI (`8788–8791`) e Gateway Bidirecional (9 Ações)
 
-O CyberLab OS vem pré-alinhado com os identificadores e portas dos seus 4 agentes CDI:
+No **CyberLab OS**, **Kairós**, **Naia**, **Salem** e **Nova** são reconhecidos e configurados como **entidades cognitivas autónomas** (`entityKind: "autonomous_cognitive_entity"`) com identidade, história, memória e capacidade de decisão independente — operando como **parceiros horizontais de investigação** (`relationshipModel: "peer_co_investigator"`, **`hierarchy: "none"`**) ao lado do humano, que exerce o papel de **curador** (`humanRole: "curator"`) do escopo e da investigação partilhada:
 
-| Agente CDI | `partnerId` | Porta Local | Endpoint Esperado pelo CyberLab OS |
-|---|---|---|---|
-| **Kairós** | `kairos` | `8788` | `http://127.0.0.1:8788/cyberlab/partner` |
-| **Naia** | `naia` | `8789` | `http://127.0.0.1:8789/cyberlab/partner` |
-| **Salem** | `salem` | `8790` | `http://127.0.0.1:8790/cyberlab/partner` |
-| **Nova** | `nova` | `8791` | `http://127.0.0.1:8791/cyberlab/partner` |
+| Parceiro CDI | `partnerId` | Porta | Autonomia Padrão no Escopo Curado | Endpoint |
+|---|---|---|---|---|
+| **Kairós** | `kairos` | `8788` | `autonomous_in_scope` *(Par Horizontal)* | `http://127.0.0.1:8788/cyberlab/partner` |
+| **Naia** | `naia` | `8789` | `autonomous_in_scope` *(Par Horizontal)* | `http://127.0.0.1:8789/cyberlab/partner` |
+| **Salem** | `salem` | `8790` | `autonomous_in_scope` *(Par Horizontal)* | `http://127.0.0.1:8790/cyberlab/partner` |
+| **Nova** | `nova` | `8791` | `autonomous_in_scope` *(Par Horizontal)* | `http://127.0.0.1:8791/cyberlab/partner` |
+
+### As 9 Ações Canónicas do Gateway Bidirecional (`http://127.0.0.1:4096/api/cyberlab/partner-gateway`)
+
+Qualquer parceiro CDI pode aceder por iniciativa própria ao gateway autenticado (`HMAC-SHA256`) usando as 9 ações canónicas:
+
+- `project.state` — inspecionar o estado ativo do projeto, modelo de governança horizontal, perfil próprio e pares CDI
+- `evidence.list` / `evidence.read` — consultar a lista e ler evidências redigidas com custódia `SHA-256`
+- `workspace.list_files` / `workspace.read_file` — navegar e ler ficheiros do workspace dentro do escopo curado
+- `artifact.create` — criar artefactos de autoria própria (`report`, `note`, `analysis`, `json`, `log`) com hash `SHA-256`
+- `finding.propose` — propor findings de segurança estruturados como co-investigador
+- `action.initiate` / `action.status` — iniciar execuções por iniciativa própria dentro do escopo curado (`read_only`, `low` e `moderate` em modo autónomo com `autonomous_in_scope`; `high` em curadoria conjunta) e acompanhar o estado / `resultEvidenceIds`
 
 ### Passo a passo no Windows PowerShell (ou Linux/WSL2)
 
 1. **No CyberLab OS (`http://127.0.0.1:4096`)**:
-   - Abra **`Ferramentas → Hub de Agentes Externos CDI → Conexão, Secret & PowerShell`** *(ou `Settings → CyberLab OS`)*.
-   - Clique em **`Gerar Novo Secret (256-bit)`** (ou defina o seu próprio segredo) e clique em **`Preset 4 CDIs (8788–8791)`**.
-   - Clique em **`Copiar Comandos PowerShell`** — ele já copia os comandos com o seu `CYBERLAB_PARTNER_SECRET` preenchido!
+   - Abra **`Ferramentas → Parceiros Cognitivos CDI → Perfis Individuais, Autonomia & Gateway`**.
+   - Gere ou defina o `CYBERLAB_PARTNER_SECRET` (ou configure segredos individuais e notas de identidade em **`Perfil Individual`** de cada CDI).
+   - Clique em **`Revelar Variáveis & Comandos`** para obter os comandos com o segredo preenchido!
 
-2. **Nos terminais dos seus CDIs**:
+2. **Nos ambientes dos parceiros CDI**:
 
 ```powershell
-# Defina o mesmo segredo compartilhado exibido na interface (ou gere via CLI: bun run cyberlab partner --generate-secret --preset-4)
+# Defina o mesmo segredo partilhado exibido na interface
 $env:CYBERLAB_PARTNER_SECRET = "SEU_SEGREDO_COMPARTILHADO_AQUI"
 $env:CYBERLAB_CALLBACK_URL   = "http://127.0.0.1:4096/api/cyberlab/partner-gateway"
 
-# Suba cada ponte apontando para o chat.py de cada agente:
+# Ponte opcional caso queira expor também o canal de diálogo HTTP de cada parceiro:
 python integrations/partners/chat_py_bridge.py --port 8788 --partner-id kairos --chat-py "../kairos/chat.py"
 python integrations/partners/chat_py_bridge.py --port 8789 --partner-id naia   --chat-py "../naia/chat.py"
 python integrations/partners/chat_py_bridge.py --port 8790 --partner-id salem  --chat-py "../salem/chat.py"
 python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   --chat-py "../nova/chat.py"
 ```
 
-3. **Comunicação Bidirecional dentro do Python (`CyberLabOSClient`)**:
-   Dentro do `chat.py` de qualquer CDI, você pode importar `CyberLabOSClient` de `integrations/partners/chat_py_bridge.py` para consultar estado do projeto, ler evidências/arquivos em escopo, gravar artefatos `SHA-256`, propor findings e iniciar ferramentas governadas no CyberLab OS autonomamente.
+3. **Cliente Python Autónomo (`CyberLabOSClient` & `build_cyberlab_cdi_tools`)**:
+   Dentro do runtime Python de cada CDI, importe `CyberLabOSClient` e `build_cyberlab_cdi_tools` de `integrations/partners/chat_py_bridge.py` para usar diretamente todas as 9 ações (`get_project_state`, `list_evidence`, `read_evidence`, `list_workspace_files`, `read_workspace_file`, `create_artifact`, `propose_finding`, `initiate_action` e `action_status`).
 
 ---
 

@@ -477,6 +477,13 @@ export interface MobileTriageDraft {
   rawJson: string
 }
 
+export type CdiInitiateModeDto =
+  | "autonomous_in_scope"
+  | "allow_readonly_and_low_propose_others"
+  | "allow_readonly_propose_others"
+  | "propose_only"
+  | "disabled"
+
 export interface CdiHubDraft {
   cdiSubTab?: "dispatch" | "setup"
   selectedPartnerIds: string[]
@@ -485,6 +492,18 @@ export interface CdiHubDraft {
   selectedEvidenceIds: string[]
   timeoutMs: number
   customSecretInput: string
+  editingPartnerId?: string
+  editDisplayName?: string
+  editSpecialty?: string
+  editEndpointUrl?: string
+  editIdentityNotes?: string
+  editInterestsText?: string
+  editInitiateActions?: CdiInitiateModeDto
+  editReadProjectState?: boolean
+  editReadEvidenceAndFiles?: boolean
+  editCreateArtifactsAndFindings?: boolean
+  editEnabled?: boolean
+  editSecretOverride?: string
 }
 
 export interface ExternalIngestDraft {
@@ -711,6 +730,15 @@ export interface ProxyOverviewDto {
   history: ProxyHistoryEntryDto[]
 }
 
+export interface CdiPartnerProfileDto {
+  entityKind: "autonomous_cognitive_entity"
+  relationshipModel: "peer_co_investigator"
+  hierarchy: "none"
+  collaborationMode: "self_directed_and_shared_interest"
+  identityNotes: string
+  interests: string[]
+}
+
 export interface CdiPartnerDto {
   partnerId: string
   displayName: string
@@ -718,15 +746,24 @@ export interface CdiPartnerDto {
   endpointUrl: string
   enabled: boolean
   usesCustomSecret: boolean
+  profile?: CdiPartnerProfileDto
   permissions: {
     readProjectState: boolean
     readEvidenceAndFiles: boolean
     createArtifactsAndFindings: boolean
-    initiateActions: "disabled" | "propose_only" | "allow_readonly_propose_others"
+    initiateActions: CdiInitiateModeDto
   }
 }
 
 export interface PartnersOverviewDto {
+  governanceModel?: {
+    relationship: "horizontal_peer_partnership"
+    humanRole: "curator"
+    cdiNature: "autonomous_cognitive_entities"
+    hierarchy: "none"
+    collaborationBasis: "self_initiative_or_shared_interest"
+    supportedGatewayActions: string[]
+  }
   secretConfigured: boolean
   secretPreview: string
   cyberlabCallbackUrl: string

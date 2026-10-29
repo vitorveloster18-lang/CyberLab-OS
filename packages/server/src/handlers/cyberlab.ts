@@ -120,6 +120,7 @@ const buildGatewayDiscoveryInfo = Effect.gen(function* () {
     canonicalUrl: overview.cyberlabCallbackUrl || "http://127.0.0.1:4096/api/cyberlab/partner-gateway",
     methods: ["GET", "POST"],
     auth: "HMAC-SHA256 canonicalJson envelope (CYBERLAB_PARTNER_SECRET)",
+    governanceModel: overview.governanceModel,
     supportedActions: [
       "project.state",
       "evidence.list",
@@ -135,8 +136,11 @@ const buildGatewayDiscoveryInfo = Effect.gen(function* () {
     registeredPartners: overview.partners.map((p) => ({
       partnerId: p.partnerId,
       displayName: p.displayName,
+      specialty: p.specialty,
       endpointUrl: p.endpointUrl,
       enabled: p.enabled,
+      profile: p.profile,
+      permissions: p.permissions,
     })),
   }
 })
@@ -464,11 +468,23 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
               if (!payload.partnerId) throw new Error("partnerId is required for upsert")
               ws.cdiHub.upsertPartner({
                 partnerId: payload.partnerId,
-                displayName: payload.displayName ?? payload.partnerId,
+                displayName: payload.displayName ?? "",
                 ...(payload.specialty !== undefined ? { specialty: payload.specialty } : {}),
-                endpointUrl: payload.endpointUrl ?? "http://127.0.0.1:8788/cyberlab/partner",
+                endpointUrl: payload.endpointUrl ?? "",
                 ...(payload.enabled !== undefined ? { enabled: payload.enabled } : {}),
                 ...(payload.secretOverride !== undefined ? { secretOverride: payload.secretOverride } : {}),
+                ...(payload.profile !== undefined
+                  ? {
+                      profile: {
+                        ...(payload.profile.identityNotes !== undefined
+                          ? { identityNotes: payload.profile.identityNotes }
+                          : {}),
+                        ...(payload.profile.interests !== undefined
+                          ? { interests: [...payload.profile.interests] }
+                          : {}),
+                      },
+                    }
+                  : {}),
                 ...(payload.permissions !== undefined ? { permissions: payload.permissions } : {}),
               })
             }

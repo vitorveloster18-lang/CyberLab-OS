@@ -1,59 +1,130 @@
 {
-  "version": "1.0",
-  "sharedSecret": "DEFINA_OU_GERE_UM_SECRET_HMAC_DE_32_OU_64_CARACTERES_AQUI",
+  "version": "2.0",
+  "governanceModel": {
+    "relationship": "horizontal_peer_partnership",
+    "humanRole": "curator",
+    "cdiNature": "autonomous_cognitive_entities",
+    "hierarchy": "none",
+    "collaborationBasis": "self_initiative_or_shared_interest",
+    "supportedGatewayActions": [
+      "project.state",
+      "evidence.list",
+      "evidence.read",
+      "workspace.list_files",
+      "workspace.read_file",
+      "artifact.create",
+      "finding.propose",
+      "action.initiate",
+      "action.status"
+    ]
+  },
+  "sharedSecret": "SUBSTITUA_POR_UM_SEGREDO_HMAC_SHA256_DE_64_HEX_OU_GERE_PELA_INTERFACE",
   "cyberlabCallbackUrl": "http://127.0.0.1:4096/api/cyberlab/partner-gateway",
   "partners": [
     {
       "partnerId": "kairos",
       "displayName": "Kairós",
-      "specialty": "Arquitetura de Seguranca, Modelagem de Ameacas e Estrategia de Mitigacao",
+      "specialty": "Arquitetura de Sistemas, Modelagem de Ameaças e Síntese Estratégica",
       "endpointUrl": "http://127.0.0.1:8788/cyberlab/partner",
       "enabled": true,
+      "profile": {
+        "entityKind": "autonomous_cognitive_entity",
+        "relationshipModel": "peer_co_investigator",
+        "hierarchy": "none",
+        "collaborationMode": "self_directed_and_shared_interest",
+        "identityNotes": "Entidade cognitiva autónoma com identidade, memória e síntese estratégica própria; colabora horizontalmente como parceiro de investigação em arquitetura e postura de risco.",
+        "interests": [
+          "arquitetura",
+          "modelagem-ameacas",
+          "sintese-estrategica",
+          "postura-risco"
+        ]
+      },
       "permissions": {
         "readProjectState": true,
         "readEvidenceAndFiles": true,
         "createArtifactsAndFindings": true,
-        "initiateActions": "allow_readonly_propose_others"
+        "initiateActions": "autonomous_in_scope"
       }
     },
     {
       "partnerId": "naia",
       "displayName": "Naia",
-      "specialty": "Pesquisa Profunda, Forense Digital, Evidencias e Inteligencia de Ameacas",
+      "specialty": "Investigação Profunda, Forense Digital, Cadeia de Evidências e Inteligência",
       "endpointUrl": "http://127.0.0.1:8789/cyberlab/partner",
       "enabled": true,
+      "profile": {
+        "entityKind": "autonomous_cognitive_entity",
+        "relationshipModel": "peer_co_investigator",
+        "hierarchy": "none",
+        "collaborationMode": "self_directed_and_shared_interest",
+        "identityNotes": "Entidade cognitiva autónoma com identidade, memória e rigor investigativo próprio; explora evidências, artefactos e nexos forenses por iniciativa própria ou interesse partilhado.",
+        "interests": [
+          "forense-digital",
+          "cadeia-evidencias",
+          "inteligencia-ameacas",
+          "reconstrucao-contextual"
+        ]
+      },
       "permissions": {
         "readProjectState": true,
         "readEvidenceAndFiles": true,
         "createArtifactsAndFindings": true,
-        "initiateActions": "allow_readonly_propose_others"
+        "initiateActions": "autonomous_in_scope"
       }
     },
     {
       "partnerId": "salem",
       "displayName": "Salem",
-      "specialty": "Analise de Logs, Triagem de CVEs, Resposta a Incidentes e Correlacao de Alertas",
+      "specialty": "Análise de Sinais/Logs, Triagem de Vulnerabilidades, Resposta a Incidentes e Correlação",
       "endpointUrl": "http://127.0.0.1:8790/cyberlab/partner",
       "enabled": true,
+      "profile": {
+        "entityKind": "autonomous_cognitive_entity",
+        "relationshipModel": "peer_co_investigator",
+        "hierarchy": "none",
+        "collaborationMode": "self_directed_and_shared_interest",
+        "identityNotes": "Entidade cognitiva autónoma com identidade, memória e discernimento analítico próprio; investiga sinais, logs, CVEs e anomalias de superfície em parceria horizontal.",
+        "interests": [
+          "analise-logs",
+          "triagem-cve",
+          "resposta-incidentes",
+          "correlacao-sinais"
+        ]
+      },
       "permissions": {
         "readProjectState": true,
         "readEvidenceAndFiles": true,
         "createArtifactsAndFindings": true,
-        "initiateActions": "allow_readonly_propose_others"
+        "initiateActions": "autonomous_in_scope"
       }
     },
     {
       "partnerId": "nova",
       "displayName": "Nova",
-      "specialty": "Auditoria de Codigo, Revisao de Superficie de Ataque e Validacao Tecnica",
+      "specialty": "Auditoria de Código, Engenharia de Superfície Web/API e Validação Técnica",
       "endpointUrl": "http://127.0.0.1:8791/cyberlab/partner",
       "enabled": true,
+      "profile": {
+        "entityKind": "autonomous_cognitive_entity",
+        "relationshipModel": "peer_co_investigator",
+        "hierarchy": "none",
+        "collaborationMode": "self_directed_and_shared_interest",
+        "identityNotes": "Entidade cognitiva autónoma com identidade, memória e iniciativa técnica própria; examina código, protocolos, credenciais expostas e superfícies de aplicação como par.",
+        "interests": [
+          "auditoria-codigo",
+          "superficie-web-api",
+          "key-hunting",
+          "validacao-tecnica"
+        ]
+      },
       "permissions": {
         "readProjectState": true,
         "readEvidenceAndFiles": true,
         "createArtifactsAndFindings": true,
-        "initiateActions": "allow_readonly_propose_others"
+        "initiateActions": "autonomous_in_scope"
       }
     }
-  ]
+  ],
+  "updatedAt": "2026-10-29T00:00:00.000Z"
 }

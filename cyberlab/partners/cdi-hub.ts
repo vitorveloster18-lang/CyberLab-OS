@@ -14,13 +14,42 @@ import { PartnerAuthError, type PartnerAuthenticator } from "./authentication.js
 import type { PartnerBridge, PartnerDispatchOutcome } from "./bridge.js"
 import { HttpPartnerTransport } from "./transport.js"
 
-export type CdiInitiateMode = "disabled" | "propose_only" | "allow_readonly_propose_others"
+export type CdiInitiateMode =
+  | "autonomous_in_scope"
+  | "allow_readonly_and_low_propose_others"
+  | "allow_readonly_propose_others"
+  | "propose_only"
+  | "disabled"
 
 export interface CdiPartnerPermissions {
   readProjectState: boolean
   readEvidenceAndFiles: boolean
   createArtifactsAndFindings: boolean
   initiateActions: CdiInitiateMode
+}
+
+export interface CdiPartnerProfile {
+  /** CDIs are autonomous cognitive entities, never tools, extensions, or sub-processes */
+  entityKind: "autonomous_cognitive_entity"
+  /** Horizontal co-investigation alongside the human curator */
+  relationshipModel: "peer_co_investigator"
+  /** Zero hierarchy among Kairós, Naia, Salem, Nova, or other CDIs */
+  hierarchy: "none"
+  /** Collaboration arises from self-direction or shared investigative interest */
+  collaborationMode: "self_directed_and_shared_interest"
+  /** Individual identity, memory/perspective context, and autonomous focus */
+  identityNotes: string
+  /** Independent investigative interest tags */
+  interests: string[]
+}
+
+export interface CdiGovernanceModel {
+  relationship: "horizontal_peer_partnership"
+  humanRole: "curator"
+  cdiNature: "autonomous_cognitive_entities"
+  hierarchy: "none"
+  collaborationBasis: "self_initiative_or_shared_interest"
+  supportedGatewayActions: readonly CdiCanonicalGatewayAction[]
 }
 
 export interface CdiPartnerEntry {
@@ -31,6 +60,7 @@ export interface CdiPartnerEntry {
   enabled: boolean
   /** Optional per-CDI secret override; if omitted, inherits global sharedSecret. */
   secretOverride?: string
+  profile: CdiPartnerProfile
   permissions: CdiPartnerPermissions
 }
 
@@ -39,23 +69,29 @@ export interface CdiPublicPartnerEntry extends Omit<CdiPartnerEntry, "secretOver
 }
 
 interface PersistedPartnersFile {
-  version: "1.0"
+  version: "1.0" | "2.0"
+  governanceModel?: CdiGovernanceModel
   sharedSecret: string
   cyberlabCallbackUrl?: string
   partners: CdiPartnerEntry[]
   updatedAt: string
 }
 
-export type CdiInboundAction =
-  | "project.state"
-  | "evidence.list"
-  | "evidence.read"
-  | "workspace.list_files"
-  | "workspace.read_file"
-  | "artifact.create"
-  | "finding.propose"
-  | "action.initiate"
-  | "execution.status"
+export const CDI_CANONICAL_GATEWAY_ACTIONS = [
+  "project.state",
+  "evidence.list",
+  "evidence.read",
+  "workspace.list_files",
+  "workspace.read_file",
+  "artifact.create",
+  "finding.propose",
+  "action.initiate",
+  "action.status",
+] as const
+
+export type CdiCanonicalGatewayAction = (typeof CDI_CANONICAL_GATEWAY_ACTIONS)[number]
+
+export type CdiInboundAction = CdiCanonicalGatewayAction | "execution.status"
 
 export interface CdiInboundRequestEnvelope {
   protocol: "cyberlab-cdi-gateway"
@@ -107,44 +143,80 @@ export interface MultiCdiDispatchReport {
   results: MultiCdiDispatchItem[]
 }
 
+export const CDI_GOVERNANCE_MODEL: CdiGovernanceModel = {
+  relationship: "horizontal_peer_partnership",
+  humanRole: "curator",
+  cdiNature: "autonomous_cognitive_entities",
+  hierarchy: "none",
+  collaborationBasis: "self_initiative_or_shared_interest",
+  supportedGatewayActions: CDI_CANONICAL_GATEWAY_ACTIONS,
+}
+
 const DEFAULT_PERMISSIONS: CdiPartnerPermissions = {
   readProjectState: true,
   readEvidenceAndFiles: true,
   createArtifactsAndFindings: true,
-  initiateActions: "allow_readonly_propose_others",
+  initiateActions: "autonomous_in_scope",
+}
+
+function createPeerProfile(identityNotes: string, interests: string[]): CdiPartnerProfile {
+  return {
+    entityKind: "autonomous_cognitive_entity",
+    relationshipModel: "peer_co_investigator",
+    hierarchy: "none",
+    collaborationMode: "self_directed_and_shared_interest",
+    identityNotes,
+    interests: [...interests],
+  }
 }
 
 export const FOUR_CDI_PRESET_ENTRIES: readonly CdiPartnerEntry[] = [
   {
     partnerId: "kairos",
     displayName: "Kairós",
-    specialty: "Arquitetura de Segurança, Modelagem de Ameaças e Estratégia de Mitigação",
+    specialty: "Arquitetura de Sistemas, Modelagem de Ameaças e Síntese Estratégica",
     endpointUrl: "http://127.0.0.1:8788/cyberlab/partner",
     enabled: true,
+    profile: createPeerProfile(
+      "Entidade cognitiva autónoma com identidade, memória e síntese estratégica própria; colabora horizontalmente como parceiro de investigação em arquitetura e postura de risco.",
+      ["arquitetura", "modelagem-ameacas", "sintese-estrategica", "postura-risco"],
+    ),
     permissions: { ...DEFAULT_PERMISSIONS },
   },
   {
     partnerId: "naia",
     displayName: "Naia",
-    specialty: "Pesquisa Profunda, Forense Digital, Evidências e Inteligência de Ameaças",
+    specialty: "Investigação Profunda, Forense Digital, Cadeia de Evidências e Inteligência",
     endpointUrl: "http://127.0.0.1:8789/cyberlab/partner",
     enabled: true,
+    profile: createPeerProfile(
+      "Entidade cognitiva autónoma com identidade, memória e rigor investigativo próprio; explora evidências, artefactos e nexos forenses por iniciativa própria ou interesse partilhado.",
+      ["forense-digital", "cadeia-evidencias", "inteligencia-ameacas", "reconstrucao-contextual"],
+    ),
     permissions: { ...DEFAULT_PERMISSIONS },
   },
   {
     partnerId: "salem",
     displayName: "Salem",
-    specialty: "Análise de Logs, Triagem de CVEs, Resposta a Incidentes e Correlação de Alertas",
+    specialty: "Análise de Sinais/Logs, Triagem de Vulnerabilidades, Resposta a Incidentes e Correlação",
     endpointUrl: "http://127.0.0.1:8790/cyberlab/partner",
     enabled: true,
+    profile: createPeerProfile(
+      "Entidade cognitiva autónoma com identidade, memória e discernimento analítico próprio; investiga sinais, logs, CVEs e anomalias de superfície em parceria horizontal.",
+      ["analise-logs", "triagem-cve", "resposta-incidentes", "correlacao-sinais"],
+    ),
     permissions: { ...DEFAULT_PERMISSIONS },
   },
   {
     partnerId: "nova",
     displayName: "Nova",
-    specialty: "Auditoria de Código, Revisão de Superfície de Ataque e Validação Técnica",
+    specialty: "Auditoria de Código, Engenharia de Superfície Web/API e Validação Técnica",
     endpointUrl: "http://127.0.0.1:8791/cyberlab/partner",
     enabled: true,
+    profile: createPeerProfile(
+      "Entidade cognitiva autónoma com identidade, memória e iniciativa técnica própria; examina código, protocolos, credenciais expostas e superfícies de aplicação como par.",
+      ["auditoria-codigo", "superficie-web-api", "key-hunting", "validacao-tecnica"],
+    ),
     permissions: { ...DEFAULT_PERMISSIONS },
   },
 ]
@@ -193,7 +265,6 @@ export class CdiPartnerHub {
   private readonly inboundActivity: CdiInboundActivityEntry[] = []
   private readonly configPath: string
   private readonly maxClockSkewMs = 5 * 60 * 1000
-  private readonlyPolicyRuleInstalled = false
 
   constructor(private readonly deps: CdiPartnerHubDeps) {
     this.configPath = path.join(deps.workspaceRoot, ".cyberlab", "partners.json")
@@ -208,6 +279,42 @@ export class CdiPartnerHub {
     this.syncAllToAuthenticator()
   }
 
+  private resolveDefaultProfileFor(partnerId: string, displayName: string): CdiPartnerProfile {
+    const preset = FOUR_CDI_PRESET_ENTRIES.find((p) => p.partnerId === partnerId)
+    if (preset) {
+      return {
+        ...preset.profile,
+        interests: [...preset.profile.interests],
+      }
+    }
+    return createPeerProfile(
+      `${displayName} atua como entidade cognitiva autónoma com identidade, memória e decisão própria em parceria horizontal com o curador.`,
+      ["investigacao-autonoma", "correlacao-evidencias"],
+    )
+  }
+
+  private normalizeProfile(
+    partnerId: string,
+    displayName: string,
+    raw?: Partial<CdiPartnerProfile>,
+  ): CdiPartnerProfile {
+    const fallback = this.resolveDefaultProfileFor(partnerId, displayName)
+    return {
+      entityKind: "autonomous_cognitive_entity",
+      relationshipModel: "peer_co_investigator",
+      hierarchy: "none",
+      collaborationMode: "self_directed_and_shared_interest",
+      identityNotes:
+        typeof raw?.identityNotes === "string" && raw.identityNotes.trim().length > 0
+          ? raw.identityNotes.trim()
+          : fallback.identityNotes,
+      interests:
+        Array.isArray(raw?.interests) && raw.interests.length > 0
+          ? raw.interests.map((tag) => String(tag).trim()).filter(Boolean)
+          : fallback.interests,
+    }
+  }
+
   private loadInitialConfig(): void {
     const candidates = [
       this.configPath,
@@ -217,6 +324,7 @@ export class CdiPartnerHub {
       if (!existsSync(candidate)) continue
       try {
         const raw = JSON.parse(readFileSync(candidate, "utf8")) as Partial<PersistedPartnersFile>
+        const isLegacyV1 = raw.version !== "2.0"
         if (typeof raw.sharedSecret === "string" && raw.sharedSecret.trim().length >= 16) {
           // Explicit env var still overrides if user set CYBERLAB_PARTNER_SECRET in shell
           if (!process.env.CYBERLAB_PARTNER_SECRET?.trim()) {
@@ -229,19 +337,34 @@ export class CdiPartnerHub {
         if (Array.isArray(raw.partners) && raw.partners.length > 0) {
           for (const p of raw.partners) {
             if (p && typeof p.partnerId === "string" && p.partnerId.trim()) {
-              this.partners.set(p.partnerId.trim(), {
-                partnerId: p.partnerId.trim(),
-                displayName: p.displayName || p.partnerId.trim(),
-                specialty: p.specialty || "General Security Analyst",
-                endpointUrl: p.endpointUrl || "http://127.0.0.1:8788/cyberlab/partner",
+              const id = p.partnerId.trim()
+              const preset = FOUR_CDI_PRESET_ENTRIES.find((item) => item.partnerId === id)
+              const displayName = p.displayName || preset?.displayName || id
+              const migratedInitiateActions: CdiInitiateMode =
+                isLegacyV1 &&
+                preset &&
+                (!p.permissions?.initiateActions || p.permissions.initiateActions === "allow_readonly_propose_others")
+                  ? "autonomous_in_scope"
+                  : (p.permissions?.initiateActions ?? DEFAULT_PERMISSIONS.initiateActions)
+
+              this.partners.set(id, {
+                partnerId: id,
+                displayName,
+                specialty: p.specialty || preset?.specialty || "Parceiro Cognitivo de Investigação",
+                endpointUrl: p.endpointUrl || preset?.endpointUrl || "http://127.0.0.1:8788/cyberlab/partner",
                 enabled: p.enabled !== false,
                 ...(p.secretOverride && p.secretOverride.length >= 16 ? { secretOverride: p.secretOverride } : {}),
+                profile: this.normalizeProfile(id, displayName, p.profile),
                 permissions: {
                   ...DEFAULT_PERMISSIONS,
                   ...(p.permissions ?? {}),
+                  initiateActions: migratedInitiateActions,
                 },
               })
             }
+          }
+          if (isLegacyV1 && candidate === this.configPath) {
+            this.saveConfigIfPersistent()
           }
           return
         }
@@ -257,6 +380,8 @@ export class CdiPartnerHub {
     FOUR_CDI_PRESET_ENTRIES.forEach((preset, idx) => {
       this.partners.set(preset.partnerId, {
         ...preset,
+        profile: { ...preset.profile, interests: [...preset.profile.interests] },
+        permissions: { ...preset.permissions },
         endpointUrl: `http://127.0.0.1:${defaultPorts[idx]}/cyberlab/partner`,
       })
     })
@@ -267,9 +392,10 @@ export class CdiPartnerHub {
       this.partners.set(envId, {
         partnerId: envId,
         displayName: envId,
-        specialty: "External Python CDI Agent",
+        specialty: "Parceiro Cognitivo CDI Externo",
         endpointUrl: process.env.CYBERLAB_PARTNER_URL.trim(),
         enabled: true,
+        profile: this.resolveDefaultProfileFor(envId, envId),
         permissions: { ...DEFAULT_PERMISSIONS },
       })
     }
@@ -280,7 +406,8 @@ export class CdiPartnerHub {
     const dir = path.dirname(this.configPath)
     mkdirSync(dir, { recursive: true })
     const doc: PersistedPartnersFile = {
-      version: "1.0",
+      version: "2.0",
+      governanceModel: CDI_GOVERNANCE_MODEL,
       sharedSecret: this.sharedSecret,
       cyberlabCallbackUrl: this.cyberlabCallbackUrl,
       partners: Array.from(this.partners.values()),
@@ -300,6 +427,64 @@ export class CdiPartnerHub {
       : this.sharedSecret
   }
 
+  private syncPartnerPolicyRules(partner: CdiPartnerEntry): void {
+    const prefix = `cdi-hub.partner.${partner.partnerId}.`
+    this.deps.policy.removeRulesByPrefix(prefix)
+    if (!partner.enabled) return
+
+    const mode = partner.permissions.initiateActions
+    if (mode === "autonomous_in_scope") {
+      this.deps.policy.upsertRule({
+        id: `${prefix}allow-autonomous-in-scope`,
+        description: `Autonomous cognitive partner ${partner.displayName} (${partner.partnerId}) operates as horizontal peer within curated project scope`,
+        capabilityPattern: "*",
+        actorTypes: ["partner"],
+        actorIds: [partner.partnerId],
+        risks: ["read_only", "low", "moderate"],
+        modes: ["approved", "lab_automation"],
+        effect: "allow",
+      })
+      this.deps.policy.upsertRule({
+        id: `${prefix}curate-high-risk`,
+        description: `High-risk action proposed by peer CDI ${partner.displayName} enters joint curatorial approval ticket`,
+        capabilityPattern: "*",
+        actorTypes: ["partner"],
+        actorIds: [partner.partnerId],
+        risks: ["high"],
+        modes: ["approved", "proposed"],
+        effect: "ask",
+      })
+      return
+    }
+
+    if (mode === "allow_readonly_and_low_propose_others") {
+      this.deps.policy.upsertRule({
+        id: `${prefix}allow-readonly-low`,
+        description: `Peer CDI ${partner.displayName} (${partner.partnerId}) executes read_only and low-risk capabilities inside scope`,
+        capabilityPattern: "*",
+        actorTypes: ["partner"],
+        actorIds: [partner.partnerId],
+        risks: ["read_only", "low"],
+        modes: ["approved", "lab_automation"],
+        effect: "allow",
+      })
+      return
+    }
+
+    if (mode === "allow_readonly_propose_others") {
+      this.deps.policy.upsertRule({
+        id: `${prefix}allow-readonly`,
+        description: `CDI partner ${partner.displayName} (${partner.partnerId}) executes read_only capabilities inside scope`,
+        capabilityPattern: "*",
+        actorTypes: ["partner"],
+        actorIds: [partner.partnerId],
+        risks: ["read_only"],
+        modes: ["approved", "lab_automation"],
+        effect: "allow",
+      })
+    }
+  }
+
   private syncAllToAuthenticator(): void {
     for (const p of this.partners.values()) {
       this.deps.partnerAuth.registerPartner({
@@ -313,24 +498,12 @@ export class CdiPartnerHub {
       if (p.endpointUrl.trim()) {
         this.deps.partnerBridge.registerTransport(p.partnerId, new HttpPartnerTransport(p.endpointUrl.trim()))
       }
+      this.syncPartnerPolicyRules(p)
     }
   }
 
-  private ensureReadonlyPartnerRuleInstalled(): void {
-    if (this.readonlyPolicyRuleInstalled) return
-    this.deps.policy.addRule({
-      id: "cdi-hub.allow-partner-readonly",
-      description: "Allow authenticated CDI partners with allow_readonly_propose_others to run read_only capabilities inside scope",
-      capabilityPattern: "*",
-      actorTypes: ["partner"],
-      risks: ["read_only"],
-      modes: ["approved", "lab_automation"],
-      effect: "allow",
-    })
-    this.readonlyPolicyRuleInstalled = true
-  }
-
   getOverview(): {
+    governanceModel: CdiGovernanceModel
     secretConfigured: boolean
     secretPreview: string
     cyberlabCallbackUrl: string
@@ -341,6 +514,7 @@ export class CdiPartnerHub {
     const s = this.sharedSecret
     const preview = s.length >= 12 ? `${s.slice(0, 6)}...${s.slice(-4)} (${s.length} chars)` : "not-set"
     return {
+      governanceModel: CDI_GOVERNANCE_MODEL,
       secretConfigured: s.length >= 16,
       secretPreview: preview,
       cyberlabCallbackUrl: this.cyberlabCallbackUrl,
@@ -393,6 +567,7 @@ export class CdiPartnerHub {
     endpointUrl: string
     enabled?: boolean
     secretOverride?: string
+    profile?: Partial<CdiPartnerProfile>
     permissions?: Partial<CdiPartnerPermissions>
   }): CdiPublicPartnerEntry {
     const id = entry.partnerId.trim()
@@ -400,17 +575,24 @@ export class CdiPartnerHub {
       throw new Error(`Invalid partnerId "${id}" (use letters, digits, '-', '_', '.')`)
     }
     const existing = this.partners.get(id)
+    const displayName = entry.displayName.trim() || existing?.displayName || id
     const merged: CdiPartnerEntry = {
       partnerId: id,
-      displayName: entry.displayName.trim() || existing?.displayName || id,
-      specialty: entry.specialty?.trim() ?? existing?.specialty ?? "CDI Specialist Agent",
+      displayName,
+      specialty: entry.specialty?.trim() ?? existing?.specialty ?? "Parceiro Cognitivo de Investigação",
       endpointUrl: entry.endpointUrl.trim() || existing?.endpointUrl || "http://127.0.0.1:8788/cyberlab/partner",
       enabled: entry.enabled ?? existing?.enabled ?? true,
-      ...(entry.secretOverride && entry.secretOverride.trim().length >= 16
-        ? { secretOverride: entry.secretOverride.trim() }
-        : existing?.secretOverride && entry.secretOverride === undefined
-          ? { secretOverride: existing.secretOverride }
-          : {}),
+      ...(entry.secretOverride === ""
+        ? {}
+        : entry.secretOverride && entry.secretOverride.trim().length >= 16
+          ? { secretOverride: entry.secretOverride.trim() }
+          : existing?.secretOverride && entry.secretOverride === undefined
+            ? { secretOverride: existing.secretOverride }
+            : {}),
+      profile: this.normalizeProfile(id, displayName, {
+        ...(existing?.profile ?? {}),
+        ...(entry.profile ?? {}),
+      }),
       permissions: {
         ...(existing?.permissions ?? DEFAULT_PERMISSIONS),
         ...(entry.permissions ?? {}),
@@ -424,8 +606,10 @@ export class CdiPartnerHub {
   }
 
   removePartner(partnerId: string): boolean {
-    const existed = this.partners.delete(partnerId.trim())
+    const trimmed = partnerId.trim()
+    const existed = this.partners.delete(trimmed)
     if (existed) {
+      this.deps.policy.removeRulesByPrefix(`cdi-hub.partner.${trimmed}.`)
       this.saveConfigIfPersistent()
     }
     return existed
@@ -683,7 +867,7 @@ export class CdiPartnerHub {
     const params = (parsed.params && typeof parsed.params === "object" ? parsed.params : {}) as Record<string, unknown>
 
     try {
-      // 1. Real-time Project State
+      // 1. Real-time Project State (with Horizontal Peer Partnership & Curator Context)
       if (parsed.action === "project.state") {
         if (!partner.permissions.readProjectState) {
           throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks readProjectState permission`)
@@ -695,10 +879,27 @@ export class CdiPartnerHub {
           Promise.resolve(this.deps.approvals.listPending(this.deps.projectId)),
           Promise.resolve(this.deps.evidenceStore.listFindings(this.deps.projectId)),
         ])
-        this.recordInboundActivity(partner.partnerId, "project.state", "allowed", "Queried live project state & capabilities")
+        const peerPartners = Array.from(this.partners.values())
+          .filter((p) => p.enabled)
+          .map((p) => ({
+            partnerId: p.partnerId,
+            displayName: p.displayName,
+            specialty: p.specialty,
+            profile: p.profile,
+          }))
+        this.recordInboundActivity(partner.partnerId, "project.state", "allowed", "Queried live project state & peer context")
         return {
           httpStatus: 200,
           body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, {
+            governanceModel: CDI_GOVERNANCE_MODEL,
+            partnerProfile: {
+              partnerId: partner.partnerId,
+              displayName: partner.displayName,
+              specialty: partner.specialty,
+              profile: partner.profile,
+              permissions: partner.permissions,
+            },
+            peerPartners,
             status,
             capabilities: capabilities.map((c) => ({
               id: c.id,
@@ -833,17 +1034,23 @@ export class CdiPartnerHub {
         }
       }
 
-      // 4. Create Artifacts & Findings Directly in CyberLab OS
+      // 4. Create Artifacts (Reports, Notes, Analyses) & Findings Directly in CyberLab OS
       if (parsed.action === "artifact.create") {
         if (!partner.permissions.createArtifactsAndFindings) {
           throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" lacks createArtifactsAndFindings permission`)
         }
         const title = String(params.title ?? "").trim()
         const rawContent = typeof params.content === "string" ? params.content : JSON.stringify(params.content ?? {}, null, 2)
-        const requestedKind = String(params.kind ?? "json").trim().toLowerCase()
+        const requestedKind = String(
+          params.kind ?? params.artifactType ?? (typeof params.content === "string" ? "note" : "json"),
+        )
+          .trim()
+          .toLowerCase()
         const kindAliases: Record<string, EvidenceKind> = {
-          log: "stdout",
+          report: "file",
+          analysis: "file",
           note: "file",
+          log: "stdout",
           json: "json",
           stdout: "stdout",
           stderr: "stderr",
@@ -852,7 +1059,13 @@ export class CdiPartnerHub {
           network_observation: "network_observation",
         }
         const kind: EvidenceKind = kindAliases[requestedKind] ?? "file"
-        const mediaType = String(params.mediaType ?? (kind === "json" ? "application/json" : "text/plain")).trim()
+        const defaultMediaType =
+          kind === "json"
+            ? "application/json"
+            : requestedKind === "report" || requestedKind === "analysis" || requestedKind === "note"
+              ? "text/markdown"
+              : "text/plain"
+        const mediaType = String(params.mediaType ?? defaultMediaType).trim()
         if (!title || !rawContent) {
           throw new Error("artifact.create requires non-empty title and content")
         }
@@ -882,12 +1095,13 @@ export class CdiPartnerHub {
           partner.partnerId,
           "artifact.create",
           "allowed",
-          `Created artifact ${stored.evidenceId} (${stored.title})`,
+          `Created ${requestedKind} artifact ${stored.evidenceId} (${stored.title})`,
         )
         return {
           httpStatus: 200,
           body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, {
             evidenceId: stored.evidenceId,
+            artifactType: requestedKind,
             sha256: stored.integrity.sha256,
             redactionStatus: stored.redactionStatus,
           }),
@@ -939,9 +1153,10 @@ export class CdiPartnerHub {
         }
       }
 
-      // 5. Initiate CyberLab OS Actions & Poll Execution Status
+      // 5. Initiate CyberLab OS Actions & Track Status (action.initiate / action.status)
       if (parsed.action === "action.initiate") {
-        if (partner.permissions.initiateActions === "disabled") {
+        const initiateMode = partner.permissions.initiateActions
+        if (initiateMode === "disabled") {
           throw new PartnerAuthError("PERMISSION_DENIED", `CDI "${partner.partnerId}" is not permitted to initiate actions`)
         }
         const capabilityId = String(params.capabilityId ?? "").trim()
@@ -950,14 +1165,25 @@ export class CdiPartnerHub {
           throw new Error(`Capability "${capabilityId}" is not registered in CyberLab OS`)
         }
 
+        // Sync per-CDI policy rules and determine execution mode unless CDI explicitly requested curatorial co-validation ("proposed")
+        this.syncPartnerPolicyRules(partner)
+        const cdiRequestedProposal = params.mode === "proposed"
         let execMode: "proposed" | "approved" = "proposed"
-        if (
-          partner.permissions.initiateActions === "allow_readonly_propose_others" &&
-          cap.risk === "read_only" &&
-          cap.supportedModes.includes("approved")
-        ) {
-          this.ensureReadonlyPartnerRuleInstalled()
-          execMode = "approved"
+
+        if (!cdiRequestedProposal && cap.supportedModes.includes("approved")) {
+          if (
+            initiateMode === "autonomous_in_scope" &&
+            (cap.risk === "read_only" || cap.risk === "low" || cap.risk === "moderate")
+          ) {
+            execMode = "approved"
+          } else if (
+            initiateMode === "allow_readonly_and_low_propose_others" &&
+            (cap.risk === "read_only" || cap.risk === "low")
+          ) {
+            execMode = "approved"
+          } else if (initiateMode === "allow_readonly_propose_others" && cap.risk === "read_only") {
+            execMode = "approved"
+          }
         }
 
         const record = await this.deps.dispatcher.submit({
@@ -969,6 +1195,7 @@ export class CdiPartnerHub {
           mode: execMode,
         })
 
+        const rationale = typeof params.rationale === "string" && params.rationale.trim() ? ` — ${params.rationale.trim().slice(0, 120)}` : ""
         const actOutcome =
           record.status === "succeeded"
             ? "allowed"
@@ -979,33 +1206,45 @@ export class CdiPartnerHub {
           partner.partnerId,
           "action.initiate",
           actOutcome,
-          `${capabilityId} -> ${record.status}`,
+          `${capabilityId} -> ${record.status}${rationale}`,
         )
 
         return {
           httpStatus: 200,
           body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, {
             executionId: record.executionId,
+            capabilityId,
             status: record.status,
+            summary: record.policyDecision?.reason ?? record.error?.message,
             resultEvidenceIds: record.resultEvidenceIds,
             ...(record.error ? { error: record.error } : {}),
           }),
         }
       }
 
-      if (parsed.action === "execution.status") {
+      if (parsed.action === "action.status" || parsed.action === "execution.status") {
         const executionId = String(params.executionId ?? "").trim()
         const rec = await this.deps.dispatcher.get(executionId)
         if (!rec || rec.request.projectId !== this.deps.projectId) {
           throw new Error(`Execution "${executionId}" not found in project "${this.deps.projectId}"`)
         }
+        this.recordInboundActivity(
+          partner.partnerId,
+          parsed.action,
+          "allowed",
+          `Checked ${executionId} (${rec.request.capabilityId} -> ${rec.status})`,
+        )
         return {
           httpStatus: 200,
           body: this.buildSignedGatewayResponse(parsed.messageId, secret, true, {
             executionId: rec.executionId,
             capabilityId: rec.request.capabilityId,
+            initiatedBy: rec.request.requestedBy,
             status: rec.status,
+            summary: rec.policyDecision?.reason ?? rec.error?.message,
             resultEvidenceIds: rec.resultEvidenceIds,
+            startedAt: rec.startedAt,
+            finishedAt: rec.finishedAt,
             ...(rec.error ? { error: rec.error } : {}),
           }),
         }

@@ -38,6 +38,23 @@ export class PolicyEngine {
     this.rules.push({ ...rule })
   }
 
+  upsertRule(rule: PolicyRule): void {
+    const idx = this.rules.findIndex((existing) => existing.id === rule.id)
+    if (idx >= 0) {
+      this.rules[idx] = { ...rule }
+      return
+    }
+    this.rules.push({ ...rule })
+  }
+
+  removeRulesByPrefix(idPrefix: string): void {
+    for (let i = this.rules.length - 1; i >= 0; i -= 1) {
+      if (this.rules[i]?.id.startsWith(idPrefix)) {
+        this.rules.splice(i, 1)
+      }
+    }
+  }
+
   getAuditLog(projectId?: string): PolicyAuditEntry[] {
     return this.auditLog
       .filter((entry) => !projectId || entry.projectId === projectId)
@@ -117,6 +134,7 @@ export class PolicyEngine {
     const matchingRules = this.rules.filter((rule) => {
       if (!matchesWildcardPattern(capability.id, rule.capabilityPattern)) return false
       if (rule.actorTypes && !rule.actorTypes.includes(ctx.request.requestedBy.type)) return false
+      if (rule.actorIds && !rule.actorIds.includes(ctx.request.requestedBy.id)) return false
       if (rule.risks && !rule.risks.includes(capability.risk)) return false
       if (rule.modes && !rule.modes.includes(ctx.request.mode)) return false
       return true
@@ -132,8 +150,8 @@ export class PolicyEngine {
     const policyIds = [...matchingRules.map((r) => r.id), `builtin.risk.${capability.risk}`]
 
     if (lastCustomRule) {
-      // Custom rule can tighten allow -> ask, or explicitly allow non-destructive operations
-      if (lastCustomRule.effect === "ask" && baseDecision.effect === "allow") {
+      // Custom rule can tighten allow -> ask, elevate non-destructive partner actions to ask, or explicitly allow non-destructive operations
+      if (lastCustomRule.effect === "ask" && capability.risk !== "destructive") {
         baseDecision = { effect: "ask", reason: `Approval required by rule "${lastCustomRule.id}"` }
       } else if (lastCustomRule.effect === "allow" && capability.risk !== "destructive") {
         baseDecision = { effect: "allow", reason: `Allowed by rule "${lastCustomRule.id}"` }

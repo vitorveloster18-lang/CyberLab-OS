@@ -1802,11 +1802,41 @@ export function ManualToolConfigForm(props: { wb: CyberLabWorkbenchService }) {
         })()}
       </Match>
 
-      {/* 16. HUB MULTI-CDI */}
+      {/* 16. PARCEIROS COGNITIVOS CDI (KAIRÓS, NAIA, SALEM & NOVA) */}
       <Match when={toolId() === "cdi-hub"}>
         {(() => {
           const d = () => wb.drafts["cdi-hub"]
           const partners = () => wb.backend.partners?.partners ?? []
+          const inboundActivity = () => wb.backend.partners?.inboundActivity ?? []
+          const gatewayActions = [
+            { id: "project.state", desc: "Estado ativo do projeto & pares" },
+            { id: "evidence.list", desc: "Listar evidências SHA-256" },
+            { id: "evidence.read", desc: "Ler evidência redigida" },
+            { id: "workspace.list_files", desc: "Navegar ficheiros no escopo" },
+            { id: "workspace.read_file", desc: "Ler ficheiro no escopo" },
+            { id: "artifact.create", desc: "Criar relatórios, notas & análises" },
+            { id: "finding.propose", desc: "Propor findings de segurança" },
+            { id: "action.initiate", desc: "Iniciar execuções autonomamente" },
+            { id: "action.status", desc: "Acompanhar estado de execuções" },
+          ] as const
+
+          const autonomyLabel = (mode: string) => {
+            switch (mode) {
+              case "autonomous_in_scope":
+                return "Autónomo no Escopo Curado (Par Horizontal)"
+              case "allow_readonly_and_low_propose_others":
+                return "Autónomo em Read-Only + Low; Curadoria em Moderate"
+              case "allow_readonly_propose_others":
+                return "Autónomo em Read-Only; Curadoria nas Demais"
+              case "propose_only":
+                return "Curadoria Conjunta Prévia (Propose Only)"
+              case "disabled":
+                return "Consulta, Artefactos & Findings (Sem Iniciar Ações)"
+              default:
+                return mode
+            }
+          }
+
           const togglePartner = (id: string) => {
             const cur = d().selectedPartnerIds
             const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
@@ -1820,24 +1850,34 @@ export function ManualToolConfigForm(props: { wb: CyberLabWorkbenchService }) {
 
           return (
             <div class="flex flex-col gap-3">
+              <div class="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-[12px] text-v2-text-text-base flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <strong class="text-emerald-400">Relação Horizontal · Sem Hierarquia:</strong>{" "}
+                  <span>
+                    Kairós, Naia, Salem e Nova operam como entidades cognitivas autónomas com identidade, memória e decisão própria; o humano atua como{" "}
+                    <strong class="text-v2-text-text-strong">curador</strong> do escopo e da investigação partilhada.
+                  </span>
+                </div>
+              </div>
+
               <Show when={d().cdiSubTab === "setup"}>
-                <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/50 p-3 flex flex-col gap-2.5">
+                <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/50 p-3 flex flex-col gap-3">
                   <div class="flex flex-wrap items-center justify-between gap-2">
                     <span class={LABEL_CLS}>
-                      Agentes CDI Registrados ({partners().length}) — Secret:{" "}
+                      Parceiros Cognitivos CDI ({partners().length}) — Segredo HMAC:{" "}
                       {wb.backend.partners?.secretConfigured
                         ? wb.backend.partners.secretPreview
                         : "NÃO CONFIGURADO"}
                     </span>
                     <div class="flex flex-wrap items-center gap-1.5">
                       <button type="button" class={CHIP_CLS} onClick={() => void wb.loadFourCdiPreset()}>
-                        Preset 4 CDIs (8788–8791)
+                        Restaurar Perfis dos 4 Pares CDI (8788–8791)
                       </button>
                       <button type="button" class={CHIP_CLS} onClick={() => void wb.manageCdiSecret("generate")}>
                         Gerar Secret 256-bit
                       </button>
                       <button type="button" class={CHIP_CLS} onClick={() => void wb.manageCdiSecret("reveal")}>
-                        Revelar Comandos PowerShell
+                        Revelar Variáveis & Comandos
                       </button>
                     </div>
                   </div>
@@ -1857,7 +1897,7 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
                     <input
                       type="text"
                       value={d().customSecretInput}
-                      placeholder="Ou defina seu próprio CYBERLAB_PARTNER_SECRET (mín. 16 caracteres)..."
+                      placeholder="Ou defina um CYBERLAB_PARTNER_SECRET partilhado (mín. 16 caracteres)..."
                       class={MONO_INPUT_CLS}
                       onInput={(e) =>
                         wb.updateDraft("cdi-hub", (p) => ({ ...p, customSecretInput: e.currentTarget.value }))
@@ -1868,19 +1908,249 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
                     </button>
                   </div>
 
-                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                     <For each={partners()}>
                       {(partner) => (
-                        <div class="rounded border border-v2-border-border-base bg-v2-background-bg-base p-2 text-[12px]">
-                          <div class="font-medium text-v2-text-text-strong">
-                            {partner.displayName} ({partner.partnerId})
+                        <div class="rounded border border-v2-border-border-base bg-v2-background-bg-base p-2.5 text-[12px] flex flex-col gap-1.5">
+                          <div class="flex items-start justify-between gap-2">
+                            <div>
+                              <div class="font-semibold text-v2-text-text-strong flex items-center gap-1.5 flex-wrap">
+                                <span>{partner.displayName}</span>
+                                <span class="font-mono text-[11px] text-v2-text-text-muted">({partner.partnerId})</span>
+                                <span class="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">
+                                  Par Autónomo · Sem Hierarquia
+                                </span>
+                              </div>
+                              <div class="text-[11px] text-v2-text-text-base">{partner.specialty}</div>
+                            </div>
+                            <button
+                              type="button"
+                              class={CHIP_CLS}
+                              onClick={() => wb.openPartnerProfileEditor(partner)}
+                            >
+                              {d().editingPartnerId === partner.partnerId ? "Fechar" : "Perfil Individual"}
+                            </button>
                           </div>
-                          <div class="font-mono text-[11px] text-v2-text-text-muted truncate">
-                            {partner.endpointUrl}
+
+                          <Show when={partner.profile?.identityNotes}>
+                            <div class="text-[11px] text-v2-text-text-muted leading-snug">
+                              {partner.profile?.identityNotes}
+                            </div>
+                          </Show>
+
+                          <Show when={(partner.profile?.interests ?? []).length > 0}>
+                            <div class="flex flex-wrap gap-1">
+                              <For each={partner.profile?.interests ?? []}>
+                                {(tag) => (
+                                  <span class="rounded bg-v2-background-bg-deep px-1.5 py-0.5 font-mono text-[10px] text-v2-text-text-muted">
+                                    #{tag}
+                                  </span>
+                                )}
+                              </For>
+                            </div>
+                          </Show>
+
+                          <div class="flex flex-wrap items-center justify-between gap-1 pt-0.5 border-t border-v2-border-border-base/60 text-[11px]">
+                            <span class="font-mono text-v2-text-text-muted truncate">{partner.endpointUrl}</span>
+                            <span class="text-emerald-400 font-medium">
+                              {autonomyLabel(partner.permissions.initiateActions)}
+                            </span>
                           </div>
                         </div>
                       )}
                     </For>
+                  </div>
+
+                  <Show when={Boolean(d().editingPartnerId)}>
+                    <div class="rounded-md border border-emerald-500/40 bg-v2-background-bg-base p-3 flex flex-col gap-2.5">
+                      <div class="flex items-center justify-between">
+                        <span class="text-[12px] font-semibold text-v2-text-text-strong">
+                          Editar Perfil Individual do Parceiro CDI ({d().editingPartnerId}) — Sem Hierarquia
+                        </span>
+                        <button
+                          type="button"
+                          class={CHIP_CLS}
+                          onClick={() => wb.updateDraft("cdi-hub", (p) => ({ ...p, editingPartnerId: "" }))}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+
+                      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div>
+                          <label class={LABEL_CLS}>Nome / Identidade</label>
+                          <input
+                            type="text"
+                            value={d().editDisplayName ?? ""}
+                            class={INPUT_CLS}
+                            onInput={(e) =>
+                              wb.updateDraft("cdi-hub", (p) => ({ ...p, editDisplayName: e.currentTarget.value }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label class={LABEL_CLS}>Domínio / Perspetiva Própria</label>
+                          <input
+                            type="text"
+                            value={d().editSpecialty ?? ""}
+                            class={INPUT_CLS}
+                            onInput={(e) =>
+                              wb.updateDraft("cdi-hub", (p) => ({ ...p, editSpecialty: e.currentTarget.value }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label class={LABEL_CLS}>Endpoint do CDI</label>
+                          <input
+                            type="text"
+                            value={d().editEndpointUrl ?? ""}
+                            class={MONO_INPUT_CLS}
+                            onInput={(e) =>
+                              wb.updateDraft("cdi-hub", (p) => ({ ...p, editEndpointUrl: e.currentTarget.value }))
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label class={LABEL_CLS}>Notas de Identidade Cognitiva & Autonomia</label>
+                        <textarea
+                          rows={2}
+                          value={d().editIdentityNotes ?? ""}
+                          class={INPUT_CLS}
+                          onInput={(e) =>
+                            wb.updateDraft("cdi-hub", (p) => ({ ...p, editIdentityNotes: e.currentTarget.value }))
+                          }
+                        />
+                      </div>
+
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <label class={LABEL_CLS}>Interesses Investigativos (separados por vírgula)</label>
+                          <input
+                            type="text"
+                            value={d().editInterestsText ?? ""}
+                            class={INPUT_CLS}
+                            onInput={(e) =>
+                              wb.updateDraft("cdi-hub", (p) => ({ ...p, editInterestsText: e.currentTarget.value }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label class={LABEL_CLS}>Autonomia para Iniciar Execuções (action.initiate)</label>
+                          <select
+                            value={d().editInitiateActions ?? "autonomous_in_scope"}
+                            class={INPUT_CLS}
+                            onChange={(e) =>
+                              wb.updateDraft("cdi-hub", (p) => ({
+                                ...p,
+                                editInitiateActions: e.currentTarget.value as typeof p.editInitiateActions,
+                              }))
+                            }
+                          >
+                            <option value="autonomous_in_scope">
+                              Autónomo no Escopo Curado (read_only, low e moderate diretos; high sob curadoria)
+                            </option>
+                            <option value="allow_readonly_and_low_propose_others">
+                              Autónomo em read_only + low; curadoria em moderate/high
+                            </option>
+                            <option value="allow_readonly_propose_others">
+                              Autónomo em read_only; curadoria nas demais
+                            </option>
+                            <option value="propose_only">Curadoria Conjunta Prévia (propose_only)</option>
+                            <option value="disabled">Apenas Consulta, Artefactos & Findings</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div class="flex flex-wrap items-center gap-4 text-[12px]">
+                        <label class="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={d().editEnabled !== false}
+                            onChange={(e) =>
+                              wb.updateDraft("cdi-hub", (p) => ({ ...p, editEnabled: e.currentTarget.checked }))
+                            }
+                          />
+                          <span>Parceiro Ativo no Gateway</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={d().editReadProjectState !== false}
+                            onChange={(e) =>
+                              wb.updateDraft("cdi-hub", (p) => ({
+                                ...p,
+                                editReadProjectState: e.currentTarget.checked,
+                              }))
+                            }
+                          />
+                          <span>project.state</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={d().editReadEvidenceAndFiles !== false}
+                            onChange={(e) =>
+                              wb.updateDraft("cdi-hub", (p) => ({
+                                ...p,
+                                editReadEvidenceAndFiles: e.currentTarget.checked,
+                              }))
+                            }
+                          />
+                          <span>evidence.* & workspace.*</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={d().editCreateArtifactsAndFindings !== false}
+                            onChange={(e) =>
+                              wb.updateDraft("cdi-hub", (p) => ({
+                                ...p,
+                                editCreateArtifactsAndFindings: e.currentTarget.checked,
+                              }))
+                            }
+                          />
+                          <span>artifact.create & finding.propose</span>
+                        </label>
+                      </div>
+
+                      <div class="flex flex-wrap items-center justify-between gap-2">
+                        <input
+                          type="text"
+                          value={d().editSecretOverride ?? ""}
+                          placeholder="Segredo HMAC individual opcional para este CDI (deixe vazio para usar o partilhado)..."
+                          class={`${MONO_INPUT_CLS} flex-1`}
+                          onInput={(e) =>
+                            wb.updateDraft("cdi-hub", (p) => ({ ...p, editSecretOverride: e.currentTarget.value }))
+                          }
+                        />
+                        <button type="button" class={BTN_PRIMARY} onClick={() => void wb.savePartnerProfile()}>
+                          Guardar Perfil Individual
+                        </button>
+                      </div>
+                    </div>
+                  </Show>
+
+                  <div class="rounded border border-v2-border-border-base bg-v2-background-bg-base p-2.5 flex flex-col gap-1.5">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <span class={LABEL_CLS}>
+                        9 Ações Canónicas do Gateway Bidirecional (CDI → CyberLab OS)
+                      </span>
+                      <span class="font-mono text-[11px] text-emerald-400">
+                        {wb.backend.partners?.cyberlabCallbackUrl || "http://127.0.0.1:4096/api/cyberlab/partner-gateway"}
+                      </span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                      <For each={gatewayActions}>
+                        {(act) => (
+                          <div class="rounded bg-v2-background-bg-deep/60 px-2 py-1 text-[11px] flex items-center justify-between gap-1.5">
+                            <span class="font-mono text-v2-text-text-strong">{act.id}</span>
+                            <span class="text-v2-text-text-muted truncate">{act.desc}</span>
+                          </div>
+                        )}
+                      </For>
+                    </div>
                   </div>
                 </div>
               </Show>
@@ -1888,10 +2158,12 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
               <Show when={d().cdiSubTab !== "setup"}>
                 <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/50 p-2.5 flex flex-col gap-2">
                   <div class="flex flex-wrap items-center justify-between gap-2">
-                    <span class={LABEL_CLS}>Selecione 1 CDI (Especialista) ou Múltiplos em Paralelo</span>
+                    <span class={LABEL_CLS}>
+                      Parceiros CDI para Investigação Partilhada (Individual ou Entre Pares, Sem Hierarquia)
+                    </span>
                     <Show when={partners().length === 0}>
                       <button type="button" class={CHIP_CLS} onClick={() => void wb.loadFourCdiPreset()}>
-                        + Carregar Preset 4 CDIs (8788–8791)
+                        + Ativar Perfis dos 4 Pares CDI (8788–8791)
                       </button>
                     </Show>
                   </div>
@@ -1904,11 +2176,17 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
                             checked={d().selectedPartnerIds.includes(partner.partnerId)}
                             onChange={() => togglePartner(partner.partnerId)}
                           />
-                          <div class="flex flex-col min-w-0">
-                            <span class="font-medium text-v2-text-text-strong">
-                              {partner.displayName} ({partner.partnerId})
-                            </span>
-                            <span class="font-mono text-[11px] text-v2-text-text-muted truncate">
+                          <div class="flex flex-col min-w-0 flex-1">
+                            <div class="flex items-center justify-between gap-1.5">
+                              <span class="font-medium text-v2-text-text-strong">
+                                {partner.displayName} ({partner.partnerId})
+                              </span>
+                              <span class="font-mono text-[10px] text-emerald-400">
+                                {partner.permissions.initiateActions === "autonomous_in_scope" ? "autónomo" : partner.permissions.initiateActions}
+                              </span>
+                            </div>
+                            <span class="text-[11px] text-v2-text-text-muted truncate">{partner.specialty}</span>
+                            <span class="font-mono text-[10px] text-v2-text-text-muted truncate">
                               {partner.endpointUrl}
                             </span>
                           </div>
@@ -1921,7 +2199,7 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
 
               <Show when={d().cdiSubTab !== "setup"}>
                 <div class="flex flex-col gap-1">
-                  <label class={LABEL_CLS}>Objetivo da Missão para os CDIs Selecionados</label>
+                  <label class={LABEL_CLS}>Tema, Hipótese ou Questão de Investigação Partilhada</label>
                   <input
                     type="text"
                     value={d().objective}
@@ -1931,11 +2209,11 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
                 </div>
 
                 <div class="flex flex-col gap-1">
-                  <label class={LABEL_CLS}>Contexto / Instruções Detalhadas (redigido automaticamente antes do envio)</label>
+                  <label class={LABEL_CLS}>Notas do Curador / Contexto Partilhado (redigido automaticamente antes da partilha)</label>
                   <textarea
                     rows={3}
                     value={d().contextText}
-                    placeholder="Descreva a hipótese, endpoint ou contexto para análise especialista ou paralela..."
+                    placeholder="Partilhe observações, hipóteses ou contexto que possam interessar aos parceiros CDI..."
                     class={INPUT_CLS}
                     onInput={(e) => wb.updateDraft("cdi-hub", (p) => ({ ...p, contextText: e.currentTarget.value }))}
                   />
@@ -1944,7 +2222,7 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
 
               <Show when={d().cdiSubTab !== "setup" && wb.backend.evidence.length > 0}>
                 <div class="flex flex-col gap-1">
-                  <label class={LABEL_CLS}>Anexar Evidências SHA-256 do Projeto ({d().selectedEvidenceIds.length})</label>
+                  <label class={LABEL_CLS}>Partilhar Evidências SHA-256 do Projeto ({d().selectedEvidenceIds.length})</label>
                   <div class="max-h-28 overflow-y-auto rounded border border-v2-border-border-base p-2 flex flex-col gap-1" data-scrollable>
                     <For each={wb.backend.evidence.slice(0, 15)}>
                       {(ev) => (
@@ -1986,11 +2264,33 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
                       onClick={() => void wb.dispatchCdiMission()}
                     >
                       {isRunning()
-                        ? "Consultando CDIs..."
+                        ? "Em diálogo com parceiros CDI..."
                         : d().selectedPartnerIds.length > 1
-                          ? `Disparar em Paralelo (${d().selectedPartnerIds.length} CDIs)`
-                          : "Enviar Tarefa ao CDI"}
+                          ? `Convidar ${d().selectedPartnerIds.length} Parceiros CDI em Conjunto`
+                          : "Convidar Parceiro CDI para Investigação"}
                     </button>
+                  </div>
+                </div>
+              </Show>
+
+              <Show when={inboundActivity().length > 0}>
+                <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep/40 p-2.5 flex flex-col gap-1.5">
+                  <span class={LABEL_CLS}>
+                    Iniciativas Autónomas Recentes dos Parceiros CDI via Gateway ({inboundActivity().length})
+                  </span>
+                  <div class="max-h-36 overflow-y-auto flex flex-col gap-1" data-scrollable>
+                    <For each={inboundActivity().slice(0, 12)}>
+                      {(act) => (
+                        <div class="rounded bg-v2-background-bg-base px-2 py-1 text-[11px] flex items-center justify-between gap-2">
+                          <div class="flex items-center gap-1.5 min-w-0">
+                            <span class="font-semibold text-emerald-400">{act.partnerId}</span>
+                            <span class="font-mono text-v2-text-text-strong">{act.action}</span>
+                            <span class="text-v2-text-text-muted truncate">{act.summary}</span>
+                          </div>
+                          <span class="font-mono text-[10px] text-v2-text-text-muted shrink-0">{act.outcome}</span>
+                        </div>
+                      )}
+                    </For>
                   </div>
                 </div>
               </Show>

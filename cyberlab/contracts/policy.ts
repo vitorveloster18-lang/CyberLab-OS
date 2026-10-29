@@ -53,6 +53,7 @@ export interface PolicyRule {
   id: string
   description: string
   actorTypes?: Array<"user" | "assistant" | "partner">
+  actorIds?: string[]
   capabilityPattern: string
   risks?: CapabilityRisk[]
   modes?: ExecutionMode[]
@@ -63,6 +64,7 @@ export const PolicyRuleSchema = Schema.Struct({
   id: NonEmptyString,
   description: NonEmptyString,
   actorTypes: Schema.Array(Schema.Literals(["user", "assistant", "partner"])).pipe(optional),
+  actorIds: Schema.Array(NonEmptyString).pipe(optional),
   capabilityPattern: NonEmptyString,
   risks: Schema.Array(CapabilityRiskSchema).pipe(optional),
   modes: Schema.Array(ExecutionModeSchema).pipe(optional),
