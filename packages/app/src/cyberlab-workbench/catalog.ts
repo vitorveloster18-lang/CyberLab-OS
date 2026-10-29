@@ -327,6 +327,28 @@ export const MANUAL_TOOLS: ManualToolMeta[] = [
     riskLabel: "Somente Leitura (Lab)",
   },
   {
+    id: "key-hunter",
+    category: "forensics",
+    title: "Key Hunter — Caçador Multi-Superfície de API Keys, Tokens & Chaves Criptográficas",
+    shortTitle: "Key Hunter",
+    subtitle: "43+ assinaturas (OpenAI/Anthropic/AWS/Stripe/GitHub/Slack/DB/PEM/JWT) em Workspace, Binários, Web/JS Bundles, Buffer e GitHub com filtro anti-placeholder e KeyHacks",
+    icon: "lock",
+    badge: "MIT Nativo",
+    capabilityId: "code-analysis.key-hunter",
+    riskLabel: "Risco Baixo (Redação SHA-256)",
+  },
+  {
+    id: "keyhunter-cli",
+    category: "forensics",
+    title: "KeyHunter Rust CLI Bridge (fadidevv/keyhunter)",
+    shortTitle: "KeyHunter CLI",
+    subtitle: "Execução governada do scanner oficial em Rust (cargo install github-keyhunter — scan/verify/patterns) com redação automática e custódia SHA-256",
+    icon: "terminal",
+    badge: "Plugin Externo",
+    capabilityId: "external.keyhunter-cli",
+    riskLabel: "Risco Baixo",
+  },
+  {
     id: "sca-sbom-iac",
     category: "forensics",
     title: "SCA (Vulnerabilidades), SBOM CycloneDX & Auditor IaC",
@@ -852,11 +874,21 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
   },
   {
     id: "code-suite",
-    title: "SAST, SCA, SBOM CycloneDX & Containers/IaC",
-    shortTitle: "Código, SCA & IaC",
-    subtitle: "Segredos & SAST · Vulnerabilidades de Dependências (OSV.dev) · SBOM CycloneDX 1.5 · Dockerfile/K8s/Terraform & Trivy",
+    title: "Key Hunter, SAST, SCA, SBOM CycloneDX & IaC",
+    shortTitle: "Key Hunter, Código & SCA",
+    subtitle: "Key Hunter (API Keys, JS Bundles, GitHub & PEM) · SAST · SCA (OSV.dev) · SBOM CycloneDX 1.5 · IaC & Trivy",
     icon: "code-lines",
     keywords: [
+      "keyhunter",
+      "key hunter",
+      "key",
+      "keyhacks",
+      "openai",
+      "anthropic",
+      "aws",
+      "stripe",
+      "github",
+      "pem",
       "sast",
       "sca",
       "sbom",
@@ -879,6 +911,25 @@ export const TOOL_SUITES: ToolSuiteMeta[] = [
       "audit",
     ],
     functions: [
+      {
+        id: "key-hunter-tab",
+        label: "Key Hunter (API Keys & Crypto)",
+        description: "Cace API keys (OpenAI, Anthropic, AWS, GCP, Stripe, GitHub, Slack, DBs) e chaves PEM/JWK/JWT no workspace, binários, URLs/JS bundles, textos colados ou GitHub autorizado",
+        engines: [
+          {
+            toolId: "key-hunter",
+            label: "CyberLab Key Hunter Studio (43+ Assinaturas + KeyHacks)",
+            badge: "MIT Nativo",
+            description: "Workspace, Binários, Web/JS Bundles, Buffer & GitHub + filtro anti-placeholder e verificação segura opt-in",
+          },
+          {
+            toolId: "keyhunter-cli",
+            label: "KeyHunter Rust CLI (fadidevv/keyhunter)",
+            badge: "Plugin Externo",
+            description: "Bridge governado para o binário oficial 'keyhunter' (cargo install github-keyhunter)",
+          },
+        ],
+      },
       {
         id: "audit",
         label: "SAST & Segredos",
@@ -1281,6 +1332,35 @@ export function createDefaultToolDrafts(): ManualToolDraftMap {
       executionMode: "manual",
       useRawJson: false,
       rawJson: '{\n  "baseUrl": "http://127.0.0.1:4096",\n  "testUnauthenticated": true\n}',
+    },
+    "key-hunter": {
+      subpath: ".",
+      targetUrl: "",
+      rawText: "",
+      githubRepoOrOrg: "",
+      githubQuery: "(T3BlbkFJ OR sk-ant-api03 OR sk_live_ OR AKIA)",
+      providerFilter: "all",
+      skipPlaceholders: true,
+      carveCryptoMaterial: true,
+      verifyActive: false,
+      maxFiles: 250,
+      maxRemoteScripts: 10,
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson: '{\n  "subpath": ".",\n  "skipPlaceholders": true,\n  "carveCryptoMaterial": true,\n  "verifyActive": false\n}',
+    },
+    "keyhunter-cli": {
+      subcommand: "scan",
+      provider: "openai",
+      query: "",
+      configPath: "",
+      inputFindingsPath: "",
+      outputFormat: "json",
+      verifiedOnly: false,
+      verbose: false,
+      executionMode: "manual",
+      useRawJson: false,
+      rawJson: '{\n  "subcommand": "scan",\n  "provider": "openai",\n  "outputFormat": "json"\n}',
     },
     "sca-sbom-iac": {
       targetPath: ".",
@@ -2024,6 +2104,77 @@ export function buildCapabilityInput<K extends ManualToolId>(
         capabilityId: "web-assessment.api-graphql-oauth-lab",
         mode: d.executionMode,
         targetSummary: `API/GraphQL/OAuth (${parts[0] ?? "Inline Spec"})`,
+        input,
+      }
+    }
+    case "key-hunter": {
+      const d = drafts["key-hunter"]
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "code-analysis.key-hunter",
+          mode: d.executionMode,
+          targetSummary: `Key Hunter → ${String(parsed.subpath ?? parsed.targetUrl ?? "Custom JSON")}`,
+          input: parsed,
+        }
+      }
+      const input: Record<string, unknown> = {
+        skipPlaceholders: d.skipPlaceholders,
+        carveCryptoMaterial: d.carveCryptoMaterial,
+        verifyActive: d.verifyActive,
+        maxFiles: Math.min(1000, Math.max(1, Math.trunc(Number(d.maxFiles) || 250))),
+        maxRemoteScripts: Math.min(30, Math.max(0, Math.trunc(Number(d.maxRemoteScripts) || 10))),
+      }
+      if (d.subpath.trim()) input.subpath = d.subpath.trim()
+      if (d.targetUrl.trim()) input.targetUrl = d.targetUrl.trim()
+      if (d.rawText.trim()) input.rawText = d.rawText
+      if (d.githubRepoOrOrg.trim()) {
+        input.githubRepoOrOrg = d.githubRepoOrOrg.trim()
+        if (d.githubQuery.trim()) input.githubQuery = d.githubQuery.trim()
+      }
+      if (d.providerFilter.trim() && d.providerFilter.trim().toLowerCase() !== "all") {
+        input.providerFilter = d.providerFilter.trim()
+      }
+      const targetsLabel = [
+        d.subpath.trim() ? `path:${d.subpath.trim()}` : "",
+        d.targetUrl.trim() ? `url:${d.targetUrl.trim()}` : "",
+        d.rawText.trim() ? "buffer" : "",
+        d.githubRepoOrOrg.trim() ? `gh:${d.githubRepoOrOrg.trim()}` : "",
+      ]
+        .filter(Boolean)
+        .join(" + ")
+      return {
+        capabilityId: "code-analysis.key-hunter",
+        mode: d.executionMode,
+        targetSummary: `Key Hunter (${targetsLabel || "workspace"})${d.verifyActive ? " [Verify]" : ""}`,
+        input,
+      }
+    }
+    case "keyhunter-cli": {
+      const d = drafts["keyhunter-cli"]
+      if (d.useRawJson) {
+        const parsed = JSON.parse(d.rawJson) as Record<string, unknown>
+        return {
+          capabilityId: "external.keyhunter-cli",
+          mode: d.executionMode,
+          targetSummary: `KeyHunter CLI (${String(parsed.subcommand ?? d.subcommand)})`,
+          input: parsed,
+        }
+      }
+      const input: Record<string, unknown> = {
+        subcommand: d.subcommand,
+        outputFormat: d.outputFormat,
+        verifiedOnly: d.verifiedOnly,
+        verbose: d.verbose,
+      }
+      if (d.provider.trim()) input.provider = d.provider.trim()
+      if (d.query.trim()) input.query = d.query.trim()
+      if (d.configPath.trim()) input.configPath = d.configPath.trim()
+      if (d.inputFindingsPath.trim()) input.inputFindingsPath = d.inputFindingsPath.trim()
+      return {
+        capabilityId: "external.keyhunter-cli",
+        mode: d.executionMode,
+        targetSummary: `keyhunter ${d.subcommand}${d.provider.trim() && d.subcommand === "scan" ? ` -p ${d.provider.trim()}` : ""}`,
         input,
       }
     }

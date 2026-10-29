@@ -209,7 +209,7 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
 
       const salemRes = parallelReport.results.find((r) => r.partnerId === "salem")!
       expect(salemRes.ok).toBe(true)
-      expect(salemRes.outcome?.result?.summary).toContain("caps=29")
+      expect(salemRes.outcome?.result?.summary).toContain("caps=31")
       expect(salemRes.outcome?.result?.summary).toContain("dotenv_blocked=True")
       expect(salemRes.outcome?.result?.summary).toContain("ro=succeeded")
       expect(salemRes.outcome?.result?.summary).toContain("act=awaiting_approval")

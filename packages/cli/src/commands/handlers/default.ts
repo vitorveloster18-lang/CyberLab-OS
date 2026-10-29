@@ -96,8 +96,10 @@ export default Runtime.handler(Commands, (input) =>
     yield* run({
       app: {
         name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
-        version: OPENCODE_VERSION,
-        channel: process.env.OPENCODE_TUI_CHANNEL ?? OPENCODE_CHANNEL,
+        version: OPENCODE_VERSION === "local" ? (process.env.OPENCODE_VERSION_OVERRIDE ?? "2.1.4") : OPENCODE_VERSION,
+        channel:
+          process.env.OPENCODE_TUI_CHANNEL ??
+          (OPENCODE_CHANNEL === "local" ? (process.env.OPENCODE_CHANNEL_OVERRIDE ?? "latest") : OPENCODE_CHANNEL),
         highlights: OPENCODE_HIGHLIGHTS,
       },
       server: {

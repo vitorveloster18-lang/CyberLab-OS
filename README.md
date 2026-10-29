@@ -1,8 +1,8 @@
 # CyberLab OS
 
-**CyberLab OS** é uma plataforma unificada de engenharia de segurança autorizada, testes Web/API, reconhecimento de rede/TLS/AD, engenharia reversa, análise forense Blue Team (DFIR/Sigma), auditoria de código/SCA/SBOM/IaC e orquestração multi-agentes construída diretamente sobre o núcleo do **OpenCode V2** (`anomalyco/opencode` v2.1.4, licença `MIT`).
+**CyberLab OS** é uma plataforma unificada de engenharia de segurança autorizada, caça de chaves/segredos (**Key Hunter**), testes Web/API, reconhecimento de rede/TLS/AD, engenharia reversa, análise forense Blue Team (DFIR/Sigma), auditoria de código/SCA/SBOM/IaC e orquestração multi-agentes construída diretamente sobre o núcleo do **OpenCode V2** (`anomalyco/opencode` v2.1.4, licença `MIT`).
 
-Toda a operação — chat com IA, provedores/modelos, terminal, árvore de arquivos, ferramentas manuais de segurança (estilo **Burp Suite / Wireshark / CyberChef / Ghidra**), governança de escopo, cofre criptográfico `SHA-256` e ponte bidirecional para os 4 agentes **CDI (`Kairós`, `Naia`, `Salem`, `Nova`)** — roda integrada em **uma única aplicação (`:4096`)**, compatível com **Windows PowerShell**, **WSL2**, **Linux** e **macOS**.
+Toda a operação — chat com IA (incluindo os **modelos gratuitos nativos do OpenCode Zen**), provedores/modelos, terminal, árvore de arquivos, ferramentas manuais de segurança (estilo **Burp Suite / Wireshark / CyberChef / Ghidra / KeyHunter**), governança de escopo, cofre criptográfico `SHA-256` e ponte bidirecional para os 4 agentes **CDI (`Kairós`, `Naia`, `Salem`, `Nova`)** — roda integrada em **uma única aplicação (`:4096`)**, compatível com **Windows PowerShell**, **WSL2**, **Linux** e **macOS**.
 
 ---
 
@@ -10,12 +10,12 @@ Toda a operação — chat com IA, provedores/modelos, terminal, árvore de arqu
 
 1. [Destaques da Arquitetura](#1-destaques-da-arquitetura)
 2. [Instalação e Atualização (Windows PowerShell, WSL2 e Linux)](#2-instalação-e-atualização-windows-powershell-wsl2-e-linux)
-3. [Como Iniciar e Navegar na Aplicação Unificada (`:4096`)](#3-como-iniciar-e-navegar-na-aplicação-unificada-4096)
-4. [Instruções de Uso das 8 Suítes Manuais (33 Modos / 29 Capacidades)](#4-instruções-de-uso-das-8-suítes-manuais-33-modos--29-capacidades)
+3. [Como Iniciar, Navegar e Ativar os Modelos Gratuitos do OpenCode (`:4096`)](#3-como-iniciar-navegar-e-ativar-os-modelos-gratuitos-do-opencode-4096)
+4. [Instruções de Uso das 8 Suítes Manuais (35 Modos / 31 Capacidades)](#4-instruções-de-uso-das-8-suítes-manuais-35-modos--31-capacidades)
 5. [Configuração e Uso dos 4 Agentes Externos CDI (`8788–8791`)](#5-configuração-e-uso-dos-4-agentes-externos-cdi-87888791)
 6. [Referência de Linha de Comando (`cyberlab` CLI)](#6-referência-de-linha-de-comando-cyberlab-cli)
-7. [Instalação de Motores Externos Opcionais (`.cyberlab/bin`)](#7-instalação-de-motores-externos-opcionais-cyberlabbin)
-8. [Catálogo Técnico Completo (29 Capacidades) e Licenciamento (`MIT`)](#8-catálogo-técnico-completo-29-capacidades-e-licenciamento-mit)
+7. [Instalação de Motores Externos Opcionais (`.cyberlab/bin` e `github-keyhunter`)](#7-instalação-de-motores-externos-opcionais-cyberlabbin-e-github-keyhunter)
+8. [Catálogo Técnico Completo (31 Capacidades) e Licenciamento (`MIT`)](#8-catálogo-técnico-completo-31-capacidades-e-licenciamento-mit)
 
 ---
 
@@ -57,7 +57,7 @@ $env:ELECTRON_SKIP_BINARY_DOWNLOAD="1"
 bun install --ignore-scripts
 bun run --cwd packages/core fix-node-pty
 
-# 4. Validar licenças, tipagem e suíte de testes (54 testes)
+# 4. Validar licenças, tipagem e suíte de testes (57 testes)
 bun run cyberlab:check-licenses
 bun run cyberlab:typecheck
 bun run cyberlab:test
@@ -95,20 +95,45 @@ bun run start
 
 ---
 
-## 3. Como Iniciar e Navegar na Aplicação Unificada (`:4096`)
+## 3. Como Iniciar, Navegar e Ativar os Modelos Gratuitos do OpenCode (`:4096`)
 
 Execute na raiz do repositório:
 
 ```powershell
 bun run start
+# ou explicitamente para Web UI:
+bun run start:web
 ```
 
 Abra no navegador:
 - **Aplicação Principal**: `http://127.0.0.1:4096` *(ou `http://localhost:4096`)*
 - **Configurações CyberLab & CDIs**: `http://127.0.0.1:4096/settings?tab=cyberlab`
 
+### Como usar os Modelos de IA Gratuitos do OpenCode (OpenCode Zen Free Models)
+
+O CyberLab OS já vem corrigido e pré-configurado para funcionar imediatamente com os **9 modelos gratuitos ativos do OpenCode (`apiKey: "public"`)** sem exigir cartão ou assinatura paga:
+
+1. **Atualize o código e a build da interface** (`git pull` + `bun run start`, que reconstrói automaticamente o bundle Web quando necessário).
+2. **Certifique-se de que os modelos gratuitos não estão desativados por variável de ambiente**:
+   - No PowerShell, verifique que `$env:OPENCODE_DISABLE_FREE_MODELS` **não** está definida como `1` ou `true` (`Remove-Item Env:OPENCODE_DISABLE_FREE_MODELS -ErrorAction SilentlyContinue`).
+   - O lançador `bun run start` já passa automaticamente `--use-system-ca` (necessário em redes Windows com antivírus/proxy corporativo) e o `User-Agent` oficial do protocolo (`opencode/latest/2.1.4/cli`) exigido pelo gateway `opencode.ai/inference/openai/v1` (evitando bloqueios WAF/Cloudflare).
+3. **Selecione um dos 9 modelos gratuitos ativos no seletor de modelos da caixa de diálogo** (sob o provedor **OpenCode Zen**):
+   - **`Big Pickle`** (`opencode/big-pickle`)
+   - **`DeepSeek V4.1 Flash Free`** (`opencode/deepseek-v4.1-flash-free`)
+   - **`GLM-5.3 Flash Free`** (`opencode/glm-5.3-flash-free`)
+   - **`Nemotron 3.5 Super VL Free`** (`opencode/nemotron-3.5-super-vl-free`)
+   - **`Nemotron 3.5 Lightning Free`** (`opencode/nemotron-3.5-lightning-free`)
+   - **`Nemotron 3 Ultra Free`** (`opencode/nemotron-3-ultra-free`)
+   - **`MiMo V2.6 Flash Free`** (`opencode/mimo-v2.6-flash-free`)
+   - **`Flint 40B Free`** (`opencode/flint-40b-free`)
+   - **`Beam Free`** (`opencode/beam-free`)
+4. **Por que modelos antigos (`kimi-k2.5-free`, `glm-5-free`, `minimax-m2.5-free`, `qwen3.6-plus-free`, `grok-code`) falhavam antes?**
+   - Esses IDs antigos foram marcados como **`deprecated`** no catálogo oficial do OpenCode e substituídos pelos 9 modelos acima. Além disso, corrigimos no CyberLab OS 4 causas técnicas do upstream (`#60047`, `#59475`, `#59926`, `#60057`): filtro de visibilidade `freeSet` no seletor Web, validação `loadable()` de pacotes no `models-dev.ts`, lista `PREFERRED_FREE` atualizada no `model.ts` e `User-Agent` canônico em builds de código-fonte (`OPENCODE_CHANNEL="local"`).
+5. **Se o seu IP receber limite de taxa anônimo (`HTTP 429 / 401` na chave `public`)**:
+   - Clique em **`Settings → Providers → OpenCode Zen → Connect`** (ou rode `bun run --cwd packages/cli dev auth login` e escolha **OpenCode Zen**) para autenticar uma conta gratuita em `https://opencode.ai/zen` e colar sua chave gratuita dedicada.
+
 ### Onde fica cada recurso na tela
-1. **Caixa de Diálogo e Chat (OpenCode V2)**: converse normalmente com qualquer modelo configurado em `Settings → Providers / Models` (Anthropic, OpenAI, Google Gemini, OpenRouter, Ollama local, etc.).
+1. **Caixa de Diálogo e Chat (OpenCode V2)**: converse normalmente com os modelos gratuitos do **OpenCode Zen** ou qualquer provedor configurado em `Settings → Providers / Models` (Anthropic, OpenAI, Google Gemini, OpenRouter, Ollama local, etc.).
 2. **Botão Único `"Ferramentas"` (abaixo da caixa de diálogo)**:
    - Clique em **`Ferramentas`** para abrir/recolher a bancada manual ou trocar de suíte através de uma **caixa vertical limpa** com busca instantânea (sem barras horizontais poluídas).
    - Dentro de cada suíte, navegue pelas **abas internas de funções** (estilo Burp Suite) e alterne entre o **Motor Nativo (`MIT`)** e o **Motor Externo** correspondente quando houver mais de uma opção.
@@ -121,7 +146,7 @@ Abra no navegador:
 
 ---
 
-## 4. Instruções de Uso das 8 Suítes Manuais (33 Modos / 29 Capacidades)
+## 4. Instruções de Uso das 8 Suítes Manuais (35 Modos / 31 Capacidades)
 
 > **Importante sobre Escopo de Alvos**: antes de apontar qualquer ferramenta de rede/web para um host fora de `127.0.0.1`/`localhost` (por exemplo `192.168.1.50` ou `lab.empresa.local`), abra **`Escopo, Cofre SHA-256 & Relatório → Escopo de Alvos`**, ative **"Permitir Alvos Externos Autorizados"** e cadastre a regra (`ip`, `cidr`, `domain` ou `url_origin`).
 
@@ -207,12 +232,24 @@ Dedicada a **Blue Team, SOC e Resposta a Incidentes**:
 
 ---
 
-### Suíte 6 — `SAST, SCA, SBOM CycloneDX & Containers/IaC`
-Segurança de aplicações, cadeia de suprimentos (Supply Chain) e infraestrutura como código:
+### Suíte 6 — `Key Hunter, SAST, SCA, SBOM CycloneDX & IaC`
+Caça avançada de segredos/API keys, segurança de código-fonte, cadeia de suprimentos (Supply Chain) e infraestrutura como código:
 
-1. **`SAST & Segredos`** (`code-analysis.workspace-audit`):
+1. **`Key Hunter (API Keys & Crypto)`** (`code-analysis.key-hunter` | `external.keyhunter-cli`):
+   - **Motor Nativo (`CyberLab Key Hunter Studio` — `MIT`)**:
+     - **51 assinaturas de alta precisão** distribuídas em 7 categorias: **IA/LLMs** (OpenAI `sk-proj-`/`T3BlbkFJ`, Anthropic `sk-ant-api03`, Google Gemini/GCP `AIzaSy`, xAI Grok, Groq, DeepSeek, Perplexity, HuggingFace, OpenRouter, Replicate, Mistral, Cohere), **Cloud/Infra** (AWS `AKIA`/`ASIA` + Secret Key, GCP Service Account JSON, Azure Storage/SAS, DigitalOcean, Supabase, HashiCorp Vault, Cloudflare), **Dev/VCS** (GitHub PAT clássico/fine-grained, GitLab, npm, PyPI, DockerHub, Postman), **Pagamentos** (Stripe Live `sk_live_`/`rk_live_`/`whsec_`, Shopify, Square), **Comunicação** (Slack, Discord, Telegram, SendGrid, Twilio, Mailgun), **Bancos/Observabilidade** (Postgres, MongoDB, MySQL, Redis, Sentry, Mapbox) e **Material Criptográfico** (chaves privadas `PEM` RSA/EC/OPENSSH/PKCS#8, `JWK` privadas com `"d"`, `JWT` com detecção `alg=none`/`service_role` e segredos de alta entropia Shannon).
+     - **4 superfícies simultâneas de caça**:
+       1. **Workspace & Binários** (`.env`, código-fonte, `.apk`, `.elf`, `.dll`, dumps de firmware com extração automática de strings imprimíveis).
+       2. **Web & JS Bundles em Escopo** (`targetUrl` — baixa o HTML e extrai/varre automaticamente os `<script src="...">` minificados do frontend).
+       3. **Buffer / Dump Colado** (`rawText` — cole respostas HTTP, logs ou arquivos `.env` diretamente).
+       4. **GitHub Autorizado** (`githubRepoOrOrg` + `GITHUB_TOKEN` — consulta `repo:` ou `org:` na API oficial de Code Search).
+     - **Filtro Inteligente Anti-Placeholder** (inspirado no `fadidevv/keyhunter`): descarta automaticamente chaves de exemplo (`YOUR_API_KEY`, `AKIAIOSFODNN7EXAMPLE`, sequências repetidas/baixa entropia).
+     - **Custódia Segura + Catálogo KeyHacks + Verificação Somente-Leitura Opt-In**: nunca grava o segredo puro em texto aberto no log (salva apenas versão mascarada + fingerprint `SHA-256`), exibe a receita somente-leitura **KeyHacks** para cada chave encontrada e oferece a opção `Verificar Chaves Ativas (Read-Only Opt-In)`.
+   - **Motor Externo (`KeyHunter Rust CLI` — `fadidevv/keyhunter`, `MIT`)**:
+     - Bridge governado (`shell=false`) para o scanner oficial em Rust (`cargo install github-keyhunter`), suportando os subcomandos `scan` (`-p`, `-q`, `-o json|table|csv`, `-V`), `verify` (`-i findings.json`) e `patterns` com redação automática no cofre `SHA-256`.
+2. **`SAST & Segredos`** (`code-analysis.workspace-audit`):
    - Varre arquivos-fonte em busca de chaves/credenciais hardcoded, validação TLS desabilitada e chamadas perigosas de execução.
-2. **`SCA, SBOM CycloneDX & IaC`** (`code-analysis.sca-sbom-iac-audit` | `external.trivy-scan`):
+3. **`SCA, SBOM CycloneDX & IaC`** (`code-analysis.sca-sbom-iac-audit` | `external.trivy-scan`):
    - **Motor Nativo (`MIT`)**:
      - Lê manifests e lockfiles (`package.json`, `package-lock.json`, `bun.lock`, `requirements.txt`, `poetry.lock`, `go.mod`, `Cargo.lock`, `pom.xml`).
      - Gera o inventário oficial **SBOM CycloneDX 1.5 (`JSON`)** como evidência verificável.
@@ -278,11 +315,13 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
 Todas as capacidades também podem ser operadas diretamente pelo terminal (PowerShell ou Bash):
 
 ```bash
-# Status geral do projeto, escopo ativo e contagem de capacidades (29 capacidades)
+# Status geral do projeto, escopo ativo e contagem de capacidades (31 capacidades)
 bun run cyberlab status
 bun run cyberlab capabilities
 
 # Exemplos das capacidades nativas (MIT):
+bun run cyberlab run -c code-analysis.key-hunter -i '{"subpath":".","skipPlaceholders":true,"carveCryptoMaterial":true}'
+bun run cyberlab run -c code-analysis.key-hunter -i '{"targetUrl":"http://127.0.0.1:4096","providerFilter":"ai_llm,cloud_infra"}'
 bun run cyberlab run -c web-assessment.api-graphql-oauth-lab -i '{"baseUrl":"http://127.0.0.1:4096","testUnauthenticated":true}'
 bun run cyberlab run -c code-analysis.sca-sbom-iac-audit -i '{"subpath":".","generateCycloneDxSbom":true,"auditContainersAndIac":true}'
 bun run cyberlab run -c network-assessment.tls-inspector -i '{"host":"127.0.0.1","port":443,"deepCipherAudit":true,"checkHsts":true}'
@@ -302,13 +341,16 @@ bun run cyberlab report > relatorio-cyberlab.md
 
 ---
 
-## 7. Instalação de Motores Externos Opcionais (`.cyberlab/bin`)
+## 7. Instalação de Motores Externos Opcionais (`.cyberlab/bin` e `github-keyhunter`)
 
-O CyberLab OS já funciona imediatamente sem binários externos graças aos **20 motores nativos `MIT`**. Quando você quiser também habilitar os **9 motores externos governados** (`nmap`, `nuclei`, `ffuf`, `tshark`, `dalfox`, `ghidra-headless`, `jadx`, `yarax`, `trivy`), basta instalá-los no sistema ou colocá-los na pasta local `<projeto>/.cyberlab/bin/`:
+O CyberLab OS já funciona imediatamente sem binários externos graças aos **21 motores nativos `MIT`** (incluindo o **CyberLab Key Hunter Studio**). Quando você quiser também habilitar os **10 motores externos governados** (`keyhunter`, `nmap`, `nuclei`, `ffuf`, `tshark`, `dalfox`, `ghidra-headless`, `jadx`, `yarax`, `trivy`), basta instalá-los no sistema ou colocá-los na pasta local `<projeto>/.cyberlab/bin/`:
 
 ```powershell
 # Windows PowerShell — baixa automaticamente Nuclei + ffuf para .cyberlab/bin/:
 powershell -ExecutionPolicy Bypass -File .\script\bootstrap-local-tools.ps1
+
+# Opcional — instalar o KeyHunter CLI oficial em Rust (fadidevv/keyhunter, licença MIT):
+cargo install github-keyhunter
 
 # Ferramentas adicionais via winget no Windows (opcionais):
 winget install Insecure.Nmap
@@ -320,15 +362,18 @@ winget install Skylot.Jadx
 ```bash
 # Linux / WSL2 — baixa automaticamente Nuclei + ffuf para .cyberlab/bin/ (adicione --with-agpl para OpenTRAP AppImage):
 ./script/bootstrap-local-tools.sh
+
+# Opcional — KeyHunter CLI em Rust (fadidevv/keyhunter, MIT):
+cargo install github-keyhunter
 ```
 
 ---
 
-## 8. Catálogo Técnico Completo (29 Capacidades) e Licenciamento (`MIT`)
+## 8. Catálogo Técnico Completo (31 Capacidades) e Licenciamento (`MIT`)
 
-Todos os **32 manifestos** em `vendor/manifests/` são auditados automaticamente em CI por `bun run cyberlab:check-licenses` (**0 componentes copyleft `GPL`/`AGPL` embutidos no código-fonte**):
+Todos os **34 manifestos** em `vendor/manifests/` são auditados automaticamente em CI por `bun run cyberlab:check-licenses` (**0 componentes copyleft `GPL`/`AGPL` embutidos no código-fonte**):
 
-### A. 20 Capacidades Nativas Embutidas (`100% MIT` — Zero Dependências Binárias Externas)
+### A. 21 Capacidades Nativas Embutidas (`100% MIT` — Zero Dependências Binárias Externas)
 
 | # | `capabilityId` | Suíte | Função Principal |
 |---|---|---|---|
@@ -350,24 +395,26 @@ Todos os **32 manifestos** em `vendor/manifests/` são auditados automaticamente
 | 16 | `mobile-forensics.artifact-triage` | Reversing | Triagem `.apk` / `.dex` (tabelas Dalvik `classes.dex`) e `.ipa` com busca de IoCs |
 | 17 | `forensics.yara-scan` | Reversing | Motor integrado de regras YARA (`ascii`, `wide`, `nocase`, hex `??` e condições) |
 | 18 | `forensics.dfir-sigma-triage` | DFIR & Sigma | Parser multi-log (`syslog`/`auth.log`, Nginx/Apache, JSON/Windows) + regras Sigma YAML + Timeline |
-| 19 | `code-analysis.workspace-audit` | Código & IaC | Auditoria estática SAST somente-leitura de segredos e padrões inseguros |
-| 20 | `code-analysis.sca-sbom-iac-audit` | Código & IaC | Scanner SCA + OSV.dev CVEs + SBOM CycloneDX 1.5 + Dockerfile/Compose/K8s/Terraform |
+| 19 | `code-analysis.key-hunter` | Key Hunter & Código | Caçador multi-superfície de 51 assinaturas de API Keys/Tokens/PEM em Workspace, Binários, Web/JS Bundles, Buffer e GitHub + KeyHacks |
+| 20 | `code-analysis.workspace-audit` | Key Hunter & Código | Auditoria estática SAST somente-leitura de segredos e padrões inseguros |
+| 21 | `code-analysis.sca-sbom-iac-audit` | Key Hunter & Código | Scanner SCA + OSV.dev CVEs + SBOM CycloneDX 1.5 + Dockerfile/Compose/K8s/Terraform |
 
 *(Mais o **Proxy Local HTTP / HTTPS MITM com Root CA ECDSA P-256 + WebSocket** em `cyberlab/proxy/` e as **6 Skills metodológicas `SKILL.md`** em `skills/`).*
 
-### B. 9 Pontes Governadas para Motores Externos (`plugin_only` — `shell=false` + `SHA-256`)
+### B. 10 Pontes Governadas para Motores Externos (`plugin_only` — `shell=false` + `SHA-256`)
 
 | # | `capabilityId` | Binário | Licença SPDX |
 |---|---|---|---|
-| 21 | `external.nuclei-template-scan` | `nuclei` | `MIT` |
-| 22 | `external.ffuf-endpoint-probe` | `ffuf` | `MIT` |
-| 23 | `external.dalfox-param-scan` | `dalfox` | `MIT` |
-| 24 | `external.ghidra-decompile` | `analyzeHeadless` | `Apache-2.0` |
-| 25 | `external.jadx-decompile` | `jadx` | `Apache-2.0` |
-| 26 | `external.trivy-scan` | `trivy` | `Apache-2.0` |
-| 27 | `external.yarax-scan` | `yr` / `yara` | `BSD-3-Clause` |
-| 28 | `external.nmap-service-probe` | `nmap` | `NPSL-0.95` *(externo isolado)* |
-| 29 | `external.tshark-pcap-summary` | `tshark` | `GPL-2.0-or-later` *(externo isolado)* |
+| 22 | `external.keyhunter-cli` | `keyhunter` (`github-keyhunter`) | `MIT` |
+| 23 | `external.nuclei-template-scan` | `nuclei` | `MIT` |
+| 24 | `external.ffuf-endpoint-probe` | `ffuf` | `MIT` |
+| 25 | `external.dalfox-param-scan` | `dalfox` | `MIT` |
+| 26 | `external.ghidra-decompile` | `analyzeHeadless` | `Apache-2.0` |
+| 27 | `external.jadx-decompile` | `jadx` | `Apache-2.0` |
+| 28 | `external.trivy-scan` | `trivy` | `Apache-2.0` |
+| 29 | `external.yarax-scan` | `yr` / `yara` | `BSD-3-Clause` |
+| 30 | `external.nmap-service-probe` | `nmap` | `NPSL-0.95` *(externo isolado)* |
+| 31 | `external.tshark-pcap-summary` | `tshark` | `GPL-2.0-or-later` *(externo isolado)* |
 
 ---
 

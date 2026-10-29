@@ -105,8 +105,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         {
           app: {
             name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
-            version: OPENCODE_VERSION,
-            channel: OPENCODE_CHANNEL,
+            version: OPENCODE_VERSION === "local" ? (process.env.OPENCODE_VERSION_OVERRIDE ?? "2.1.4") : OPENCODE_VERSION,
+            channel: OPENCODE_CHANNEL === "local" ? (process.env.OPENCODE_CHANNEL_OVERRIDE ?? "latest") : OPENCODE_CHANNEL,
           },
           hostname,
           port,

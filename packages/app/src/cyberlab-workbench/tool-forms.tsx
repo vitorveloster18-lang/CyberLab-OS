@@ -4219,6 +4219,440 @@ python integrations/partners/chat_py_bridge.py --port 8791 --partner-id nova   -
           )
         })()}
       </Match>
+
+      {/* ==================================================================
+          KEY HUNTER — NATIVE MULTI-SURFACE STUDIO (MIT)
+         ================================================================== */}
+      <Match when={toolId() === "key-hunter"}>
+        {(() => {
+          const d = () => wb.drafts["key-hunter"]
+          const providerPresets = [
+            { label: "Todos (43+ Padrões)", value: "all" },
+            { label: "IA / LLMs (OpenAI/Anthropic/Gemini/Grok/Groq/HF)", value: "ai_llm" },
+            { label: "Cloud & Infra (AWS/GCP/Azure/Supabase/Vault/CF)", value: "cloud_infra" },
+            { label: "Pagamentos (Stripe Live/Shopify/Square)", value: "payment_commerce" },
+            { label: "Dev & VCS (GitHub/GitLab/npm/PyPI)", value: "developer_vcs" },
+            { label: "Comunicação (Slack/Discord/Telegram/SendGrid)", value: "communication_saas" },
+            { label: "Bancos & Crypto (Postgres/Mongo/Redis/PEM/JWK/JWT)", value: "database_observability,crypto_material" },
+          ]
+          return (
+            <div class="flex flex-col gap-3">
+              <div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-v2-border-border-base bg-v2-background-bg-base/70 px-3 py-2 text-[12px]">
+                <div class="flex flex-col">
+                  <strong class="text-v2-text-text-strong">
+                    CyberLab Key Hunter Studio (MIT Nativo — Código, Binários, Web/JS Bundles, Buffer & GitHub)
+                  </strong>
+                  <span class="text-[11px] text-v2-text-text-muted">
+                    Inclui filtro inteligente anti-placeholder (estilo fadidevv/keyhunter), carving de chaves PEM/JWK/alta entropia, mascaramento automático SHA-256 e catálogo KeyHacks.
+                  </span>
+                </div>
+                <select
+                  value={d().executionMode}
+                  class={`${INPUT_CLS} !w-auto`}
+                  onChange={(e) =>
+                    wb.updateDraft("key-hunter", (p) => ({
+                      ...p,
+                      executionMode: e.currentTarget.value as "manual" | "proposed",
+                    }))
+                  }
+                >
+                  <option value="manual">Manual Direto</option>
+                  <option value="proposed">Propor p/ Aprovação</option>
+                </select>
+              </div>
+
+              <div class="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>1. Caminho no Workspace / Binário / .apk / .env (Opcional)</label>
+                  <input
+                    type="text"
+                    value={d().subpath}
+                    placeholder="Ex: . , src/ , .env , app-release.apk (vazio para ignorar disco)"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) => wb.updateDraft("key-hunter", (p) => ({ ...p, subpath: e.currentTarget.value }))}
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>2. URL Alvo Web & JS Bundles no Escopo (Opcional)</label>
+                  <input
+                    type="text"
+                    value={d().targetUrl}
+                    placeholder="Ex: http://127.0.0.1:4096 (extrai HTML + <script src='...'>)"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) => wb.updateDraft("key-hunter", (p) => ({ ...p, targetUrl: e.currentTarget.value }))}
+                  />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>3. GitHub Autorizado — Org ou Owner/Repo (Opcional)</label>
+                  <input
+                    type="text"
+                    value={d().githubRepoOrOrg}
+                    placeholder="Ex: minha-org ou usuario/meu-repo (usa GITHUB_TOKEN)"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("key-hunter", (p) => ({ ...p, githubRepoOrOrg: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Query GitHub Code Search (Quando Repo/Org definido)</label>
+                  <input
+                    type="text"
+                    value={d().githubQuery}
+                    placeholder="(T3BlbkFJ OR sk-ant-api03 OR sk_live_ OR AKIA)"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("key-hunter", (p) => ({ ...p, githubQuery: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div class="flex flex-col gap-1">
+                <div class="flex flex-wrap items-center justify-between gap-1">
+                  <label class={LABEL_CLS}>4. Buffer / Resposta HTTP / Dump de Strings Colado (Opcional)</label>
+                  <button
+                    type="button"
+                    class={CHIP_CLS}
+                    onClick={() =>
+                      wb.updateDraft("key-hunter", (p) => ({
+                        ...p,
+                        subpath: "",
+                        rawText: [
+                          "# Exemplo de buffer misto (1 placeholder filtrado + chaves de teste sintéticas):",
+                          "OPENAI_EXAMPLE=sk-proj-YOUR_API_KEY_HERE_XXXXXXXXXXXX",
+                          "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7REAL987",
+                          "GITHUB_TOKEN=ghp_9Km2Pq8Vx4Lz7Bn3Rt6Yw1Jc5Hd8Gf0Sa2Ue",
+                        ].join("\n"),
+                      }))
+                    }
+                  >
+                    Carregar Exemplo Anti-Placeholder
+                  </button>
+                </div>
+                <textarea
+                  rows={3}
+                  value={d().rawText}
+                  placeholder="Cole aqui arquivos .env, bundles JavaScript minificados, logs HTTP, JSON ou dumps de memória..."
+                  class={`${MONO_INPUT_CLS} resize-y`}
+                  onInput={(e) => wb.updateDraft("key-hunter", (p) => ({ ...p, rawText: e.currentTarget.value }))}
+                />
+              </div>
+
+              <div class="grid grid-cols-1 gap-2.5 md:grid-cols-3">
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Filtro de Provedores / Categorias</label>
+                  <input
+                    type="text"
+                    value={d().providerFilter}
+                    placeholder="all, openai, anthropic, aws, stripe..."
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("key-hunter", (p) => ({ ...p, providerFilter: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Máx. Ficheiros no Workspace (1–1000)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={1000}
+                    value={d().maxFiles}
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("key-hunter", (p) => ({ ...p, maxFiles: Number(e.currentTarget.value) }))
+                    }
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Máx. JS Bundles Remotos (0–30)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={30}
+                    value={d().maxRemoteScripts}
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("key-hunter", (p) => ({
+                        ...p,
+                        maxRemoteScripts: Number(e.currentTarget.value),
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="text-[11px] text-v2-text-text-muted">Presets de Categoria:</span>
+                <For each={providerPresets}>
+                  {(preset) => (
+                    <button
+                      type="button"
+                      class={CHIP_CLS}
+                      onClick={() => wb.updateDraft("key-hunter", (p) => ({ ...p, providerFilter: preset.value }))}
+                    >
+                      {preset.label}
+                    </button>
+                  )}
+                </For>
+              </div>
+
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-3 rounded-md border border-v2-border-border-base bg-v2-background-bg-base/60 p-2.5 text-[12px]">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={d().skipPlaceholders}
+                    onChange={(e) =>
+                      wb.updateDraft("key-hunter", (p) => ({ ...p, skipPlaceholders: e.currentTarget.checked }))
+                    }
+                  />
+                  <span>Filtrar Placeholders / Exemplos (Anti-FP)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={d().carveCryptoMaterial}
+                    onChange={(e) =>
+                      wb.updateDraft("key-hunter", (p) => ({ ...p, carveCryptoMaterial: e.currentTarget.checked }))
+                    }
+                  />
+                  <span>Carving PEM / JWK / JWT / Alta Entropia</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={d().verifyActive}
+                    onChange={(e) =>
+                      wb.updateDraft("key-hunter", (p) => ({ ...p, verifyActive: e.currentTarget.checked }))
+                    }
+                  />
+                  <span class="text-amber-300">Verificar Chaves Ativas (Read-Only Opt-In)</span>
+                </label>
+              </div>
+
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("key-hunter", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("key-hunter", (p) => ({ ...p, rawJson: v }))}
+              />
+
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("key-hunter")}
+                >
+                  {isRunning() ? "Caçando Chaves & Segredos..." : "Executar Key Hunter"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("key-hunter")}>
+                  Restaurar Padrão
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Match>
+
+      {/* ==================================================================
+          EXTERNAL KEYHUNTER RUST CLI BRIDGE (fadidevv/keyhunter — MIT)
+         ================================================================== */}
+      <Match when={toolId() === "keyhunter-cli"}>
+        {(() => {
+          const d = () => wb.drafts["keyhunter-cli"]
+          const providerChips = [
+            "openai",
+            "anthropic",
+            "google_ai",
+            "grok",
+            "deepseek",
+            "groq",
+            "huggingface",
+            "aws",
+            "stripe_live",
+            "github",
+            "slack",
+          ]
+          return (
+            <div class="flex flex-col gap-3">
+              <ExternalBinaryBadge wb={wb} toolId="keyhunter" />
+              <div class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-v2-border-border-base bg-v2-background-bg-base/70 px-3 py-2 text-[12px]">
+                <div class="flex flex-col">
+                  <strong class="text-v2-text-text-strong">
+                    KeyHunter Rust CLI Bridge (fadidevv/keyhunter — MIT)
+                  </strong>
+                  <span class="text-[11px] text-v2-text-text-muted">
+                    Invoca o binário externo <code>keyhunter</code> (<code>cargo install github-keyhunter</code>) via <code>shell=false</code> com redação automática e custódia SHA-256.
+                  </span>
+                </div>
+                <select
+                  value={d().executionMode}
+                  class={`${INPUT_CLS} !w-auto`}
+                  onChange={(e) =>
+                    wb.updateDraft("keyhunter-cli", (p) => ({
+                      ...p,
+                      executionMode: e.currentTarget.value as "manual" | "proposed",
+                    }))
+                  }
+                >
+                  <option value="manual">Manual Direto</option>
+                  <option value="proposed">Propor p/ Aprovação</option>
+                </select>
+              </div>
+
+              <div class="grid grid-cols-1 gap-2.5 md:grid-cols-3">
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Subcomando KeyHunter</label>
+                  <select
+                    value={d().subcommand}
+                    class={INPUT_CLS}
+                    onChange={(e) =>
+                      wb.updateDraft("keyhunter-cli", (p) => ({
+                        ...p,
+                        subcommand: e.currentTarget.value as "scan" | "verify" | "patterns",
+                      }))
+                    }
+                  >
+                    <option value="scan">scan (Buscar chaves no GitHub)</option>
+                    <option value="verify">verify (Verificar arquivo JSON salvo)</option>
+                    <option value="patterns">patterns (Listar provedores & regexes)</option>
+                  </select>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Provedor (-p)</label>
+                  <input
+                    type="text"
+                    value={d().provider}
+                    placeholder="openai, anthropic, aws, stripe_live (vazio = todos)"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("keyhunter-cli", (p) => ({ ...p, provider: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Formato de Saída (-o)</label>
+                  <select
+                    value={d().outputFormat}
+                    class={INPUT_CLS}
+                    onChange={(e) =>
+                      wb.updateDraft("keyhunter-cli", (p) => ({
+                        ...p,
+                        outputFormat: e.currentTarget.value as "json" | "table" | "csv",
+                      }))
+                    }
+                  >
+                    <option value="json">json (Recomendado)</option>
+                    <option value="table">table</option>
+                    <option value="csv">csv</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="text-[11px] text-v2-text-text-muted">Provedores rápidos (-p):</span>
+                <For each={providerChips}>
+                  {(prov) => (
+                    <button
+                      type="button"
+                      class={CHIP_CLS}
+                      onClick={() => wb.updateDraft("keyhunter-cli", (p) => ({ ...p, provider: prov }))}
+                    >
+                      {prov}
+                    </button>
+                  )}
+                </For>
+              </div>
+
+              <div class="grid grid-cols-1 gap-2.5 md:grid-cols-3">
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Query Customizada (-q, Opcional)</label>
+                  <input
+                    type="text"
+                    value={d().query}
+                    placeholder='Ex: OPENAI_API_KEY filename:.env'
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) => wb.updateDraft("keyhunter-cli", (p) => ({ ...p, query: e.currentTarget.value }))}
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>Arquivo Config (-c, Opcional)</label>
+                  <input
+                    type="text"
+                    value={d().configPath}
+                    placeholder="config.toml"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("keyhunter-cli", (p) => ({ ...p, configPath: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class={LABEL_CLS}>JSON p/ Verify (-i, Modo verify)</label>
+                  <input
+                    type="text"
+                    value={d().inputFindingsPath}
+                    placeholder="results/findings.json"
+                    class={MONO_INPUT_CLS}
+                    onInput={(e) =>
+                      wb.updateDraft("keyhunter-cli", (p) => ({ ...p, inputFindingsPath: e.currentTarget.value }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-4 rounded-md border border-v2-border-border-base bg-v2-background-bg-base/60 p-2.5 text-[12px]">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={d().verifiedOnly}
+                    onChange={(e) =>
+                      wb.updateDraft("keyhunter-cli", (p) => ({ ...p, verifiedOnly: e.currentTarget.checked }))
+                    }
+                  />
+                  <span>Modo Verified-Only (-V: somente chaves ativas)</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={d().verbose}
+                    onChange={(e) =>
+                      wb.updateDraft("keyhunter-cli", (p) => ({ ...p, verbose: e.currentTarget.checked }))
+                    }
+                  />
+                  <span>Logs Detalhados (--verbose / -v)</span>
+                </label>
+              </div>
+
+              <RawJsonOverrideSection
+                enabled={d().useRawJson}
+                rawJson={d().rawJson}
+                onToggle={(v) => wb.updateDraft("keyhunter-cli", (p) => ({ ...p, useRawJson: v }))}
+                onChange={(v) => wb.updateDraft("keyhunter-cli", (p) => ({ ...p, rawJson: v }))}
+              />
+
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isRunning()}
+                  class={BTN_PRIMARY}
+                  onClick={() => void wb.runCapabilityTool("keyhunter-cli")}
+                >
+                  {isRunning() ? "Executando keyhunter CLI..." : "Executar KeyHunter Rust CLI"}
+                </button>
+                <button type="button" class={BTN_SECONDARY} onClick={() => wb.resetToolDraft("keyhunter-cli")}>
+                  Restaurar Padrão
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </Match>
     </Switch>
   )
 }

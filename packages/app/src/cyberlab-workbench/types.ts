@@ -60,6 +60,8 @@ export type ManualToolId =
   | "pcap-analyzer"
   | "tshark"
   | "workspace-audit"
+  | "key-hunter"
+  | "keyhunter-cli"
   | "sca-sbom-iac"
   | "trivy"
   | "binary-triage"
@@ -293,6 +295,37 @@ export interface ApiSecurityLabDraft {
   rawJson: string
 }
 
+export interface KeyHunterDraft {
+  subpath: string
+  targetUrl: string
+  rawText: string
+  githubRepoOrOrg: string
+  githubQuery: string
+  providerFilter: string
+  skipPlaceholders: boolean
+  carveCryptoMaterial: boolean
+  verifyActive: boolean
+  maxFiles: number
+  maxRemoteScripts: number
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
+}
+
+export interface KeyHunterCliDraft {
+  subcommand: "scan" | "verify" | "patterns"
+  provider: string
+  query: string
+  configPath: string
+  inputFindingsPath: string
+  outputFormat: "json" | "table" | "csv"
+  verifiedOnly: boolean
+  verbose: boolean
+  executionMode: "manual" | "proposed"
+  useRawJson: boolean
+  rawJson: string
+}
+
 export interface ScaSbomIacDraft {
   targetPath: string
   queryOsv: boolean
@@ -499,6 +532,8 @@ export interface ManualToolDraftMap {
   "pcap-analyzer": PcapAnalyzerDraft
   tshark: TsharkDraft
   "workspace-audit": WorkspaceAuditDraft
+  "key-hunter": KeyHunterDraft
+  "keyhunter-cli": KeyHunterCliDraft
   "sca-sbom-iac": ScaSbomIacDraft
   trivy: TrivyDraft
   "binary-triage": BinaryTriageDraft

@@ -156,6 +156,16 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
     installHint: "winget install AquaSecurity.Trivy (Windows) or brew/apt install trivy",
     description: "Apache-2.0 filesystem vulnerability, container & IaC misconfiguration scanner governed inside workspace.",
   },
+  {
+    toolId: "keyhunter",
+    displayName: "KeyHunter Rust CLI (fadidevv/keyhunter)",
+    binaryCandidates: ["keyhunter", "github-keyhunter"],
+    licenseSpdx: "MIT",
+    integrationMode: "approved_internal_process",
+    governedCapabilityId: "external.keyhunter-cli",
+    installHint: "cargo install github-keyhunter (or place keyhunter / keyhunter.exe in .cyberlab/bin)",
+    description: "MIT Rust API key hunter CLI (45+ providers, scan/verify/patterns) governed with automatic secret redaction and SHA-256 custody.",
+  },
 ]
 
 function expandPlatformNames(name: string): string[] {
@@ -1318,6 +1328,158 @@ export class ExternalYaraXExecutor implements CyberLabExecutor {
       status: out.exitCode === 0 ? "succeeded" : "failed",
       evidenceIds: [evId],
       summary: `External YARA-X scan finished on ${params.targetPath} (exit=${out.exitCode}).`,
+      exitCode: out.exitCode,
+    }
+  }
+}
+
+export const EXTERNAL_KEYHUNTER_INPUT_SCHEMA_ID = "cyberlab.external.keyhunter.input.v1"
+export const ExternalKeyHunterInputSchema = Schema.Struct({
+  subcommand: Schema.optionalKey(Schema.Literals(["scan", "verify", "patterns"])),
+  provider: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(128))),
+  query: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(512))),
+  configPath: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(512))),
+  inputFindingsPath: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(512))),
+  outputFormat: Schema.optionalKey(Schema.Literals(["json", "table", "csv"])),
+  verifiedOnly: Schema.optionalKey(Schema.Boolean),
+  verbose: Schema.optionalKey(Schema.Boolean),
+})
+
+export const ExternalKeyHunterCapability: CapabilityDefinition = {
+  id: "external.keyhunter-cli",
+  version: "1.0.0",
+  title: "External KeyHunter Rust CLI Bridge (fadidevv/keyhunter — MIT)",
+  description:
+    "Executes the upstream Rust KeyHunter CLI ('cargo install github-keyhunter', MIT) via structured non-shell arguments (scan / verify / patterns) with automatic secret redaction and SHA-256 chain of custody.",
+  inputSchemaId: EXTERNAL_KEYHUNTER_INPUT_SCHEMA_ID,
+  outputSchemaId: "cyberlab.external.output.v1",
+  risk: "low",
+  supportedModes: ["manual", "proposed", "approved", "lab_automation"],
+  requiredPermissions: ["cyberlab:read"],
+  requiredScope: [],
+  executorId: "external-keyhunter-executor",
+  skillIds: ["code-review", "evidence-review"],
+  licenseRefs: ["MIT"],
+  enabled: true,
+}
+
+export class ExternalKeyHunterExecutor implements CyberLabExecutor {
+  readonly id = "external-keyhunter-executor"
+  readonly version = "1.0.0"
+
+  constructor(private readonly getWorkspaceRoot: () => string) {}
+
+  async checkAvailability(): Promise<{ available: boolean; version?: string; reason?: string }> {
+    const root = this.getWorkspaceRoot()
+    const resolved = resolveExternalBinary(
+      root,
+      ["keyhunter", "github-keyhunter"],
+      loadCustomBinaryOverrides(root),
+    )
+    if (!resolved.resolvedPath) {
+      return {
+        available: false,
+        reason: "KeyHunter CLI ('keyhunter') not found in .cyberlab/bin or PATH (install via 'cargo install github-keyhunter')",
+      }
+    }
+    return { available: true, version: resolved.resolvedPath }
+  }
+
+  async validate(input: unknown): Promise<{ valid: boolean; errors: string[] }> {
+    try {
+      const d = Schema.decodeUnknownSync(ExternalKeyHunterInputSchema)(input)
+      for (const field of [d.provider, d.query, d.configPath, d.inputFindingsPath]) {
+        if (field && (field.includes("\0") || field.trim().startsWith("-"))) {
+          return { valid: false, errors: ["Arguments must not start with '-' or contain null bytes"] }
+        }
+      }
+      if ((d.subcommand ?? "scan") === "verify" && !d.inputFindingsPath?.trim()) {
+        return { valid: false, errors: ["inputFindingsPath is required when subcommand is 'verify'"] }
+      }
+      return { valid: true, errors: [] }
+    } catch (err) {
+      return { valid: false, errors: [err instanceof Error ? err.message : String(err)] }
+    }
+  }
+
+  async execute(execInput: ExecutorInput, ctx: ExecutorContext): Promise<ExecutorResult> {
+    const params = Schema.decodeUnknownSync(ExternalKeyHunterInputSchema)(execInput.input)
+    if (params.configPath && !isPathInsideRoot(params.configPath, ctx.workspaceRoot)) {
+      return { status: "failed", evidenceIds: [], summary: "configPath escapes workspaceRoot", exitCode: 2 }
+    }
+    if (params.inputFindingsPath && !isPathInsideRoot(params.inputFindingsPath, ctx.workspaceRoot)) {
+      return { status: "failed", evidenceIds: [], summary: "inputFindingsPath escapes workspaceRoot", exitCode: 2 }
+    }
+
+    const resolved = resolveExternalBinary(
+      ctx.workspaceRoot,
+      ["keyhunter", "github-keyhunter"],
+      loadCustomBinaryOverrides(ctx.workspaceRoot),
+    )
+    if (!resolved.resolvedPath) {
+      return {
+        status: "failed",
+        evidenceIds: [],
+        summary: "keyhunter binary not installed (run 'cargo install github-keyhunter' or use the built-in MIT Key Hunter engine)",
+        exitCode: 127,
+      }
+    }
+
+    const sub = params.subcommand ?? "scan"
+    const args: string[] = [sub]
+    if (sub === "scan") {
+      if (params.provider?.trim()) {
+        args.push("-p", params.provider.trim())
+      }
+      if (params.query?.trim()) {
+        args.push("-q", params.query.trim())
+      }
+      if (params.configPath?.trim()) {
+        args.push("-c", path.resolve(ctx.workspaceRoot, params.configPath.trim()))
+      }
+      args.push("-o", params.outputFormat ?? "json")
+      if (params.verifiedOnly) {
+        args.push("-V")
+      }
+      if (params.verbose) {
+        args.push("-v")
+      }
+    } else if (sub === "verify") {
+      args.push("-i", path.resolve(ctx.workspaceRoot, params.inputFindingsPath!.trim()))
+      if (params.verbose) args.push("-v")
+    }
+
+    const out = await runSafeChildProcess({
+      binaryPath: resolved.resolvedPath,
+      args,
+      cwd: ctx.workspaceRoot,
+      signal: ctx.signal,
+    })
+
+    const combinedRaw = [out.stdout, out.stderr].filter(Boolean).join("\n") || "(empty output)"
+    const redacted = redactSensitiveContent(combinedRaw)
+    const isJson = sub === "scan" && (params.outputFormat ?? "json") === "json"
+
+    const evId = await ctx.emitEvidence({
+      ...normalizeRawOutputDraft({
+        kind: isJson ? "json" : "stdout",
+        title: `External KeyHunter CLI (${sub}${params.provider ? ` -p ${params.provider}` : ""})`,
+        rawText: redacted.text,
+        mediaType: isJson ? "application/json" : "text/plain; charset=utf-8",
+        toolId: "external:keyhunter",
+        toolVersion: "external",
+        executorId: this.id,
+        executionId: ctx.executionId,
+        maxOutputBytes: 768 * 1024,
+        labels: ["external-plugin", "keyhunter", "api-keys"],
+      }),
+      redactionApplied: redacted.redacted,
+    })
+
+    return {
+      status: out.exitCode === 0 ? "succeeded" : "failed",
+      evidenceIds: [evId],
+      summary: `External KeyHunter CLI (${sub}) completed (exit=${out.exitCode}).`,
       exitCode: out.exitCode,
     }
   }

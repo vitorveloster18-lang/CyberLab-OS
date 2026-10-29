@@ -17,6 +17,7 @@ import {
   EXTERNAL_FFUF_INPUT_SCHEMA_ID,
   EXTERNAL_GHIDRA_INPUT_SCHEMA_ID,
   EXTERNAL_JADX_INPUT_SCHEMA_ID,
+  EXTERNAL_KEYHUNTER_INPUT_SCHEMA_ID,
   EXTERNAL_NMAP_INPUT_SCHEMA_ID,
   EXTERNAL_NUCLEI_INPUT_SCHEMA_ID,
   EXTERNAL_TRIVY_INPUT_SCHEMA_ID,
@@ -35,6 +36,9 @@ import {
   ExternalJadxCapability,
   ExternalJadxExecutor,
   ExternalJadxInputSchema,
+  ExternalKeyHunterCapability,
+  ExternalKeyHunterExecutor,
+  ExternalKeyHunterInputSchema,
   ExternalNmapCapability,
   ExternalNmapExecutor,
   ExternalNmapInputSchema,
@@ -183,6 +187,12 @@ import {
   EntropyRecipeInputSchema,
   EntropyRecipeStudioExecutor,
 } from "../integrations/reverse-forensics/entropy-recipe-studio.js"
+import {
+  KEY_HUNTER_INPUT_SCHEMA_ID,
+  KeyHunterCapability,
+  KeyHunterExecutor,
+  KeyHunterInputSchema,
+} from "../integrations/code-analysis/key-hunter.js"
 
 const repoSkillsDir = fileURLToPath(new URL("../skills", import.meta.url))
 
@@ -392,7 +402,11 @@ export class CyberLabWorkspace {
     this.executors.registerExecutor(new EntropyRecipeStudioExecutor())
     await this.capabilities.register(EntropyRecipeCapability)
 
-    // Register governed External Tool Control Plane bridges (Nmap, Nuclei, ffuf, tshark, dalfox, ghidra, jadx, yarax)
+    this.schemas.registerEffectSchema(KEY_HUNTER_INPUT_SCHEMA_ID, KeyHunterInputSchema)
+    this.executors.registerExecutor(new KeyHunterExecutor())
+    await this.capabilities.register(KeyHunterCapability)
+
+    // Register governed External Tool Control Plane bridges (Nmap, Nuclei, ffuf, tshark, dalfox, ghidra, jadx, yarax, trivy, keyhunter)
     this.schemas.registerEffectSchema(EXTERNAL_NMAP_INPUT_SCHEMA_ID, ExternalNmapInputSchema)
     this.executors.registerExecutor(new ExternalNmapExecutor(() => this.workspaceRoot))
     await this.capabilities.register(ExternalNmapCapability)
@@ -428,6 +442,10 @@ export class CyberLabWorkspace {
     this.schemas.registerEffectSchema(EXTERNAL_TRIVY_INPUT_SCHEMA_ID, ExternalTrivyInputSchema)
     this.executors.registerExecutor(new ExternalTrivyExecutor(() => this.workspaceRoot))
     await this.capabilities.register(ExternalTrivyCapability)
+
+    this.schemas.registerEffectSchema(EXTERNAL_KEYHUNTER_INPUT_SCHEMA_ID, ExternalKeyHunterInputSchema)
+    this.executors.registerExecutor(new ExternalKeyHunterExecutor(() => this.workspaceRoot))
+    await this.capabilities.register(ExternalKeyHunterCapability)
 
     // Load CyberLab skills
     this.skills.loadFromDirectory(repoSkillsDir)

@@ -14,7 +14,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-const UI_BUILD_STAMP = "cyberlab-unified-v3.0-complete-suites"
+const UI_BUILD_STAMP = "cyberlab-unified-v3.1-key-hunter-free-models"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const distDir = path.join(repoRoot, "packages", "app", "dist")
@@ -85,7 +85,25 @@ console.log(`  Gateway Bidirecional dos 4 CDIs:   http://127.0.0.1:${port}/api/c
 console.log("======================================================================")
 console.log("")
 
-const cliArgs = ["run", "--cwd", "packages/cli", "src/index.ts", "serve", "--hostname", host, "--port", port]
+if (["1", "true"].includes((process.env.OPENCODE_DISABLE_FREE_MODELS ?? "").toLowerCase())) {
+  console.warn(
+    "[Aviso] OPENCODE_DISABLE_FREE_MODELS está ativa no ambiente — modelos gratuitos do OpenCode ficarão ocultos até removê-la.",
+  )
+}
+
+const cliArgs = [
+  "--user-agent=opencode/latest/2.1.4/cli",
+  "--use-system-ca",
+  "run",
+  "--cwd",
+  "packages/cli",
+  "src/index.ts",
+  "serve",
+  "--hostname",
+  host,
+  "--port",
+  port,
+]
 if (corsFlag) {
   cliArgs.push("--cors", corsFlag)
 }

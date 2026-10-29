@@ -328,7 +328,10 @@ const PREFERRED_FREE = [
   "big-pickle",
   "deepseek-v4.1-flash-free",
   "glm-5.3-flash-free",
-  "muse-spark-1.3-contributor-free",
+  "nemotron-3.5-super-vl-free",
+  "mimo-v2.6-flash-free",
+  "flint-40b-free",
+  "beam-free",
 ]
 
 function preferFree(models: Info[]) {

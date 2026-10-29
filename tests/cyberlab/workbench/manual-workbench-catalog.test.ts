@@ -7,7 +7,7 @@ import { CyberLabWorkspace } from "../../../cyberlab/index.js"
 const catalogUrl = new URL("../../../packages/app/src/cyberlab-workbench/catalog.ts", import.meta.url).href
 
 describe("CyberLab Manual Workbench Suites, Catalog & Schema Parity", () => {
-  test("consolidates all 33 underlying manual modes into 8 distinct Burp-Suite-style suites and validates every default capability payload against backend Effect schemas", async () => {
+  test("consolidates all 35 underlying manual modes into 8 distinct Burp-Suite-style suites and validates every default capability payload against backend Effect schemas", async () => {
     const catalog = (await import(catalogUrl)) as {
       TOOL_SUITES: Array<{
         id: string
@@ -41,7 +41,7 @@ describe("CyberLab Manual Workbench Suites, Catalog & Schema Parity", () => {
       "governance-suite",
     ])
 
-    // Verify all 33 underlying tool modes are reachable through the 8 distinct suites
+    // Verify all 35 underlying tool modes are reachable through the 8 distinct suites
     const coveredToolIds = new Set<string>()
     for (const suite of catalog.TOOL_SUITES) {
       expect(suite.functions.length).toBeGreaterThanOrEqual(1)
@@ -49,7 +49,7 @@ describe("CyberLab Manual Workbench Suites, Catalog & Schema Parity", () => {
         coveredToolIds.add(tid)
       }
     }
-    expect(coveredToolIds.size).toBe(33)
+    expect(coveredToolIds.size).toBe(35)
     for (const tool of catalog.MANUAL_TOOLS) {
       expect(coveredToolIds.has(tool.id)).toBe(true)
       const loc = catalog.findSuiteAndFunctionForTool(tool.id)
@@ -67,7 +67,7 @@ describe("CyberLab Manual Workbench Suites, Catalog & Schema Parity", () => {
 
       const drafts = catalog.createDefaultToolDrafts()
       const capabilityTools = catalog.MANUAL_TOOLS.filter((t) => Boolean(t.capabilityId))
-      expect(capabilityTools.length).toBe(29)
+      expect(capabilityTools.length).toBe(31)
 
       for (const tool of capabilityTools) {
         const built = catalog.buildCapabilityInput(tool.id, drafts)

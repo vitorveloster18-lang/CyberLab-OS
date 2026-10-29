@@ -16,6 +16,7 @@ const EXTERNAL_BINARY_TOOLS = new Set<ManualToolId>([
   "jadx",
   "yarax",
   "trivy",
+  "keyhunter-cli",
 ])
 
 interface EntropyBlockDto {
@@ -53,6 +54,13 @@ function StructuredResultVisualizer(props: { outputText: string }) {
     const obj = parsed()
     const tl = obj?.incidentTimeline
     return Array.isArray(tl) ? (tl as Array<Record<string, unknown>>) : []
+  })
+
+  const keyHunterMatches = createMemo<Array<Record<string, unknown>>>(() => {
+    const obj = parsed()
+    if (obj?.tool !== "CyberLab Key Hunter") return []
+    const m = obj?.matches
+    return Array.isArray(m) ? (m as Array<Record<string, unknown>>) : []
   })
 
   const barColor = (cls: EntropyBlockDto["classification"]) => {
@@ -154,6 +162,66 @@ function StructuredResultVisualizer(props: { outputText: string }) {
                   <span class="shrink-0 font-mono text-[10px] text-v2-text-text-muted">
                     #{String(ev.lineNumber ?? "")}
                   </span>
+                </div>
+              )}
+            </For>
+          </div>
+        </div>
+      </Show>
+
+      <Show when={keyHunterMatches().length > 0}>
+        <div class="rounded-md border border-v2-border-border-base bg-v2-background-bg-base p-2.5 flex flex-col gap-1.5">
+          <div class="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+            <strong class="text-v2-text-text-strong">
+              Key Hunter — {keyHunterMatches().length} Segredo(s) / Chave(s) Identificada(s) (Mascarados + SHA-256)
+            </strong>
+            <span class="text-[10px] text-v2-text-text-muted">
+              Custódia automática: segredos ofuscados no log com receita KeyHacks somente-leitura
+            </span>
+          </div>
+          <div class="max-h-44 overflow-y-auto flex flex-col gap-1.5" data-scrollable>
+            <For each={keyHunterMatches().slice(0, 25)}>
+              {(m) => (
+                <div class="rounded border border-v2-border-border-base bg-v2-background-bg-deep/50 p-2 flex flex-col gap-1 text-[11px]">
+                  <div class="flex flex-wrap items-center justify-between gap-1.5">
+                    <div class="flex items-center gap-1.5 min-w-0">
+                      <span
+                        class={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                          String(m.severity) === "critical"
+                            ? "bg-red-500/20 text-red-400 border border-red-500/40"
+                            : String(m.severity) === "high"
+                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                              : "bg-sky-500/20 text-sky-300 border border-sky-500/40"
+                        }`}
+                      >
+                        {String(m.severity ?? "high")}
+                      </span>
+                      <strong class="text-v2-text-text-strong truncate">{String(m.provider)}</strong>
+                      <span class="text-v2-text-text-muted truncate">— {String(m.description)}</span>
+                    </div>
+                    <span class="font-mono text-[10px] text-v2-text-text-muted">
+                      {String(m.location)}:{String(m.line)} · H={String(m.shannonEntropy)}
+                    </span>
+                  </div>
+                  <div class="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px]">
+                    <span class="text-emerald-400">
+                      Key: {String(m.maskedSecret)} <span class="text-v2-text-text-muted">(fp:{String(m.fingerprintSha256)})</span>
+                    </span>
+                    <Show when={String(m.verificationStatus) !== "not_checked"}>
+                      <span
+                        class={`rounded px-1.5 py-0.5 ${
+                          String(m.verificationStatus) === "active_confirmed"
+                            ? "bg-red-500/25 text-red-300 font-semibold"
+                            : "bg-v2-background-bg-base text-v2-text-text-muted"
+                        }`}
+                      >
+                        {String(m.verificationStatus)}
+                      </span>
+                    </Show>
+                  </div>
+                  <div class="font-mono text-[10px] text-v2-text-text-muted truncate" title={String(m.verificationRecipe ?? "")}>
+                    KeyHacks: {String(m.verificationRecipe ?? "")}
+                  </div>
                 </div>
               )}
             </For>

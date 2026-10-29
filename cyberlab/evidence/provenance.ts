@@ -44,17 +44,17 @@ const REDACTION_PATTERNS: ReadonlyArray<{ category: string; regex: RegExp; repla
   },
   {
     category: "authorization_header",
-    regex: /((?:Authorization|Proxy-Authorization)\s*:\s*(?:Bearer|Basic|Token)\s+)(?!\[REDACTED:)[^\r\n"'\s]+/gi,
+    regex: /((?:Authorization|Proxy-Authorization)\s*:\s*(?:Bearer|Basic|Token)\s+)(?!\[REDACTED:)[^\r\n"'\\\s]+/gi,
     replacement: "$1[REDACTED:AUTH_TOKEN]",
   },
   {
     category: "cookie_header",
-    regex: /((?:Set-Cookie|Cookie)\s*:\s*)(?!\[REDACTED:)[^\r\n]+/gi,
+    regex: /((?:Set-Cookie|Cookie)\s*:\s*)(?!\[REDACTED:)[^\r\n"'\\]+/gi,
     replacement: "$1[REDACTED:COOKIE]",
   },
   {
     category: "api_key_header",
-    regex: /((?:X-Api-Key|X-Auth-Token|Api-Key)\s*:\s*)(?!\[REDACTED:)[^\r\n"'\s]+/gi,
+    regex: /((?:X-Api-Key|X-Auth-Token|Api-Key)\s*:\s*)(?!\[REDACTED:)[^\r\n"'\\\s]+/gi,
     replacement: "$1[REDACTED:API_KEY]",
   },
   {
@@ -74,12 +74,12 @@ const REDACTION_PATTERNS: ReadonlyArray<{ category: string; regex: RegExp; repla
   },
   {
     category: "url_credentials",
-    regex: /([a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^:\s/@]+:)(?!\[REDACTED:)([^@\s/]+)(@)/g,
+    regex: /([a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^:\s/@"'\\]+:)(?!\[REDACTED:)([^@\s/"'\\]+)(@)/g,
     replacement: "$1[REDACTED:URL_SECRET]$3",
   },
   {
     category: "secret_assignment",
-    regex: /((?:password|passwd|secret|client_secret|access_token|refresh_token)\s*[=:]\s*["']?)(?!\[REDACTED:)([^"'\s&;,\r\n]{4,})(["']?)/gi,
+    regex: /((?:password|passwd|secret|client_secret|access_token|refresh_token)\s*[=:]\s*["']?)(?!\[REDACTED:)([^"'\s&;,\r\n\\]{4,})(["']?)/gi,
     replacement: "$1[REDACTED:SECRET]$3",
   },
 ]

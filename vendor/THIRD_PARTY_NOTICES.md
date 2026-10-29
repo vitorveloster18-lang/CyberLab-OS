@@ -67,8 +67,9 @@ Os seguintes adaptadores e executores em `cyberlab/` e `integrations/` são impl
 - **`cyberlab-dfir-sigma`** (`integrations/reverse-forensics/dfir-sigma-analyzer.ts`) — Analisador forense DFIR de logs (`syslog`/`auth.log`, Nginx/Apache, JSON/Windows Events), motor de regras Sigma YAML e gerador de Timeline de Incidente com custódia `SHA-256` (`MIT`).
 - **`cyberlab-ad-smb-ldap`** (`integrations/network-observation/ad-smb-ldap-inspector.ts`) — Inspetor passivo de laboratório para assinatura SMB2/3 (`SMB Signing`), exposição anônima de `RootDSE` LDAPv3 e decodificação de metadados de challenge HTTP NTLM (`MIT`).
 - **`cyberlab-entropy-recipe-studio`** (`integrations/reverse-forensics/entropy-recipe-studio.ts`) — Mapeador visual de entropia de Shannon por janelas, detector de assinaturas mágicas embutidas e estúdio de receitas estilo CyberChef (`XOR`, `AES`, `Gzip/Zlib`, `Protobuf raw`) (`MIT`).
+- **`cyberlab-key-hunter`** (`integrations/code-analysis/key-hunter.ts`) — Motor nativo `MIT` **Key Hunter** de caça de API keys, tokens cloud/LLM/SaaS/pagamentos, URIs de banco de dados e chaves criptográficas (`PEM`/`JWK`/`JWT`/alta entropia) em ficheiros/binários do workspace, páginas web + JS bundles remotos em escopo, buffers colados e repositórios GitHub autorizados, com filtro inteligente anti-placeholders, redação automática de segredos e receitas KeyHacks (`MIT`).
 
- Conectores externos opcionais sob licenças permissivas registrados em `vendor/manifests/` (invocados via `shell=false` sem incorporação binária): `dalfox-external-connector` (`MIT`), `ghidra-headless-connector` (`Apache-2.0`), `jadx-external-connector` (`Apache-2.0`), `yarax-external-connector` (`BSD-3-Clause`) e `trivy-external-connector` (`Apache-2.0`).
+ Conectores externos opcionais sob licenças permissivas registrados em `vendor/manifests/` (invocados via `shell=false` sem incorporação binária): `dalfox-external-connector` (`MIT`), `ghidra-headless-connector` (`Apache-2.0`), `jadx-external-connector` (`Apache-2.0`), `yarax-external-connector` (`BSD-3-Clause`), `trivy-external-connector` (`Apache-2.0`) e `keyhunter-external-connector` (`MIT`, `fadidevv/keyhunter`).
 
 ---
 

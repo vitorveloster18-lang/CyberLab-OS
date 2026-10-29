@@ -1,0 +1,20 @@
+{
+  "id": "keyhunter-external-connector",
+  "version": "0.2.0",
+  "source": "https://github.com/fadidevv/keyhunter",
+  "commit": "external-user-installed",
+  "license": {
+    "spdx": "MIT",
+    "reviewStatus": "plugin_only",
+    "reviewNotes": [
+      "MIT Rust KeyHunter CLI ('cargo install github-keyhunter', Copyright (c) 2026 @fadidevv) invoked externally via shell=false with automatic secret redaction and SHA-256 custody."
+    ]
+  },
+  "integration": {
+    "mode": "plugin_only",
+    "linuxRequired": false
+  },
+  "dependenciesReviewed": true,
+  "noticesRecorded": true,
+  "lastReviewedAt": "2026-10-28T00:00:00.000Z"
+}

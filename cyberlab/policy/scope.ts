@@ -125,6 +125,7 @@ export function extractTargetsFromInput(input: unknown): ExtractedTargets {
   const networkKeys = [
     "target",
     "url",
+    "targetUrl",
     "baseUrl",
     "baselineUrl",
     "host",
