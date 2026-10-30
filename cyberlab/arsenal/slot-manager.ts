@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   statSync,
   writeFileSync,
 } from "node:fs"
@@ -199,6 +200,25 @@ function expandPosixCandidatePath(template: string, toolsRoot: string): string {
     .replace(/^~(?=\/|$)/, os.homedir())
 }
 
+function stripSurroundingQuotes(raw: string): string {
+  const trimmed = raw.trim()
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim()
+  }
+  return trimmed
+}
+
+function safeRealpath(targetPath: string): string {
+  try {
+    return realpathSync(targetPath)
+  } catch {
+    return targetPath
+  }
+}
+
 function decodePotentialUtf16Le(buf: Buffer | string | null | undefined): string {
   if (!buf) return ""
   if (typeof buf === "string") return buf.replace(/\0/g, "")
@@ -309,13 +329,17 @@ export class ArsenalSlotManager {
       path.join(this.workspaceRoot, ".cyberlab", "bin"),
       path.join(this.config.toolsRootDir, "bin"),
       this.config.toolsRootDir,
+      path.join(localAppData, "BurpSuiteCommunity"),
+      path.join(localAppData, "Programs", "BurpSuiteCommunity"),
+      path.join(progFiles, "BurpSuiteCommunity"),
+      path.join(userHome, "BurpSuiteCommunity"),
+      path.join(localAppData, "BurpSuitePro"),
+      path.join(localAppData, "Programs", "BurpSuitePro"),
       path.join(localAppData, "Microsoft", "WinGet", "Links"),
       path.join(localAppData, "Programs", "caido"),
       path.join(localAppData, "Programs", "Caido"),
       path.join(localAppData, "caido"),
       path.join(progFiles, "Caido"),
-      path.join(localAppData, "Programs", "BurpSuiteCommunity"),
-      path.join(localAppData, "Programs", "BurpSuitePro"),
       path.join(userHome, ".cargo", "bin"),
       path.join(userHome, "go", "bin"),
       path.join(userHome, "scoop", "shims"),
@@ -488,6 +512,10 @@ export class ArsenalSlotManager {
 
         if (allPosixBins.length > 0) {
           const scriptLines = [
+            // Strip Windows /mnt/* paths appended by WSL2 so Windows .bat/.sh scripts in C:\Program Files are never mistaken for native Linux binaries!
+            'CLEAN_PATH=""',
+            'IFS=:; for seg in $PATH; do case "$seg" in /mnt/*|"") ;; *) CLEAN_PATH="${CLEAN_PATH:+$CLEAN_PATH:}$seg" ;; esac; done; unset IFS',
+            'PATH="$CLEAN_PATH"',
             'for d in "$HOME/.local/bin" "$HOME/go/bin" "$HOME/.cargo/bin" "$HOME/.pdtm/go/bin" /home/*/.local/bin /home/*/go/bin /home/*/.cargo/bin /home/*/.pdtm/go/bin /root/.local/bin /root/go/bin /root/.cargo/bin /opt/opentrap /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin; do [ -d "$d" ] && PATH="$d:$PATH"; done',
             "export PATH",
             ...allPosixBins.map((token) => {
@@ -496,9 +524,11 @@ export class ArsenalSlotManager {
                 return `for cand in "$HOME/${sub}" /home/*/${sub} "/root/${sub}"; do if [ -x "$cand" ]; then echo "HIT:${token}=$cand"; break; fi; done`
               }
               if (token.includes("/")) {
-                return `p="${token}"; [ -x "$p" ] && echo "HIT:${token}=$p"`
+                return token.endsWith(".jar")
+                  ? `p="${token}"; [ -s "$p" ] && echo "HIT:${token}=$p"`
+                  : `p="${token}"; [ -x "$p" ] && echo "HIT:${token}=$p"`
               }
-              return `p=$(command -v "${token}" 2>/dev/null | head -n 1); [ -n "$p" ] && echo "HIT:${token}=$p"`
+              return `p=$(command -v "${token}" 2>/dev/null | head -n 1); case "$p" in /mnt/*|"") ;; *) echo "HIT:${token}=$p" ;; esac`
             }),
           ].join("\n")
 
@@ -521,7 +551,9 @@ export class ArsenalSlotManager {
                 if (eqIdx === -1) continue
                 const key = line.slice(4, eqIdx).trim()
                 const val = line.slice(eqIdx + 1).trim()
-                if (key && val) wslResolvedByBin.set(key, val)
+                if (key && val && !val.startsWith("/mnt/")) {
+                  wslResolvedByBin.set(key, val)
+                }
               }
             }
           } catch {
@@ -749,8 +781,8 @@ export class ArsenalSlotManager {
     slotId?: string
     slotOverride?: SlotUserOverride
   }): ArsenalOverview {
-    if (params.toolsRootDir !== undefined && params.toolsRootDir.trim()) {
-      this.config.toolsRootDir = params.toolsRootDir.trim()
+    if (params.toolsRootDir !== undefined && stripSurroundingQuotes(params.toolsRootDir)) {
+      this.config.toolsRootDir = stripSurroundingQuotes(params.toolsRootDir)
     }
     if (params.preferredWslDistro !== undefined && params.preferredWslDistro.trim()) {
       this.config.preferredWslDistro = params.preferredWslDistro.trim()
@@ -759,9 +791,28 @@ export class ArsenalSlotManager {
       this.config.enforceScopeOnCliRuns = params.enforceScopeOnCliRuns
     }
     if (params.slotId && params.slotOverride) {
+      const cleaned: SlotUserOverride = { ...params.slotOverride }
+      if (cleaned.customExecutablePath !== undefined) {
+        const p = stripSurroundingQuotes(cleaned.customExecutablePath)
+        cleaned.customExecutablePath = p || undefined
+      }
+      if (cleaned.customEmbedUrl !== undefined) {
+        const u = stripSurroundingQuotes(cleaned.customEmbedUrl)
+        cleaned.customEmbedUrl = u || undefined
+      }
       this.config.slotOverrides[params.slotId] = {
         ...this.config.slotOverrides[params.slotId],
-        ...params.slotOverride,
+        ...cleaned,
+      }
+      // Stop any running daemon for this slot so the next launch uses the updated executable/JAR/URL
+      const runningDaemon = this.daemons.get(params.slotId)
+      if (runningDaemon) {
+        if (runningDaemon.child) this.terminateProcessTree(runningDaemon.child)
+        if (runningDaemon.tcpBridges) {
+          for (const srv of runningDaemon.tcpBridges) srv.close()
+        }
+        if (runningDaemon.staticServer) runningDaemon.staticServer.close()
+        this.daemons.delete(params.slotId)
       }
     }
     this.saveConfig()
@@ -1024,17 +1075,219 @@ export class ArsenalSlotManager {
     return null
   }
 
-  private findPreferredWindowsBurpJar(slot: ArsenalSlotStatus): string | null {
+  private async createEmbedHttpProxyServer(
+    remoteHosts: string[],
+    remotePort: number,
+  ): Promise<{ server: http.Server; localPort: number } | null> {
+    const pickHost = async (): Promise<string> => {
+      for (const h of remoteHosts) {
+        const ok = await new Promise<boolean>((resolve) => {
+          const s = net.connect({ host: h, port: remotePort })
+          const t = setTimeout(() => {
+            s.destroy()
+            resolve(false)
+          }, 300)
+          s.once("connect", () => {
+            clearTimeout(t)
+            s.end()
+            resolve(true)
+          })
+          s.once("error", () => {
+            clearTimeout(t)
+            s.destroy()
+            resolve(false)
+          })
+        })
+        if (ok) return h
+      }
+      return remoteHosts[0] ?? "127.0.0.1"
+    }
+
+    let cachedUpstreamHost = await pickHost()
+
+    const srv = http.createServer((req, res) => {
+      const forwardHeaders: http.OutgoingHttpHeaders = { ...req.headers }
+      forwardHeaders.host = `127.0.0.1:${remotePort}`
+      forwardHeaders.origin = `http://127.0.0.1:${remotePort}`
+      forwardHeaders.referer = `http://127.0.0.1:${remotePort}/`
+      if (forwardHeaders["sec-fetch-site"]) {
+        forwardHeaders["sec-fetch-site"] = "same-origin"
+      }
+
+      const upstreamReq = http.request(
+        {
+          host: cachedUpstreamHost,
+          port: remotePort,
+          method: req.method,
+          path: req.url ?? "/",
+          headers: forwardHeaders,
+        },
+        (upstreamRes) => {
+          const outHeaders: http.OutgoingHttpHeaders = { ...upstreamRes.headers }
+          delete outHeaders["x-frame-options"]
+          delete outHeaders["X-Frame-Options"]
+          const csp = outHeaders["content-security-policy"]
+          if (typeof csp === "string") {
+            const stripped = csp.replace(/frame-ancestors\s+[^;]+;?/gi, "").trim()
+            if (stripped) outHeaders["content-security-policy"] = stripped
+            else delete outHeaders["content-security-policy"]
+          }
+          res.writeHead(upstreamRes.statusCode ?? 200, outHeaders)
+          upstreamRes.pipe(res)
+        },
+      )
+
+      upstreamReq.on("error", async () => {
+        cachedUpstreamHost = await pickHost()
+        if (!res.headersSent) {
+          res.writeHead(502, { "Content-Type": "text/plain; charset=utf-8" })
+        }
+        res.end("Aguardando inicialização do servidor Web local da ferramenta... Clique em Recarregar Frame em instantes.")
+      })
+
+      req.pipe(upstreamReq)
+    })
+
+    srv.on("upgrade", (req, clientSocket, head) => {
+      const upstream = net.connect({ host: cachedUpstreamHost, port: remotePort })
+      upstream.setNoDelay(true)
+      clientSocket.on("error", () => upstream.destroy())
+      upstream.on("error", () => clientSocket.destroy())
+      upstream.once("connect", () => {
+        const headerLines: string[] = [`${req.method ?? "GET"} ${req.url ?? "/"} HTTP/1.1`]
+        for (const [k, v] of Object.entries(req.headers)) {
+          if (v === undefined) continue
+          const low = k.toLowerCase()
+          if (low === "host") {
+            headerLines.push(`Host: 127.0.0.1:${remotePort}`)
+          } else if (low === "origin") {
+            headerLines.push(`Origin: http://127.0.0.1:${remotePort}`)
+          } else if (low === "sec-fetch-site") {
+            headerLines.push("Sec-Fetch-Site: same-origin")
+          } else if (Array.isArray(v)) {
+            for (const item of v) headerLines.push(`${k}: ${item}`)
+          } else {
+            headerLines.push(`${k}: ${v}`)
+          }
+        }
+        headerLines.push("", "")
+        upstream.write(headerLines.join("\r\n"))
+        if (head && head.byteLength > 0) upstream.write(head)
+        upstream.pipe(clientSocket)
+        clientSocket.pipe(upstream)
+      })
+    })
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        srv.once("error", reject)
+        srv.listen(0, "127.0.0.1", () => resolve())
+      })
+      const localPort = (srv.address() as net.AddressInfo).port
+      return { server: srv, localPort }
+    } catch {
+      try {
+        srv.close()
+      } catch {
+        // Ignore
+      }
+      return null
+    }
+  }
+
+  private findWindowsJavaExecutable(preferredBaseDir?: string): string {
     const localAppData =
       process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local")
     const progFiles = process.env.ProgramFiles ?? "C:\\Program Files"
+    const directCandidates = [
+      preferredBaseDir ? path.join(preferredBaseDir, "jre", "bin", "javaw.exe") : "",
+      preferredBaseDir ? path.join(preferredBaseDir, "jre", "bin", "java.exe") : "",
+      path.join(localAppData, "BurpSuiteCommunity", "jre", "bin", "javaw.exe"),
+      path.join(localAppData, "Programs", "BurpSuiteCommunity", "jre", "bin", "javaw.exe"),
+      path.join(progFiles, "BurpSuiteCommunity", "jre", "bin", "javaw.exe"),
+    ].filter(Boolean)
+    for (const c of directCandidates) {
+      if (existsSync(c)) return c
+    }
+    for (const vendorRoot of [
+      path.join(progFiles, "Eclipse Adoptium"),
+      path.join(progFiles, "Java"),
+      path.join(progFiles, "Microsoft"),
+    ]) {
+      if (!existsSync(vendorRoot)) continue
+      try {
+        for (const sub of readdirSync(vendorRoot)) {
+          const jw = path.join(vendorRoot, sub, "bin", "javaw.exe")
+          if (existsSync(jw)) return jw
+        }
+      } catch {
+        // Ignore
+      }
+    }
+    return this.findWhereOnWindows(["javaw.exe", "java.exe"]) ?? "javaw.exe"
+  }
+
+  private findPreferredWindowsBurpJar(slot: ArsenalSlotStatus): string | null {
+    // 0. Explicit user override (.jar or .exe) takes highest priority!
+    const customRaw = slot.override.customExecutablePath
+      ? stripSurroundingQuotes(slot.override.customExecutablePath)
+      : ""
+    if (customRaw && existsSync(customRaw)) {
+      const realCustom = safeRealpath(customRaw)
+      if (/\.jar$/i.test(realCustom)) {
+        return realCustom
+      }
+      const customDir = path.dirname(realCustom)
+      for (const d of [customDir, path.join(customDir, "app"), path.dirname(customDir)]) {
+        if (!existsSync(d)) continue
+        try {
+          const jar =
+            readdirSync(d).find((f) => /^burpsuite_community.*\.jar$/i.test(f)) ??
+            readdirSync(d).find((f) => /^burpsuite.*\.jar$/i.test(f)) ??
+            readdirSync(d).find((f) => /\.jar$/i.test(f))
+          if (jar) return path.join(d, jar)
+        } catch {
+          // Ignore
+        }
+      }
+    }
+
+    const localAppData =
+      process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local")
+    const progFiles = process.env.ProgramFiles ?? "C:\\Program Files"
+    const userHome = os.homedir()
+    const resolvedWinSlot = slot.windowsPath ? safeRealpath(slot.windowsPath) : ""
+    if (resolvedWinSlot && /\.jar$/i.test(resolvedWinSlot) && existsSync(resolvedWinSlot)) {
+      return resolvedWinSlot
+    }
+
+    const extraDownloadDirs: string[] = []
+    for (const userFolder of [path.join(userHome, "Downloads"), path.join(userHome, "Desktop")]) {
+      if (!existsSync(userFolder)) continue
+      extraDownloadDirs.push(userFolder)
+      try {
+        for (const ent of readdirSync(userFolder, { withFileTypes: true })) {
+          if (ent.isDirectory() && /burp/i.test(ent.name)) {
+            extraDownloadDirs.push(path.join(userFolder, ent.name))
+          }
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
     const candidateDirs = Array.from(
       new Set(
         [
+          resolvedWinSlot ? path.dirname(resolvedWinSlot) : "",
+          path.join(localAppData, "BurpSuiteCommunity"),
           path.join(localAppData, "Programs", "BurpSuiteCommunity"),
           path.join(progFiles, "BurpSuiteCommunity"),
+          path.join(userHome, "BurpSuiteCommunity"),
           path.join(this.config.toolsRootDir, "BurpSuite"),
-          slot.windowsPath ? path.dirname(slot.windowsPath) : "",
+          this.config.toolsRootDir,
+          ...extraDownloadDirs,
+          path.join(localAppData, "BurpSuitePro"),
           path.join(localAppData, "Programs", "BurpSuitePro"),
           path.join(progFiles, "BurpSuitePro"),
         ].filter(Boolean),
@@ -1065,32 +1318,175 @@ export class ArsenalSlotManager {
     return null
   }
 
+  private buildCyberLabCanvasHtml(slotTitle: string): string {
+    const safeTitle = slotTitle.replace(/[<>&"]/g, "")
+    return `<!DOCTYPE html>
+<html lang="pt-BR" translate="no" class="notranslate">
+<head>
+  <meta charset="utf-8" />
+  <meta name="google" content="notranslate" />
+  <title>${safeTitle}</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #09090b;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    #status_pill {
+      position: fixed;
+      top: 8px;
+      right: 12px;
+      z-index: 50;
+      background: rgba(16, 185, 129, 0.16);
+      border: 1px solid rgba(16, 185, 129, 0.45);
+      color: #6ee7b7;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    #status_pill.hidden { opacity: 0; }
+    #screen {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #09090b;
+    }
+    #screen > div {
+      scrollbar-width: thin;
+      scrollbar-color: #10b981 #18181b;
+    }
+    #screen.scroll-mode > div {
+      overflow: auto !important;
+      align-items: flex-start !important;
+      justify-content: flex-start !important;
+    }
+    #screen > div::-webkit-scrollbar { width: 11px; height: 11px; }
+    #screen > div::-webkit-scrollbar-track { background: #18181b; }
+    #screen > div::-webkit-scrollbar-thumb {
+      background: #10b981;
+      border-radius: 6px;
+      border: 2px solid #18181b;
+    }
+  </style>
+  <script type="module">
+    import RFB from './core/rfb.js';
+
+    const pill = document.getElementById('status_pill');
+    const screenEl = document.getElementById('screen');
+    const params = new URLSearchParams(window.location.search);
+    let currentMode = params.get('mode') || 'fit';
+    let currentZoom = Number(params.get('zoom') || '100');
+    let rfb = null;
+    let retryTimer = null;
+
+    function applyFraming() {
+      if (!rfb) return;
+      const canvas = screenEl.querySelector('canvas');
+      if (currentMode === 'fit') {
+        screenEl.classList.remove('scroll-mode');
+        if (canvas) canvas.style.zoom = '';
+        rfb.resizeSession = false;
+        rfb.clipViewport = false;
+        rfb.scaleViewport = true;
+      } else if (currentMode === 'native') {
+        screenEl.classList.remove('scroll-mode');
+        if (canvas) canvas.style.zoom = '';
+        rfb.scaleViewport = false;
+        rfb.clipViewport = false;
+        rfb.resizeSession = true;
+      } else {
+        screenEl.classList.add('scroll-mode');
+        rfb.scaleViewport = false;
+        rfb.resizeSession = false;
+        rfb.clipViewport = false;
+        if (canvas) {
+          canvas.style.zoom = (Math.max(50, Math.min(160, currentZoom)) / 100).toString();
+        }
+      }
+    }
+
+    function connectVnc() {
+      clearTimeout(retryTimer);
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = proto + '//' + window.location.host + '/websockify';
+      try {
+        rfb = new RFB(screenEl, wsUrl);
+        rfb.background = '#09090b';
+        rfb.addEventListener('connect', () => {
+          pill.classList.add('hidden');
+          applyFraming();
+          setTimeout(applyFraming, 250);
+        });
+        rfb.addEventListener('disconnect', () => {
+          pill.textContent = 'Reconectando tela gráfica...';
+          pill.classList.remove('hidden');
+          retryTimer = setTimeout(connectVnc, 850);
+        });
+      } catch {
+        retryTimer = setTimeout(connectVnc, 850);
+      }
+    }
+
+    window.addEventListener('message', (ev) => {
+      const d = ev && ev.data;
+      if (!d || d.type !== 'cyberlab-canvas-control') return;
+      if (d.mode) currentMode = d.mode;
+      if (typeof d.zoom === 'number') currentZoom = d.zoom;
+      applyFraming();
+    });
+
+    connectVnc();
+  </script>
+</head>
+<body>
+  <div id="status_pill">Carregando ${safeTitle}...</div>
+  <div id="screen"></div>
+</body>
+</html>`
+  }
+
   private resolveEmbeddedLinuxGuiCommand(slot: ArsenalSlotStatus): {
     launchCmd: string
     needsJava: boolean
     wslSourceBurpJar?: string
   } {
     // 1. Burp Suite: stage JAR onto fast Linux ext4 (/opt/cyberlab-burp/burpsuite.jar) & launch with Genuine Java 21 LTS
-    //    and PortSwigger's exact 2026 module opens!
+    //    (with automatic fallback to system /usr/bin/java if compiled with newer JDK bytecode!)
     if (slot.slotId === "burp-suite") {
+      const customRaw = slot.override.customExecutablePath
+        ? stripSurroundingQuotes(slot.override.customExecutablePath)
+        : ""
       const winJar = process.platform === "win32" ? this.findPreferredWindowsBurpJar(slot) : null
-      const wslSourceBurpJar = winJar ? windowsPathToWslPath(winJar) : undefined
+      const wslSourceBurpJar = winJar
+        ? windowsPathToWslPath(winJar)
+        : customRaw.startsWith("/") && /\.jar$/i.test(customRaw)
+          ? customRaw
+          : undefined
+      const burpFlags = [
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/javax.crypto=ALL-UNNAMED",
+        "--add-opens=java.desktop/javax.swing=ALL-UNNAMED",
+        "--add-opens=java.desktop/java.awt=ALL-UNNAMED",
+        "--add-opens=java.desktop/java.awt.color=ALL-UNNAMED",
+        "--add-opens=jdk.crypto.cryptoki/sun.security.pkcs11=ALL-UNNAMED",
+        "-XX:MaxRAMPercentage=50",
+        "-Djava.awt.headless=false",
+        "-Dawt.useSystemAAFontSettings=on",
+        "-Dswing.aatext=true",
+        '-jar "$BURP_JAR_TARGET"',
+        "--disable-auto-update",
+      ].join(" ")
       return {
         needsJava: true,
         ...(wslSourceBurpJar ? { wslSourceBurpJar } : {}),
-        launchCmd: [
-          '"$JAVA21_BIN"',
-          "--add-opens=java.base/java.lang=ALL-UNNAMED",
-          "--add-opens=java.base/javax.crypto=ALL-UNNAMED",
-          "--add-opens=java.desktop/javax.swing=ALL-UNNAMED",
-          "--add-opens=java.desktop/java.awt=ALL-UNNAMED",
-          "--add-opens=java.desktop/java.awt.color=ALL-UNNAMED",
-          "--add-opens=jdk.crypto.cryptoki/sun.security.pkcs11=ALL-UNNAMED",
-          "-XX:MaxRAMPercentage=50",
-          "-Dawt.useSystemAAFontSettings=on",
-          "-Dswing.aatext=true",
-          '-jar "$BURP_JAR_TARGET"',
-        ].join(" "),
+        launchCmd: `("$JAVA21_BIN" ${burpFlags} || (grep -qi "UnsupportedClassVersionError" "$GUI_LOG" && /usr/bin/java ${burpFlags}))`,
       }
     }
 
@@ -1106,25 +1502,35 @@ export class ArsenalSlotManager {
       }
     }
 
-    // 3. Kali full desktop stream
+    // 3. Kali full XFCE desktop stream (with panel + Kali menu + terminal — never a blank blue wall!)
     if (slot.slotId === "kali-desktop-stream") {
       return {
         needsJava: false,
-        launchCmd: "(command -v startxfce4 >/dev/null 2>&1 && dbus-launch --exit-with-session startxfce4) || openbox-session",
+        launchCmd:
+          "(command -v startxfce4 >/dev/null 2>&1 && dbus-launch --exit-with-session startxfce4) || (openbox & sleep 0.6 && (xfce4-terminal || xterm))",
       }
     }
 
     // 4. OWASP ZAP, Ghidra, Wireshark, JADX-GUI, Cutter, or custom GUI slot
     if (slot.slotId === "owasp-zap") {
-      const p = slot.wslPath ?? slot.posixPath ?? "zaproxy"
-      return { needsJava: true, launchCmd: `'${p.replace(/'/g, "'\\''")}'` }
+      return {
+        needsJava: true,
+        launchCmd:
+          'if [ -x /usr/share/zaproxy/zap.sh ]; then /usr/share/zaproxy/zap.sh; else zaproxy; fi',
+      }
     }
     if (slot.slotId === "ghidra") {
-      const p = slot.wslPath ?? slot.posixPath ?? "ghidra"
+      const p =
+        slot.wslPath && !slot.wslPath.startsWith("/mnt/")
+          ? slot.wslPath
+          : slot.posixPath ?? "ghidra"
       return { needsJava: true, launchCmd: `'${p.replace(/'/g, "'\\''")}'` }
     }
     if (slot.slotId === "jadx") {
-      const p = slot.wslPath ?? slot.posixPath ?? "jadx-gui"
+      const p =
+        slot.wslPath && !slot.wslPath.startsWith("/mnt/")
+          ? slot.wslPath
+          : slot.posixPath ?? "jadx-gui"
       return { needsJava: true, launchCmd: `'${p.replace(/'/g, "'\\''")}'` }
     }
     if (slot.slotId === "wireshark") {
@@ -1150,7 +1556,7 @@ export class ArsenalSlotManager {
     const useWsl = process.platform === "win32"
     if (useWsl && (!this.wslAvailable || !this.config.preferredWslDistro)) {
       throw new Error(
-        `Para abrir a interface gráfica de "${slot.name}" dentro do centro do CyberLab OS no Windows, o WSL2 (kali-linux) precisa estar instalado. Caso prefira, clique em "Janela Externa do Windows".`,
+        `Para abrir a interface gráfica de "${slot.name}" dentro do centro do CyberLab OS no Windows, o WSL2 (kali-linux) precisa estar instalado. Caso prefira, clique em "Janela Externa".`,
       )
     }
 
@@ -1159,11 +1565,13 @@ export class ArsenalSlotManager {
     const vncPort = 5900 + dispNum
     const wsPort = 6000 + dispNum
     const escapedWslSrcJar = wslSourceBurpJar ? wslSourceBurpJar.replace(/'/g, "'\\''") : ""
+    const canvasHtmlB64 = Buffer.from(this.buildCyberLabCanvasHtml(slot.shortLabel), "utf8").toString("base64")
 
-    // 1. Ensure Xtigervnc + openbox + novnc + websockify + x11-utils + genuine Java 21 LTS (Temurin 21)
-    //    + native ext4 cached Burp JAR (/opt/cyberlab-burp/burpsuite.jar) are ready inside Kali WSL2!
+    // 1. Ensure Xtigervnc + openbox + novnc + websockify + x11-utils + genuine Java 21 LTS
+    //    + any missing Linux GUI package (zaproxy, wireshark, ghidra, jadx, xfce4) are installed in Kali WSL2!
     const bootstrapCheckAndInstall = [
       "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH",
+      "export DEBIAN_FRONTEND=noninteractive",
       "MISSING=0",
       "command -v Xtigervnc >/dev/null 2>&1 || MISSING=1",
       "command -v openbox >/dev/null 2>&1 || MISSING=1",
@@ -1171,26 +1579,57 @@ export class ArsenalSlotManager {
       "command -v xmessage >/dev/null 2>&1 || MISSING=1",
       "[ -d /usr/share/novnc ] || MISSING=1",
       'if [ "$MISSING" = "1" ]; then',
-      "  export DEBIAN_FRONTEND=noninteractive",
       "  apt-get update -qq || true",
       "  apt-get install -y -qq curl jq tar tigervnc-standalone-server openbox novnc websockify dbus-x11 x11-xserver-utils x11-utils fonts-dejavu-core || true",
       "fi",
+      ...(slot.slotId === "owasp-zap"
+        ? [
+            "if [ ! -x /usr/share/zaproxy/zap.sh ] && ! command -v zaproxy >/dev/null 2>&1; then apt-get update -qq || true; apt-get install -y -qq zaproxy || true; fi",
+          ]
+        : []),
+      ...(slot.slotId === "wireshark"
+        ? [
+            'if ! command -v wireshark >/dev/null 2>&1; then echo "wireshark-common wireshark-common/install-setuid boolean true" | debconf-set-selections 2>/dev/null || true; apt-get update -qq || true; apt-get install -y -qq wireshark tshark || true; fi',
+          ]
+        : []),
+      ...(slot.slotId === "ghidra"
+        ? [
+            "if ! command -v ghidra >/dev/null 2>&1 && [ ! -x /opt/ghidra/ghidraRun ]; then apt-get update -qq || true; apt-get install -y -qq ghidra || true; fi",
+          ]
+        : []),
+      ...(slot.slotId === "jadx"
+        ? [
+            "if ! command -v jadx-gui >/dev/null 2>&1; then apt-get update -qq || true; apt-get install -y -qq jadx || true; fi",
+          ]
+        : []),
+      ...(slot.slotId === "kali-desktop-stream"
+        ? [
+            "if ! command -v startxfce4 >/dev/null 2>&1; then apt-get update -qq || true; apt-get install -y -qq --no-install-recommends xfce4 xfce4-terminal thunar dbus-x11 kali-menu xterm || true; fi",
+          ]
+        : []),
       ...(slot.slotId === "burp-suite"
         ? [
             "mkdir -p /opt/cyberlab-burp",
+            // Remove broken symlink if present
+            "[ -L /opt/cyberlab-burp/burpsuite.jar ] && [ ! -e /opt/cyberlab-burp/burpsuite.jar ] && rm -f /opt/cyberlab-burp/burpsuite.jar",
             ...(escapedWslSrcJar
               ? [
-                  `if [ ! -s /opt/cyberlab-burp/burpsuite.jar ] && [ -f '${escapedWslSrcJar}' ]; then cp -f '${escapedWslSrcJar}' /opt/cyberlab-burp/burpsuite.jar && chmod 644 /opt/cyberlab-burp/burpsuite.jar; fi`,
+                  `if [ -f '${escapedWslSrcJar}' ]; then`,
+                  `  SRC_SZ=$(stat -c%s '${escapedWslSrcJar}' 2>/dev/null || echo 0)`,
+                  `  DST_SZ=$(stat -c%s /opt/cyberlab-burp/burpsuite.jar 2>/dev/null || echo -1)`,
+                  `  if [ -L /opt/cyberlab-burp/burpsuite.jar ] || [ "$SRC_SZ" != "$DST_SZ" ]; then`,
+                  `    rm -f /opt/cyberlab-burp/burpsuite.jar && cp -f '${escapedWslSrcJar}' /opt/cyberlab-burp/burpsuite.jar && chmod 644 /opt/cyberlab-burp/burpsuite.jar`,
+                  `  fi`,
+                  `fi`,
                 ]
               : []),
-            "if [ ! -s /opt/cyberlab-burp/burpsuite.jar ] && [ -f /usr/share/burpsuite/burpsuite.jar ]; then ln -sf /usr/share/burpsuite/burpsuite.jar /opt/cyberlab-burp/burpsuite.jar; fi",
-            "if [ ! -s /opt/cyberlab-burp/burpsuite.jar ]; then export DEBIAN_FRONTEND=noninteractive; apt-get update -qq || true; apt-get install -y -qq burpsuite || true; [ -f /usr/share/burpsuite/burpsuite.jar ] && ln -sf /usr/share/burpsuite/burpsuite.jar /opt/cyberlab-burp/burpsuite.jar; fi",
+            "if [ ! -s /opt/cyberlab-burp/burpsuite.jar ] && [ -s /usr/share/burpsuite/burpsuite.jar ]; then ln -sf /usr/share/burpsuite/burpsuite.jar /opt/cyberlab-burp/burpsuite.jar; fi",
+            "if [ ! -s /opt/cyberlab-burp/burpsuite.jar ]; then apt-get update -qq || true; apt-get install -y -qq burpsuite || true; [ -s /usr/share/burpsuite/burpsuite.jar ] && ln -sf /usr/share/burpsuite/burpsuite.jar /opt/cyberlab-burp/burpsuite.jar; fi",
           ]
         : []),
       ...(needsJava
         ? [
             'if [ ! -x /opt/cyberlab-jre21/bin/java ] && [ ! -x /usr/lib/jvm/java-21-openjdk-amd64/bin/java ]; then',
-            "  export DEBIAN_FRONTEND=noninteractive",
             "  apt-get install -y -qq curl jq tar ca-certificates || true",
             "  apt-get install -y -qq openjdk-21-jre 2>/dev/null || true",
             "  if [ ! -x /usr/lib/jvm/java-21-openjdk-amd64/bin/java ]; then",
@@ -1215,7 +1654,7 @@ export class ArsenalSlotManager {
           encoding: "utf8",
           stdio: ["pipe", "pipe", "pipe"],
           windowsHide: true,
-          timeout: 240000,
+          timeout: 300000,
         },
       )
       const ipLine = (boot.stdout ?? "")
@@ -1228,15 +1667,23 @@ export class ArsenalSlotManager {
       if (ipLine) wslIp = ipLine
     }
 
-    // 2. Start dedicated Xtigervnc + Openbox (<decor>yes</decor> so fixed-size startup wizards render properly
-    //    and resizable main frames auto-maximize!) + websockify + GUI tool
+    // 2. Start dedicated spacious 1366x860 Xtigervnc + Openbox (normal decorations, no forced maximize on dialogs!)
+    //    + clean zero-chrome CyberLab Canvas HTML + GUI tool running in native $HOME (fast ext4!)
     const sessionScript = [
+      'cd "$HOME" 2>/dev/null || cd /tmp',
+      'CLEAN_PATH=""',
+      'IFS=:; for seg in $PATH; do case "$seg" in /mnt/*|"") ;; *) CLEAN_PATH="${CLEAN_PATH:+$CLEAN_PATH:}$seg" ;; esac; done; unset IFS',
+      'export PATH="$CLEAN_PATH"',
       'if [ -x /opt/cyberlab-jre21/bin/java ]; then export JAVA_HOME=/opt/cyberlab-jre21; export JAVA21_BIN=/opt/cyberlab-jre21/bin/java; elif [ -x /usr/lib/jvm/java-21-openjdk-amd64/bin/java ]; then export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64; export JAVA21_BIN=/usr/lib/jvm/java-21-openjdk-amd64/bin/java; else export JAVA21_BIN=java; fi',
-      'export BURP_JAR_TARGET=/opt/cyberlab-burp/burpsuite.jar; [ ! -s "$BURP_JAR_TARGET" ] && [ -f /usr/share/burpsuite/burpsuite.jar ] && export BURP_JAR_TARGET=/usr/share/burpsuite/burpsuite.jar',
+      'export BURP_JAR_TARGET=/opt/cyberlab-burp/burpsuite.jar; [ ! -s "$BURP_JAR_TARGET" ] && [ -s /usr/share/burpsuite/burpsuite.jar ] && export BURP_JAR_TARGET=/usr/share/burpsuite/burpsuite.jar',
       'export PATH="${JAVA_HOME:+$JAVA_HOME/bin:}$HOME/.local/bin:$HOME/go/bin:$HOME/.cargo/bin:/opt/opentrap:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"',
+      `export GUI_LOG=/tmp/cyberlab-gui-${dispNum}.log`,
       `pkill -f "Xtigervnc :${dispNum}" 2>/dev/null || true`,
       `pkill -f "websockify.*:${wsPort}" 2>/dev/null || true`,
       `rm -f /tmp/.X${dispNum}-lock /tmp/.X11-unix/X${dispNum} 2>/dev/null || true`,
+      `mkdir -p /tmp/cyberlab-web-${dispNum}`,
+      `ln -sf /usr/share/novnc/* /tmp/cyberlab-web-${dispNum}/ 2>/dev/null || true`,
+      `echo '${canvasHtmlB64}' | base64 -d > /tmp/cyberlab-web-${dispNum}/cyberlab_canvas.html`,
       `cat > /tmp/cyberlab-ob-${dispNum}.xml << 'EOF_OB'`,
       `<?xml version="1.0" encoding="UTF-8"?>`,
       `<openbox_config xmlns="http://openbox.org/3.4/rc">`,
@@ -1250,25 +1697,24 @@ export class ArsenalSlotManager {
       `    <application type="*">`,
       `      <decor>yes</decor>`,
       `      <focus>yes</focus>`,
-      `      <maximized>yes</maximized>`,
       `      <position force="no"><x>center</x><y>center</y></position>`,
       `    </application>`,
       `  </applications>`,
       `</openbox_config>`,
       `EOF_OB`,
-      `Xtigervnc :${dispNum} -rfbport ${vncPort} -SecurityTypes None -AlwaysShared -AcceptSetDesktopSize=1 -geometry 1440x900 -depth 24 -dpi 96 >/dev/null 2>&1 &`,
+      `Xtigervnc :${dispNum} -rfbport ${vncPort} -SecurityTypes None -AlwaysShared -AcceptSetDesktopSize=1 -geometry 1366x860 -depth 24 -dpi 96 >/dev/null 2>&1 &`,
       "VNC_PID=$!",
       "for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do [ -S /tmp/.X11-unix/X" + dispNum + " ] && break; sleep 0.2; done",
       `export DISPLAY=:${dispNum}`,
       "export GDK_SCALE=1",
-      "xsetroot -solid '#111827' 2>/dev/null || true",
+      "xsetroot -solid '#09090b' 2>/dev/null || true",
       ...(slot.slotId === "kali-desktop-stream"
         ? []
-        : [`openbox --config-file /tmp/cyberlab-ob-${dispNum}.xml >/dev/null 2>&1 &`, "sleep 0.3"]),
-      `websockify --web=/usr/share/novnc 0.0.0.0:${wsPort} 127.0.0.1:${vncPort} >/dev/null 2>&1 &`,
+        : [`openbox --config-file /tmp/cyberlab-ob-${dispNum}.xml >/dev/null 2>&1 &`, "sleep 0.35"]),
+      `websockify --web=/tmp/cyberlab-web-${dispNum} 0.0.0.0:${wsPort} 127.0.0.1:${vncPort} >/dev/null 2>&1 &`,
       "WS_PID=$!",
-      `(xmessage -center -timeout 6 -buttons "" "Iniciando ${slot.shortLabel} (Java 21 LTS)... Aguarde alguns segundos." >/dev/null 2>&1 || true) &`,
-      `(${launchCmd} >/tmp/cyberlab-gui-${dispNum}.log 2>&1 || xmessage -center -title "Diagnóstico ${slot.shortLabel}" -file /tmp/cyberlab-gui-${dispNum}.log >/dev/null 2>&1) &`,
+      `(xmessage -center -timeout 8 -buttons "" "Iniciando ${slot.shortLabel}... Aguarde alguns segundos." >/dev/null 2>&1 || true) &`,
+      `(${launchCmd} >"$GUI_LOG" 2>&1 || (sleep 1.2 && xmessage -center -buttons "Fechar:0" -title "Diagnóstico ${slot.shortLabel}" -file "$GUI_LOG" >/dev/null 2>&1)) &`,
       "wait $WS_PID $VNC_PID",
     ].join("\n")
 
@@ -1287,11 +1733,11 @@ export class ArsenalSlotManager {
     child.stdin?.end()
 
     const candidateHosts = Array.from(new Set([wslIp, "127.0.0.1", "localhost"]))
-    const liveHost = await this.waitForTcpPort(candidateHosts, wsPort, 7000)
+    const liveHost = await this.waitForTcpPort(candidateHosts, wsPort, 7500)
     if (!liveHost) {
       this.terminateProcessTree(child)
       throw new Error(
-        `O servidor gráfico embutido (noVNC :${wsPort}) não respondeu a tempo. Verifique no Kali WSL2 se os pacotes novnc, websockify e tigervnc-standalone-server estão instalados.`,
+        `O servidor gráfico central (:${wsPort}) não respondeu a tempo. Verifique sua instância Kali WSL2.`,
       )
     }
 
@@ -1316,7 +1762,7 @@ export class ArsenalSlotManager {
       }
     }
 
-    const embedUrl = `http://127.0.0.1:${mainBridge.localPort}/vnc.html?autoconnect=true&resize=remote&reconnect=true&reconnect_delay=1000`
+    const embedUrl = `http://127.0.0.1:${mainBridge.localPort}/cyberlab_canvas.html?mode=fit`
     this.daemons.set(slot.slotId, {
       child,
       staticServer: null,
@@ -1327,7 +1773,7 @@ export class ArsenalSlotManager {
 
     return {
       embedUrl,
-      message: `${slot.name} aberto dentro do Palco Central do CyberLab OS (redimensionamento automático ativo).`,
+      message: `${slot.name} aberto no Palco Central (use "📐 Ajustar" ou "↕ Rolagem + Zoom" na barra superior conforme preferir).`,
     }
   }
 
@@ -1456,6 +1902,47 @@ export class ArsenalSlotManager {
       throw new Error(`Slot "${params.slotId}" não encontrado`)
     }
 
+    // 0b. Native Windows File Picker (`rawArgs === "__pick_executable__"`) so the operator can pick any .jar / .exe on disk in 1 click!
+    if (params.rawArgs === "__pick_executable__") {
+      if (process.platform !== "win32") {
+        throw new Error("Informe o caminho do arquivo .jar ou executável no campo de configuração do slot.")
+      }
+      const psPicker = [
+        "Add-Type -AssemblyName System.Windows.Forms",
+        "$dlg = New-Object System.Windows.Forms.OpenFileDialog",
+        `$dlg.Title = 'Selecionar arquivo para ${slot.shortLabel.replace(/'/g, "")} (.jar ou .exe)'`,
+        "$dlg.Filter = 'Arquivos Suportados (*.jar;*.exe;*.bat;*.cmd)|*.jar;*.exe;*.bat;*.cmd|Todos os arquivos (*.*)|*.*'",
+        "if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.WriteLine($dlg.FileName) }",
+      ].join("; ")
+      const pickRes = spawnSync(
+        "powershell.exe",
+        ["-NoProfile", "-Sta", "-ExecutionPolicy", "Bypass", "-Command", psPicker],
+        {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+          windowsHide: true,
+          timeout: 120000,
+        },
+      )
+      const picked = stripSurroundingQuotes((pickRes.stdout ?? "").trim().split(/\r?\n/).pop() ?? "")
+      if (!picked) {
+        return {
+          ok: true,
+          message: "Seleção de arquivo cancelada.",
+          overview: currentOverview,
+        }
+      }
+      const updated = this.configureSettings({
+        slotId: slot.slotId,
+        slotOverride: { customExecutablePath: picked },
+      })
+      return {
+        ok: true,
+        message: `Arquivo vinculado com sucesso: ${picked}. Clique agora em "Abrir Aqui Dentro" ou "Janela Externa"!`,
+        overview: updated,
+      }
+    }
+
     // 1. Stop Web Daemon / Embedded GUI Canvas
     if (params.action === "stop_web") {
       const existing = this.daemons.get(slot.slotId)
@@ -1544,64 +2031,134 @@ export class ArsenalSlotManager {
         }
       }
 
-      // 2c. Managed local Web daemon (e.g. mitmweb :8081, Caido :7000 — supports both Windows native AND WSL2 Kali!)
-      const targetEmbedUrl = slot.override.customEmbedUrl ?? def.defaultEmbedUrl
-      if (def.managedDaemonArgs && slot.resolvedPath && slot.activeRuntime !== "web" && slot.activeRuntime !== "none") {
-        let tokenUrl: string | null = null
+      // 2c. Managed local Web daemon (e.g. mitmweb :8081, Caido :7000 — supports both Windows native AND WSL2 Kali,
+      //     strips X-Frame-Options/CSP via loopback HTTP+WS proxy, and enables Caido --allow-guests!)
+      let liveSlot = slot
+      const targetEmbedUrl = liveSlot.override.customEmbedUrl ?? def.defaultEmbedUrl
+
+      // If a managed Web daemon (mitmweb / caido) is not installed yet and Kali WSL2 is available, auto-install it in Kali WSL2 first!
+      if (
+        def.managedDaemonArgs &&
+        !liveSlot.resolvedPath &&
+        process.platform === "win32" &&
+        this.wslAvailable &&
+        liveSlot.installKaliWsl.trim() &&
+        !liveSlot.installKaliWsl.trim().startsWith("#")
+      ) {
+        const cleanInstall = liveSlot.installKaliWsl.replace(/\bsudo\s+/g, "")
+        spawnSync(
+          "wsl.exe",
+          ["-d", this.config.preferredWslDistro, "-u", "root", "--", "bash", "-s"],
+          {
+            input: Buffer.from(`export DEBIAN_FRONTEND=noninteractive\n${cleanInstall}\n`, "utf8"),
+            stdio: ["pipe", "ignore", "ignore"],
+            windowsHide: true,
+            timeout: 180000,
+          },
+        )
+        const refreshed = this.getOverview(true)
+        liveSlot = refreshed.slots.find((s) => s.slotId === slot.slotId) ?? liveSlot
+      }
+
+      if (def.managedDaemonArgs && liveSlot.resolvedPath && liveSlot.activeRuntime !== "web" && liveSlot.activeRuntime !== "none") {
+        // For Caido Web UI, prefer caido-cli (WSL2 or Windows caido-cli.exe) over the Electron desktop binary Caido.exe
+        let daemonRuntime: "windows" | "wsl" | "linux_mac" = liveSlot.activeRuntime
+        let daemonBin = liveSlot.resolvedPath
+        if (
+          liveSlot.slotId === "caido" &&
+          daemonRuntime === "windows" &&
+          /Caido\.exe$/i.test(daemonBin) &&
+          !/caido-cli/i.test(daemonBin) &&
+          liveSlot.wslPath
+        ) {
+          daemonRuntime = "wsl"
+          daemonBin = liveSlot.wslPath
+        }
+
+        const port = def.managedDaemonPort ?? 8081
         let wslDaemonIp = "127.0.0.1"
-        if (slot.activeRuntime === "wsl" && process.platform === "win32") {
+        if (daemonRuntime === "wsl" && process.platform === "win32") {
           try {
-            const ipCheck = spawnSync(
+            const prep = spawnSync(
               "wsl.exe",
-              ["-d", this.config.preferredWslDistro, "--", "hostname", "-I"],
-              { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true, timeout: 3000 },
+              ["-d", this.config.preferredWslDistro, "--", "bash", "-s"],
+              {
+                input: Buffer.from(
+                  `pkill -f "caido.*${port}" 2>/dev/null || true; pkill -f "mitmweb.*${port}" 2>/dev/null || true; hostname -I 2>/dev/null | awk '{print $1}'\n`,
+                  "utf8",
+                ),
+                encoding: "utf8",
+                stdio: ["pipe", "pipe", "ignore"],
+                windowsHide: true,
+                timeout: 4000,
+              },
             )
-            const firstIp = (ipCheck.stdout ?? "").trim().split(/\s+/)[0]
+            const firstIp = (prep.stdout ?? "")
+              .replace(/\0/g, "")
+              .trim()
+              .split(/\r?\n/)
+              .pop()
+              ?.trim()
             if (firstIp && /^\d+\.\d+\.\d+\.\d+$/.test(firstIp)) wslDaemonIp = firstIp
           } catch {
             // Ignore
           }
         }
+
+        let tokenSuffix = liveSlot.slotId === "mitmweb" ? "/?token=cyberlab" : "/"
         const child = this.spawnForRuntimeWithPipes(
-          slot.activeRuntime,
-          slot.resolvedPath,
+          daemonRuntime,
+          daemonBin,
           def.managedDaemonArgs,
           this.workspaceRoot,
           (chunk) => {
-            const match = chunk.match(/https?:\/\/(?:127\.0\.0\.1|localhost|0\.0\.0\.0):\d+\/\?token=[a-zA-Z0-9._-]+/i)
-            if (match && !tokenUrl) tokenUrl = match[0].replace("0.0.0.0", "127.0.0.1")
+            const match = chunk.match(/https?:\/\/(?:127\.0\.0\.1|localhost|0\.0\.0\.0):\d+(\/\?token=[a-zA-Z0-9._-]+)/i)
+            if (match?.[1]) tokenSuffix = match[1]
           },
         )
-        const port = def.managedDaemonPort ?? 8081
+
         const candidateHosts = Array.from(new Set([wslDaemonIp, "127.0.0.1", "localhost"]))
-        await this.waitForTcpPort(candidateHosts, port, 5500)
+        await this.waitForTcpPort(candidateHosts, port, 7500)
 
         const tcpBridges: net.Server[] = []
-        let url = tokenUrl ?? targetEmbedUrl ?? `http://127.0.0.1:${port}`
-        if (slot.activeRuntime === "wsl" && process.platform === "win32" && wslDaemonIp !== "127.0.0.1") {
-          const bridge = await this.createTcpBridgeServer(candidateHosts, port, 0)
-          if (bridge) {
-            tcpBridges.push(bridge.server)
-            const suffix = tokenUrl ? new URL(tokenUrl).search : ""
-            url = `http://127.0.0.1:${bridge.localPort}/${suffix}`
-          }
+        if (
+          daemonRuntime === "wsl" &&
+          process.platform === "win32" &&
+          liveSlot.companionProxyPort &&
+          liveSlot.companionProxyPort !== port &&
+          wslDaemonIp !== "127.0.0.1"
+        ) {
+          const proxyBridge = await this.createTcpBridgeServer(
+            candidateHosts,
+            liveSlot.companionProxyPort,
+            liveSlot.companionProxyPort,
+          )
+          if (proxyBridge) tcpBridges.push(proxyBridge.server)
         }
 
-        this.daemons.set(slot.slotId, {
+        const embedProxy = await this.createEmbedHttpProxyServer(candidateHosts, port)
+        const url = embedProxy
+          ? `http://127.0.0.1:${embedProxy.localPort}${tokenSuffix}`
+          : `${targetEmbedUrl ?? `http://127.0.0.1:${port}`}`
+
+        this.daemons.set(liveSlot.slotId, {
           child,
-          staticServer: null,
+          staticServer: embedProxy?.server ?? null,
           tcpBridges,
           embedUrl: url,
         })
         return {
           ok: true,
-          message: `${slot.name} iniciado no Palco Central (${url})`,
+          message:
+            liveSlot.slotId === "caido"
+              ? `${liveSlot.name} iniciado com Modo Convidado ativo ("Continue as guest" liberado sem conta)!`
+              : `${liveSlot.name} iniciado e autenticado no Palco Central!`,
           embedUrl: url,
           overview: this.getOverview(false),
         }
       }
 
-      if (targetEmbedUrl) {
+      if (targetEmbedUrl && !def.managedDaemonArgs) {
         return {
           ok: true,
           message: `Conectado ao endereço Web ${targetEmbedUrl}`,
@@ -1706,7 +2263,7 @@ export class ArsenalSlotManager {
       )
     }
 
-    // 4. Desktop GUI Launch (Burp Suite Community/Pro, OpenTRAP via WSLg, Wireshark, Ghidra, JADX-GUI)
+    // 4. Desktop GUI Launch (Burp Suite Community/Pro .exe or .jar, OpenTRAP via WSLg, Wireshark, Ghidra, JADX-GUI)
     if (params.action === "launch_desktop") {
       const extraArgs =
         slot.slotId === "opentrap" && binPath.toLowerCase().endsWith(".appimage")
@@ -1726,6 +2283,26 @@ export class ArsenalSlotManager {
             windowsHide: false,
           },
         )
+        child.unref()
+      } else if (chosenRuntime === "windows" && /\.jar$/i.test(binPath)) {
+        const javaExe = this.findWindowsJavaExecutable(path.dirname(binPath))
+        const jvmArgs = [
+          "--add-opens=java.base/java.lang=ALL-UNNAMED",
+          "--add-opens=java.base/javax.crypto=ALL-UNNAMED",
+          "--add-opens=java.desktop/javax.swing=ALL-UNNAMED",
+          "--add-opens=java.desktop/java.awt=ALL-UNNAMED",
+          "--add-opens=java.desktop/java.awt.color=ALL-UNNAMED",
+          "--add-opens=jdk.crypto.cryptoki/sun.security.pkcs11=ALL-UNNAMED",
+          "-jar",
+          binPath,
+          ...extraArgs,
+        ]
+        const child = spawn(javaExe, jvmArgs, {
+          cwd: path.dirname(binPath),
+          detached: true,
+          stdio: "ignore",
+          windowsHide: false,
+        })
         child.unref()
       } else if (chosenRuntime === "windows" && /\.(bat|cmd)$/i.test(binPath)) {
         const child = spawn("cmd.exe", ["/c", binPath, ...extraArgs], {

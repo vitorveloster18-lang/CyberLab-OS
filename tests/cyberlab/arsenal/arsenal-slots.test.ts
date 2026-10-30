@@ -157,6 +157,25 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
     const outListing = await ws.listWorkspaceFiles(".cyberlab/outputs")
     expect(outListing.entries.length).toBeGreaterThanOrEqual(1)
 
+    // Verify quote-stripping when operator pastes Windows "Copy as path" quoted string for Burp Suite
+    const fakeJar = path.join(externalToolsDir, "burpsuite_community_custom.jar")
+    writeFileSync(fakeJar, "PK-mock-jar", "utf8")
+    const quotedUpdate = await ws.configureArsenal({
+      slotId: "burp-suite",
+      slotOverride: { customExecutablePath: `"${fakeJar}"` },
+    })
+    const updatedBurp = quotedUpdate.slots.find((s) => s.slotId === "burp-suite")!
+    expect(updatedBurp.override.customExecutablePath).toBe(fakeJar)
+
+    // Verify Caido enables --allow-guests and mitmweb uses deterministic token + 0.0.0.0 bridgeable host
+    const caidoDef = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === "caido")!
+    expect(caidoDef.managedDaemonArgs).toContain("--allow-guests")
+    const mitmDef = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === "mitmweb")!
+    expect(mitmDef.managedDaemonArgs).toContain("web_password=cyberlab")
+    expect(mitmDef.managedDaemonArgs).toContain("0.0.0.0")
+    const burpDef = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === "burp-suite")!
+    expect(burpDef.windowsKnownPaths?.some((p) => p.includes("%LOCALAPPDATA%\\BurpSuiteCommunity\\"))).toBe(true)
+
     await ws.launchArsenalSlot({ slotId: "cyberchef", action: "stop_web" })
   }, 25_000)
 })

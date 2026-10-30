@@ -15,7 +15,7 @@ import net from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-const UI_BUILD_STAMP = "cyberlab-unified-v5.3-burp-ext4-opengrep-closefix"
+const UI_BUILD_STAMP = "cyberlab-unified-v5.4-framing-scroll-mitmweb-caido-burp-xfce"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const distDir = path.join(repoRoot, "packages", "app", "dist")
@@ -212,13 +212,14 @@ async function waitForServerAndOpenBrowser() {
         console.log(`[CyberLab OS] Partner Gateway ativo (GET/POST): http://127.0.0.1:${port}/api/cyberlab/partner-gateway`)
         if (!noOpen) {
           try {
-            if (process.platform === "win32") {
-              spawn("cmd.exe", ["/c", "start", "", openUrl], { detached: true, stdio: "ignore" }).unref()
-            } else if (process.platform === "darwin") {
-              spawn("open", [openUrl], { detached: true, stdio: "ignore" }).unref()
-            } else {
-              spawn("xdg-open", [openUrl], { detached: true, stdio: "ignore" }).unref()
-            }
+            const opener =
+              process.platform === "win32"
+                ? spawn("cmd.exe", ["/c", "start", "", openUrl], { detached: true, stdio: "ignore" })
+                : process.platform === "darwin"
+                  ? spawn("open", [openUrl], { detached: true, stdio: "ignore" })
+                  : spawn("xdg-open", [openUrl], { detached: true, stdio: "ignore" })
+            opener.on("error", () => {})
+            opener.unref()
           } catch {
             // Ignore browser auto-open errors on headless machines
           }

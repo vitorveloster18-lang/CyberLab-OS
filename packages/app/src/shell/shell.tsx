@@ -1,4 +1,4 @@
-import { Show, startTransition, Suspense, type ParentProps } from "solid-js"
+import { createSignal, Show, startTransition, Suspense, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
@@ -212,6 +212,7 @@ export default function Layout(props: ParentProps) {
   return (
     <div
       class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
+      classList={{ "h-dvh max-h-dvh overflow-hidden": antigravityActive() }}
       style={{
         // Mobile panels only need clearance for their outer border.
         "--shell-inline-inset": mobile() ? "1px" : "8px",
@@ -228,7 +229,7 @@ export default function Layout(props: ParentProps) {
       }}
     >
       <Titlebar verticalTabs={verticalTabs() ? { mount: state.tabsMount } : undefined} />
-      <div class="relative flex flex-1 min-h-0 min-w-0 flex-row">
+      <div class="relative flex flex-1 min-h-0 min-w-0 flex-row" classList={{ "overflow-hidden": antigravityActive() }}>
         {/* The empty inset above the panels moves the window, as the titlebar does. */}
         <Show when={dragInset()}>
           <div
@@ -296,6 +297,7 @@ export default function Layout(props: ParentProps) {
         {/* Size containment collapses percentage-height descendants in WebKit. */}
         <main
           class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-content"
+          classList={{ "overflow-y-hidden items-stretch": antigravityActive() }}
           style={{
             "padding-top": bottomTitlebar() ? "env(safe-area-inset-top, 0px)" : "0px",
             "padding-bottom":
@@ -329,35 +331,97 @@ function CyberLabMainSplit(
 ) {
   const wb = useCyberLabWorkbench()
   const active = () => Boolean(wb?.ui.open) && !props.settingsActive()
+  const [draggingDivider, setDraggingDivider] = createSignal(false)
+
+  const startHorizontalDrag = (
+    e: MouseEvent,
+    initialWidth: number,
+    min: number,
+    max: number,
+    invertDelta: boolean,
+    onUpdate: (nextWidth: number) => void,
+  ) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    const startX = e.clientX
+    setDraggingDivider(true)
+    document.body.style.userSelect = "none"
+    document.body.style.cursor = "col-resize"
+
+    const onMove = (ev: MouseEvent) => {
+      const rawDelta = ev.clientX - startX
+      const delta = invertDelta ? -rawDelta : rawDelta
+      onUpdate(Math.min(max, Math.max(min, initialWidth + delta)))
+    }
+    const onUp = () => {
+      setDraggingDivider(false)
+      document.body.style.userSelect = ""
+      document.body.style.cursor = ""
+      window.removeEventListener("mousemove", onMove)
+      window.removeEventListener("mouseup", onUp)
+    }
+    window.addEventListener("mousemove", onMove)
+    window.addEventListener("mouseup", onUp)
+  }
 
   return (
     <Show when={active() && wb} fallback={props.children}>
       {(service) => (
         <div
           data-slot="cyberlab-antigravity-workspace"
-          class="flex size-full min-h-0 min-w-0 flex-1 flex-row overflow-hidden rounded-t-lg border-t border-v2-border-border-base bg-v2-background-bg-base"
+          class="relative flex h-full max-h-full w-full min-h-0 min-w-0 flex-1 flex-row overflow-hidden rounded-t-lg border-t border-v2-border-border-base bg-v2-background-bg-base"
         >
+          {/* Escudo transparente durante redimensionamento de colunas para iframes nunca engolirem o mouseup */}
+          <Show when={draggingDivider()}>
+            <div class="fixed inset-0 z-50 cursor-col-resize" />
+          </Show>
+
           {/* 1. COLUNA ESQUERDA RETRÁTIL: Pastas, Outputs (.cyberlab/outputs) & Slots do Arsenal */}
           <Show when={!props.mobile()}>
-            <div class="relative flex h-full min-h-0 shrink-0">
+            <div class="flex h-full max-h-full min-h-0 shrink-0 overflow-hidden">
               <CyberLabLeftExplorer />
-              <Show when={service().ui.leftSidebarOpen}>
-                <ResizeHandle
-                  class="-end-1"
-                  direction="horizontal"
-                  size={service().ui.leftSidebarWidth}
-                  min={210}
-                  max={440}
-                  onResize={(w) => service().setLeftSidebarWidth(w)}
-                />
-              </Show>
             </div>
+            {/* Divisor dedicado FORA da barra de rolagem esquerda para nunca bloquear a rolagem vertical! */}
+            <Show when={service().ui.leftSidebarOpen}>
+              <div
+                title="Arraste para ajustar a largura da barra esquerda"
+                class="h-full w-[5px] shrink-0 cursor-col-resize bg-v2-border-border-base/40 hover:bg-emerald-500/70 transition-colors"
+                onMouseDown={(e) =>
+                  startHorizontalDrag(
+                    e,
+                    service().ui.leftSidebarWidth,
+                    210,
+                    440,
+                    false,
+                    (w) => service().setLeftSidebarWidth(w),
+                  )
+                }
+              />
+            </Show>
           </Show>
 
           {/* 2. COLUNA CENTRAL (TELA CHEIA): A Ferramenta Real Ocupa Tudo no Centro! */}
-          <div class="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div class="flex h-full max-h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <CyberLabCenterStage />
           </div>
+
+          {/* Divisor dedicado à esquerda do Agente OpenCode */}
+          <Show when={service().ui.rightAgentOpen && !props.mobile()}>
+            <div
+              title="Arraste para ajustar a largura do Agente OpenCode"
+              class="h-full w-[5px] shrink-0 cursor-col-resize bg-v2-border-border-base/40 hover:bg-emerald-500/70 transition-colors"
+              onMouseDown={(e) =>
+                startHorizontalDrag(
+                  e,
+                  service().ui.rightAgentWidth,
+                  300,
+                  620,
+                  true,
+                  (w) => service().setRightAgentWidth(w),
+                )
+              }
+            />
+          </Show>
 
           {/* 3. COLUNA DIREITA ESTREITA & RETRÁTIL: Agente OpenCode IA (Mantém sessão viva sem desmontar!) */}
           <aside
@@ -367,20 +431,8 @@ function CyberLabMainSplit(
                 ? `${service().ui.rightAgentWidth}px`
                 : "38px",
             }}
-            class="relative flex h-full min-h-0 shrink-0 flex-col border-l border-v2-border-border-base bg-v2-background-bg-deep/70"
+            class="relative flex h-full max-h-full min-h-0 shrink-0 flex-col overflow-hidden border-l border-v2-border-border-base bg-v2-background-bg-deep/70"
           >
-            <Show when={service().ui.rightAgentOpen && !props.mobile()}>
-              <ResizeHandle
-                class="-start-1"
-                direction="horizontal"
-                edge="start"
-                size={service().ui.rightAgentWidth}
-                min={300}
-                max={620}
-                onResize={(w) => service().setRightAgentWidth(w)}
-              />
-            </Show>
-
             {/* Barra colapsada de 38px quando o Agente IA está recolhido */}
             <Show when={!service().ui.rightAgentOpen || props.mobile()}>
               <div class="flex h-full w-[38px] flex-col items-center justify-between py-2 select-none">

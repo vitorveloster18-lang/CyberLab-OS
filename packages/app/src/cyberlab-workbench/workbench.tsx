@@ -129,7 +129,7 @@ export function CyberLabLeftExplorer() {
       <aside
         data-slot="cyberlab-left-explorer"
         style={{ width: `${wb.ui.leftSidebarWidth}px` }}
-        class="flex h-full min-h-0 shrink-0 flex-col border-r border-v2-border-border-base bg-v2-background-bg-deep/55 select-text"
+        class="flex h-full max-h-full min-h-0 shrink-0 flex-col overflow-hidden border-r border-v2-border-border-base bg-v2-background-bg-deep/55 select-text"
       >
         {/* Cabeçalho Compacto c/ Abas Slots | Pastas + Botão Recolher */}
         <div class="flex items-center justify-between gap-1 border-b border-v2-border-border-base px-2.5 py-2">
@@ -330,7 +330,10 @@ export function CyberLabLeftExplorer() {
             </Show>
           </div>
 
-          <div class="min-h-0 flex-1 overflow-y-auto p-2 flex flex-col gap-3" data-scrollable>
+          <div
+            class="min-h-0 flex-1 overflow-y-scroll overscroll-contain p-2 pr-1.5 pb-8 flex flex-col gap-3 [scrollbar-width:thin] [scrollbar-color:#10b981_transparent]"
+            data-scrollable
+          >
             <For each={groupedSlots()}>
               {(group) => (
                 <div class="flex flex-col gap-1">
@@ -561,8 +564,54 @@ export function CyberLabCenterStage() {
   const [customPathInput, setCustomPathInput] = createSignal("")
   const [customUrlInput, setCustomUrlInput] = createSignal("")
   const [toolsRootInput, setToolsRootInput] = createSignal("")
+  const [burpQuickPath, setBurpQuickPath] = createSignal("")
+  const [framingBySlot, setFramingBySlot] = createStore<Record<string, "fit" | "scroll" | "native">>({})
+  const [zoomBySlot, setZoomBySlot] = createStore<Record<string, number>>({})
+  let activeToolIframeRef: HTMLIFrameElement | undefined
 
   if (!wb) return null
+
+  const getSlotFraming = (slot: ArsenalSlotStatusDto): "fit" | "scroll" | "native" => {
+    const savedMode = framingBySlot[slot.slotId]
+    if (savedMode) return savedMode
+    if (slot.kind === "web_embed" && slot.slotId !== "kali-desktop-stream") {
+      return "scroll"
+    }
+    return "fit"
+  }
+
+  const getSlotZoom = (slot: ArsenalSlotStatusDto): number => {
+    const savedZoom = zoomBySlot[slot.slotId]
+    if (typeof savedZoom === "number") return savedZoom
+    if (slot.slotId === "caido") return 85
+    return 100
+  }
+
+  const syncCanvasControl = (slot: ArsenalSlotStatusDto, nextMode?: "fit" | "scroll" | "native", nextZoom?: number) => {
+    const mode = nextMode ?? getSlotFraming(slot)
+    const zoom = nextZoom ?? getSlotZoom(slot)
+    if (nextMode) setFramingBySlot(slot.slotId, nextMode)
+    if (typeof nextZoom === "number") setZoomBySlot(slot.slotId, nextZoom)
+    try {
+      activeToolIframeRef?.contentWindow?.postMessage(
+        { type: "cyberlab-canvas-control", mode, zoom },
+        "*",
+      )
+    } catch {
+      // Ignore cross-origin postMessage errors
+    }
+  }
+
+  const toggleMaximizeCenter = () => {
+    const bothClosed = !wb.ui.leftSidebarOpen && !wb.ui.rightAgentOpen
+    if (bothClosed) {
+      wb.toggleLeftSidebar(true)
+      wb.toggleRightAgent(true)
+    } else {
+      wb.toggleLeftSidebar(false)
+      wb.toggleRightAgent(false)
+    }
+  }
 
   const navItems: Array<{ id: CenterViewMode; label: string }> = [
     { id: "tool", label: "Ferramenta Ativa" },
@@ -896,16 +945,11 @@ export function CyberLabCenterStage() {
               </div>
             </Show>
 
-            {/* MODO A: WEB TOOL EMBUTIDA EM TELA CHEIA NO CENTRO (CyberChef, mitmweb, Caido, ZAP, Kali Win-KeX/noVNC) */}
+            {/* MODO A: WEB TOOL EMBUTIDA EM TELA CHEIA NO CENTRO (CyberChef, mitmweb, Caido, Kali Desktop Web) */}
             <Show when={slot().kind === "web_embed"}>
-              <div class="flex min-h-0 flex-1 flex-col">
+              <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <div class="flex flex-wrap items-center justify-between gap-2 border-b border-v2-border-border-base bg-v2-background-bg-base px-3 py-1.5 text-[11px] shrink-0">
-                  <div class="flex items-center gap-2 min-w-0">
-                    <span class="font-mono text-v2-text-text-muted truncate">
-                      {slot().embedUrl || "Servidor local ainda não iniciado"}
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-1.5">
+                  <div class="flex flex-wrap items-center gap-1.5 min-w-0">
                     <button
                       type="button"
                       disabled={wb.ui.busy}
@@ -927,12 +971,89 @@ export function CyberLabCenterStage() {
                         ⏹ Parar
                       </button>
                     </Show>
+
+                    {/* Controles de Dimensionamento (Zoom) e Rolagem Vertical */}
+                    <div class="flex items-center gap-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-1.5 py-0.5">
+                      <button
+                        type="button"
+                        title="Enquadrar tudo na tela sem cortar"
+                        class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
+                          getSlotFraming(slot()) === "fit"
+                            ? "bg-emerald-600 text-white"
+                            : "text-v2-text-text-muted hover:text-v2-text-text-strong"
+                        }`}
+                        onClick={() => syncCanvasControl(slot(), "fit")}
+                      >
+                        📐 Ajustar
+                      </button>
+                      <button
+                        type="button"
+                        title="Ativar barra de rolagem vertical para descer até o final da ferramenta"
+                        class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
+                          getSlotFraming(slot()) === "scroll"
+                            ? "bg-emerald-600 text-white"
+                            : "text-v2-text-text-muted hover:text-v2-text-text-strong"
+                        }`}
+                        onClick={() => syncCanvasControl(slot(), "scroll")}
+                      >
+                        ↕ Rolagem
+                      </button>
+                      <button
+                        type="button"
+                        title="Diminuir zoom (-10%)"
+                        class="rounded px-1.5 py-0.5 text-[10.5px] font-bold text-v2-text-text-base hover:bg-v2-background-bg-base cursor-pointer"
+                        onClick={() => {
+                          const next = Math.max(60, getSlotZoom(slot()) - 10)
+                          syncCanvasControl(
+                            slot(),
+                            slot().slotId === "kali-desktop-stream" ? "scroll" : getSlotFraming(slot()),
+                            next,
+                          )
+                        }}
+                      >
+                        −
+                      </button>
+                      <button
+                        type="button"
+                        title="Restaurar zoom padrão"
+                        class="rounded px-1 py-0.5 font-mono text-[10px] text-emerald-400 hover:bg-v2-background-bg-base cursor-pointer"
+                        onClick={() => syncCanvasControl(slot(), getSlotFraming(slot()), 100)}
+                      >
+                        {getSlotZoom(slot())}%
+                      </button>
+                      <button
+                        type="button"
+                        title="Aumentar zoom (+10%)"
+                        class="rounded px-1.5 py-0.5 text-[10.5px] font-bold text-v2-text-text-base hover:bg-v2-background-bg-base cursor-pointer"
+                        onClick={() => {
+                          const next = Math.min(140, getSlotZoom(slot()) + 10)
+                          syncCanvasControl(
+                            slot(),
+                            slot().slotId === "kali-desktop-stream" ? "scroll" : getSlotFraming(slot()),
+                            next,
+                          )
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-1.5">
                     <button
                       type="button"
-                      class="rounded border border-v2-border-border-base px-2 py-1 text-[11px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                      title="Recolher/restaurar barras laterais para ampliar o espaço central"
+                      class="rounded border border-v2-border-border-base px-2 py-1 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                      onClick={toggleMaximizeCenter}
+                    >
+                      {!wb.ui.leftSidebarOpen && !wb.ui.rightAgentOpen ? "◫ Painéis" : "⛶ Ampliar"}
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded border border-v2-border-border-base px-2 py-1 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
                       onClick={() => wb.setUi("iframeReloadNonce", (n) => n + 1)}
                     >
-                      ↻ Recarregar Frame
+                      ↻ Recarregar
                     </button>
                     <Show when={slot().embedUrl}>
                       {(url) => (
@@ -940,7 +1061,7 @@ export function CyberLabCenterStage() {
                           href={url()}
                           target="_blank"
                           rel="noreferrer"
-                          class="rounded border border-v2-border-border-base px-2 py-1 text-[11px] text-emerald-500 hover:border-emerald-500"
+                          class="rounded border border-v2-border-border-base px-2 py-1 text-[10.5px] text-emerald-500 hover:border-emerald-500"
                         >
                           ↗ Nova Aba
                         </a>
@@ -957,21 +1078,56 @@ export function CyberLabCenterStage() {
                         {slot().name} pronto para abrir no palco central
                       </div>
                       <p class="max-w-lg text-[12px] text-v2-text-text-muted">
-                        Clique em <strong>"▶ Iniciar / Hospedar Web UI"</strong> acima para iniciar a interface web local e carregá-la em tela cheia aqui no centro, mantendo suas pastas à esquerda e o Agente OpenCode à direita.
+                        Clique em <strong>"▶ Abrir Aqui no Centro"</strong> acima para iniciar a interface real com ajuste de escala (Zoom) e barra de rolagem vertical.
                       </p>
                     </div>
                   }
                 >
-                  {(url) => (
-                    <iframe
-                      data-slot="cyberlab-real-tool-iframe"
-                      src={`${url()}${url().includes("?") ? "&" : "?"}_cb=${wb.ui.iframeReloadNonce}`}
-                      title={slot().name}
-                      class="h-full w-full flex-1 border-0 bg-zinc-950"
-                      allow="clipboard-read; clipboard-write; fullscreen"
-                      allowfullscreen
-                    />
-                  )}
+                  {(url) => {
+                    const isVncCanvas = () => url().includes("cyberlab_canvas.html")
+                    const scaleFactor = () => getSlotZoom(slot()) / 100
+                    const scrollActive = () => !isVncCanvas() && getSlotFraming(slot()) === "scroll"
+                    return (
+                      <div
+                        class={`min-h-0 flex-1 bg-zinc-950 [scrollbar-width:thin] [scrollbar-color:#10b981_#18181b] ${
+                          scrollActive() ? "overflow-auto" : "overflow-hidden"
+                        }`}
+                      >
+                        <div
+                          style={{
+                            width: "100%",
+                            height: scrollActive() ? `${Math.round(880 * scaleFactor())}px` : "100%",
+                            "min-height": scrollActive() ? `${Math.round(880 * scaleFactor())}px` : "100%",
+                            position: "relative",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <iframe
+                            ref={(el) => {
+                              activeToolIframeRef = el
+                            }}
+                            data-slot="cyberlab-real-tool-iframe"
+                            src={`${url()}${url().includes("?") ? "&" : "?"}_cb=${wb.ui.iframeReloadNonce}`}
+                            title={slot().name}
+                            onLoad={() => syncCanvasControl(slot())}
+                            style={
+                              isVncCanvas() || scaleFactor() === 1
+                                ? { width: "100%", height: "100%" }
+                                : {
+                                    width: `${(100 / scaleFactor()).toFixed(3)}%`,
+                                    height: `${(100 / scaleFactor()).toFixed(3)}%`,
+                                    transform: `scale(${scaleFactor()})`,
+                                    "transform-origin": "0 0",
+                                  }
+                            }
+                            class="border-0 bg-zinc-950"
+                            allow="clipboard-read; clipboard-write; fullscreen"
+                            allowfullscreen
+                          />
+                        </div>
+                      </div>
+                    )
+                  }}
                 </Show>
               </div>
             </Show>
@@ -1199,6 +1355,52 @@ export function CyberLabCenterStage() {
                             Detectado em: {slot().resolvedPath}
                           </div>
                         </Show>
+
+                        {/* Seletor rápido de outra versão (.jar ou .exe do PC) */}
+                        <div class="mt-2 rounded-lg border border-v2-border-border-base bg-v2-background-bg-base/75 p-2.5 space-y-2">
+                          <div class="flex flex-wrap items-center justify-between gap-2">
+                            <span class="text-[11px] font-medium text-v2-text-text-strong">
+                              📂 Tem outra versão instalada ou baixada (.jar ou .exe)?
+                            </span>
+                            <button
+                              type="button"
+                              disabled={wb.ui.busy}
+                              class="rounded bg-emerald-600/20 border border-emerald-500/50 px-2.5 py-1 text-[10.5px] font-semibold text-emerald-400 hover:bg-emerald-600/30 cursor-pointer"
+                              onClick={() =>
+                                void wb.launchSlot({
+                                  slotId: slot().slotId,
+                                  action: "launch_desktop",
+                                  rawArgs: "__pick_executable__",
+                                })
+                              }
+                            >
+                              📂 Procurar Arquivo (.jar / .exe) no Windows...
+                            </button>
+                          </div>
+                          <div class="flex flex-wrap items-center gap-1.5">
+                            <input
+                              type="text"
+                              placeholder={`Ou cole o caminho (ex.: C:\\Users\\Admin\\Downloads\\burpsuite_community.jar)`}
+                              value={burpQuickPath()}
+                              class="min-w-[210px] flex-1 rounded border border-v2-border-border-base bg-zinc-950 px-2 py-1 font-mono text-[10.5px] text-zinc-100"
+                              onInput={(e) => setBurpQuickPath(e.currentTarget.value)}
+                            />
+                            <button
+                              type="button"
+                              class="rounded bg-emerald-600 px-2.5 py-1 text-[10.5px] font-medium text-white hover:bg-emerald-500 cursor-pointer"
+                              onClick={() => {
+                                if (!burpQuickPath().trim()) return
+                                void wb.configureArsenal({
+                                  slotId: slot().slotId,
+                                  slotOverride: { customExecutablePath: burpQuickPath().trim() },
+                                })
+                                setBurpQuickPath("")
+                              }}
+                            >
+                              Vincular Versão
+                            </button>
+                          </div>
+                        </div>
                       </div>
 
                       {/* Card Especial de Sinergia Burp Suite + OpenTRAP */}
@@ -1269,26 +1471,106 @@ export function CyberLabCenterStage() {
                 {(url) => (
                   <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div class="flex flex-wrap items-center justify-between gap-2 border-b border-v2-border-border-base bg-v2-background-bg-base px-3 py-1 text-[11px] shrink-0">
-                      <div class="flex items-center gap-2 min-w-0">
+                      <div class="flex flex-wrap items-center gap-2 min-w-0">
                         <span class="inline-block size-2 rounded-full bg-emerald-500" />
                         <span class="font-medium text-emerald-400">
-                          {slot().shortLabel} integrado ao Palco Central
+                          {slot().shortLabel}
                         </span>
+
+                        {/* Controles Ao Vivo de Enquadramento + Barra de Rolagem Vertical + Zoom */}
+                        <div class="flex items-center gap-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-1.5 py-0.5">
+                          <button
+                            type="button"
+                            title="Enquadrar 100% da janela na tela central (todos os botões inferiores visíveis)"
+                            class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
+                              getSlotFraming(slot()) === "fit"
+                                ? "bg-emerald-600 text-white"
+                                : "text-v2-text-text-muted hover:text-v2-text-text-strong"
+                            }`}
+                            onClick={() => syncCanvasControl(slot(), "fit")}
+                          >
+                            📐 Ajustar Tudo
+                          </button>
+                          <button
+                            type="button"
+                            title="Ativar barras de rolagem vertical e horizontal (ideal p/ ler em tamanho maior e rolar até os botões inferiores)"
+                            class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
+                              getSlotFraming(slot()) === "scroll"
+                                ? "bg-emerald-600 text-white"
+                                : "text-v2-text-text-muted hover:text-v2-text-text-strong"
+                            }`}
+                            onClick={() => syncCanvasControl(slot(), "scroll")}
+                          >
+                            ↕ Rolagem
+                          </button>
+                          <button
+                            type="button"
+                            title="Diminuir zoom (-10%)"
+                            class="rounded px-1.5 py-0.5 text-[10.5px] font-bold text-v2-text-text-base hover:bg-v2-background-bg-base cursor-pointer"
+                            onClick={() => {
+                              const next = Math.max(60, getSlotZoom(slot()) - 10)
+                              syncCanvasControl(slot(), "scroll", next)
+                            }}
+                          >
+                            −
+                          </button>
+                          <button
+                            type="button"
+                            title="Zoom 100%"
+                            class="rounded px-1 py-0.5 font-mono text-[10px] text-emerald-400 hover:bg-v2-background-bg-base cursor-pointer"
+                            onClick={() => syncCanvasControl(slot(), "scroll", 100)}
+                          >
+                            {getSlotZoom(slot())}%
+                          </button>
+                          <button
+                            type="button"
+                            title="Aumentar zoom (+10%)"
+                            class="rounded px-1.5 py-0.5 text-[10.5px] font-bold text-v2-text-text-base hover:bg-v2-background-bg-base cursor-pointer"
+                            onClick={() => {
+                              const next = Math.min(150, getSlotZoom(slot()) + 10)
+                              syncCanvasControl(slot(), "scroll", next)
+                            }}
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
                       <div class="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          title="Recolher/restaurar barras laterais para dar mais espaço à ferramenta"
+                          class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                          onClick={toggleMaximizeCenter}
+                        >
+                          {!wb.ui.leftSidebarOpen && !wb.ui.rightAgentOpen ? "◫ Painéis" : "⛶ Ampliar"}
+                        </button>
+                        <button
+                          type="button"
+                          title="Escolher outro arquivo .jar ou .exe no Windows"
+                          class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                          onClick={() =>
+                            void wb.launchSlot({
+                              slotId: slot().slotId,
+                              action: "launch_desktop",
+                              rawArgs: "__pick_executable__",
+                            })
+                          }
+                        >
+                          📂 Outra Versão
+                        </button>
                         <button
                           type="button"
                           class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
                           onClick={() => setShowDesktopIngestDrawer((v) => !v)}
                         >
-                          📋 Colar p/ SHA-256 ou IA
+                          📋 SHA-256 / IA
                         </button>
                         <button
                           type="button"
                           class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
                           onClick={() => wb.setUi("iframeReloadNonce", (n) => n + 1)}
                         >
-                          ↻ Reconectar Tela
+                          ↻ Reconectar
                         </button>
                         <button
                           type="button"
@@ -1312,7 +1594,7 @@ export function CyberLabCenterStage() {
                             })
                           }
                         >
-                          ⏹ Fechar Tela Central
+                          ⏹ Fechar
                         </button>
                       </div>
                     </div>
@@ -1358,10 +1640,14 @@ export function CyberLabCenterStage() {
                     </Show>
 
                     <iframe
+                      ref={(el) => {
+                        activeToolIframeRef = el
+                      }}
                       data-slot="cyberlab-embedded-gui-iframe"
                       src={`${url()}${url().includes("?") ? "&" : "?"}_cb=${wb.ui.iframeReloadNonce}`}
                       title={slot().name}
-                      class="h-full w-full flex-1 border-0 bg-zinc-950"
+                      onLoad={() => syncCanvasControl(slot())}
+                      class="h-full w-full min-h-0 flex-1 border-0 bg-zinc-950"
                       allow="clipboard-read; clipboard-write; fullscreen"
                       allowfullscreen
                     />

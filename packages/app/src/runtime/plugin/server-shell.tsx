@@ -47,10 +47,10 @@ export function PluginServerCover(props: ParentProps) {
   }
 
   return (
-    <div class="relative flex size-full min-h-0 min-w-0 flex-col">
+    <div class="relative flex size-full flex-1 min-h-0 min-w-0 flex-col overflow-hidden">
       {/* Keep the route mounted so reconnecting preserves its draft and local UI state. */}
       <div
-        class="flex size-full min-h-0 min-w-0 flex-col"
+        class="flex size-full flex-1 min-h-0 min-w-0 flex-col overflow-hidden"
         classList={{ invisible: !!covered() }}
         inert={!!covered()}
         aria-hidden={covered() ? true : undefined}
