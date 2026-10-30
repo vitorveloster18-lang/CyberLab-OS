@@ -99,22 +99,22 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
   // =========================================================================
   {
     slotId: "burp-suite",
-    name: "Burp Suite Community / Pro",
+    name: "Burp Suite Community (Oficial)",
     shortLabel: "Burp Suite",
     category: "web_proxy_suite",
     kind: "desktop_gui",
     tagline: "Proxy interceptador e Repeater padrão da indústria + Navegador Isolado 1-Clique (:8080)",
     description:
-      "Abre o seu Burp Suite Community/Pro instalado no Windows (ou Kali), conecta em 1 clique um navegador Chrome/Edge isolado direto na porta 8080 sem mexer nos certificados do Windows e sincroniza exports XML/logs com a IA e os 4 CDIs.",
+      "Abre o seu Burp Suite Community gratuito (ou Pro, se tiver licença) dentro do palco central do CyberLab OS ou em janela nativa, conecta em 1 clique um navegador Chrome/Edge isolado direto na porta 8080 e sincroniza requests/logs com a IA e os 4 CDIs.",
     upstreamUrl: "https://portswigger.net/burp/communitydownload",
-    licenseNote: "Proprietary Free / Pro (Externo)",
+    licenseNote: "Free Community Edition (Externo)",
     windowsBinaries: ["BurpSuiteCommunity.exe", "BurpSuitePro.exe"],
     windowsKnownPaths: [
       "%LOCALAPPDATA%\\Programs\\BurpSuiteCommunity\\BurpSuiteCommunity.exe",
-      "%LOCALAPPDATA%\\Programs\\BurpSuitePro\\BurpSuitePro.exe",
       "%ProgramFiles%\\BurpSuiteCommunity\\BurpSuiteCommunity.exe",
-      "%ProgramFiles%\\BurpSuitePro\\BurpSuitePro.exe",
       "{toolsRoot}\\BurpSuite\\BurpSuiteCommunity.exe",
+      "%LOCALAPPDATA%\\Programs\\BurpSuitePro\\BurpSuitePro.exe",
+      "%ProgramFiles%\\BurpSuitePro\\BurpSuitePro.exe",
     ],
     posixBinaries: ["burpsuite"],
     posixKnownPaths: ["/usr/bin/burpsuite", "/opt/BurpSuiteCommunity/BurpSuiteCommunity"],
@@ -859,10 +859,15 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
     licenseNote: "LGPL-2.1 (Externo)",
     windowsBinaries: ["semgrep.exe", "opengrep.exe"],
     posixBinaries: ["semgrep", "opengrep"],
-    posixKnownPaths: ["/usr/local/bin/semgrep", "/usr/bin/semgrep", "~/.local/bin/semgrep"],
+    posixKnownPaths: [
+      "/usr/local/bin/semgrep",
+      "/usr/local/bin/opengrep",
+      "/usr/bin/semgrep",
+      "~/.local/bin/semgrep",
+    ],
     installPowerShell: "pip install semgrep",
     installKaliWsl:
-      "sudo apt-get update && sudo apt-get install -y python3-pip && sudo python3 -m pip install --break-system-packages semgrep",
+      'sudo apt-get install -y -qq curl jq ca-certificates && URL=$(curl -fsSL https://api.github.com/repos/opengrep/opengrep/releases/latest | jq -r \'.assets[] | select(.name == "opengrep_manylinux_x86") | .browser_download_url\' | head -n 1) && sudo curl -fsSL "$URL" -o /usr/local/bin/opengrep && sudo chmod +x /usr/local/bin/opengrep && sudo ln -sf /usr/local/bin/opengrep /usr/local/bin/semgrep',
     presets: [
       {
         id: "semgrep-auto",

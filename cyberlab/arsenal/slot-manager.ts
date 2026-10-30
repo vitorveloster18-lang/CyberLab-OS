@@ -1024,43 +1024,74 @@ export class ArsenalSlotManager {
     return null
   }
 
+  private findPreferredWindowsBurpJar(slot: ArsenalSlotStatus): string | null {
+    const localAppData =
+      process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local")
+    const progFiles = process.env.ProgramFiles ?? "C:\\Program Files"
+    const candidateDirs = Array.from(
+      new Set(
+        [
+          path.join(localAppData, "Programs", "BurpSuiteCommunity"),
+          path.join(progFiles, "BurpSuiteCommunity"),
+          path.join(this.config.toolsRootDir, "BurpSuite"),
+          slot.windowsPath ? path.dirname(slot.windowsPath) : "",
+          path.join(localAppData, "Programs", "BurpSuitePro"),
+          path.join(progFiles, "BurpSuitePro"),
+        ].filter(Boolean),
+      ),
+    )
+
+    // Pass 1: strictly prefer Burp Suite Community JAR (free, zero license key blocking)
+    for (const dir of candidateDirs) {
+      if (!existsSync(dir)) continue
+      try {
+        const comm = readdirSync(dir).find((f) => /^burpsuite_community.*\.jar$/i.test(f))
+        if (comm) return path.join(dir, comm)
+      } catch {
+        // Ignore
+      }
+    }
+
+    // Pass 2: accept any burpsuite*.jar if Community wasn't found
+    for (const dir of candidateDirs) {
+      if (!existsSync(dir)) continue
+      try {
+        const anyJar = readdirSync(dir).find((f) => /^burpsuite.*\.jar$/i.test(f))
+        if (anyJar) return path.join(dir, anyJar)
+      } catch {
+        // Ignore
+      }
+    }
+    return null
+  }
+
   private resolveEmbeddedLinuxGuiCommand(slot: ArsenalSlotStatus): {
     launchCmd: string
     needsJava: boolean
+    wslSourceBurpJar?: string
   } {
-    // 1. Burp Suite: reuse existing Windows BurpSuiteCommunity/Pro .jar directly via /mnt/c/... with Java 21 LTS!
+    // 1. Burp Suite: stage JAR onto fast Linux ext4 (/opt/cyberlab-burp/burpsuite.jar) & launch with Genuine Java 21 LTS
+    //    and PortSwigger's exact 2026 module opens!
     if (slot.slotId === "burp-suite") {
-      if (slot.windowsPath && existsSync(slot.windowsPath)) {
-        const winDir = path.dirname(slot.windowsPath)
-        try {
-          const jarName = readdirSync(winDir).find((f) => /^burpsuite.*\.jar$/i.test(f))
-          if (jarName) {
-            const wslJar = windowsPathToWslPath(path.join(winDir, jarName))
-            const escapedJar = wslJar.replace(/'/g, "'\\''")
-            return {
-              needsJava: true,
-              launchCmd: [
-                '"$JAVA21_BIN"',
-                "--add-opens=java.desktop/javax.swing=ALL-UNNAMED",
-                "--add-opens=java.desktop/javax.swing.plaf.basic=ALL-UNNAMED",
-                "--add-opens=java.desktop/java.awt=ALL-UNNAMED",
-                "--add-opens=java.desktop/sun.awt.X11=ALL-UNNAMED",
-                "--add-opens=java.base/java.lang=ALL-UNNAMED",
-                "--add-opens=java.base/java.nio=ALL-UNNAMED",
-                "--add-opens=java.base/jdk.internal.org.objectweb.asm=ALL-UNNAMED",
-                "--add-opens=java.base/jdk.internal.org.objectweb.asm.tree=ALL-UNNAMED",
-                "--add-opens=java.base/jdk.internal.org.objectweb.asm.Opcodes=ALL-UNNAMED",
-                "-Dawt.useSystemAAFontSettings=on -Dswing.aatext=true",
-                `-jar '${escapedJar}'`,
-              ].join(" "),
-            }
-          }
-        } catch {
-          // Fall through to Linux burpsuite binary
-        }
+      const winJar = process.platform === "win32" ? this.findPreferredWindowsBurpJar(slot) : null
+      const wslSourceBurpJar = winJar ? windowsPathToWslPath(winJar) : undefined
+      return {
+        needsJava: true,
+        ...(wslSourceBurpJar ? { wslSourceBurpJar } : {}),
+        launchCmd: [
+          '"$JAVA21_BIN"',
+          "--add-opens=java.base/java.lang=ALL-UNNAMED",
+          "--add-opens=java.base/javax.crypto=ALL-UNNAMED",
+          "--add-opens=java.desktop/javax.swing=ALL-UNNAMED",
+          "--add-opens=java.desktop/java.awt=ALL-UNNAMED",
+          "--add-opens=java.desktop/java.awt.color=ALL-UNNAMED",
+          "--add-opens=jdk.crypto.cryptoki/sun.security.pkcs11=ALL-UNNAMED",
+          "-XX:MaxRAMPercentage=50",
+          "-Dawt.useSystemAAFontSettings=on",
+          "-Dswing.aatext=true",
+          '-jar "$BURP_JAR_TARGET"',
+        ].join(" "),
       }
-      const linuxBurp = slot.wslPath ?? slot.posixPath ?? "burpsuite"
-      return { needsJava: true, launchCmd: `'${linuxBurp.replace(/'/g, "'\\''")}'` }
     }
 
     // 2. OpenTRAP AppImage
@@ -1123,29 +1154,39 @@ export class ArsenalSlotManager {
       )
     }
 
-    const { launchCmd, needsJava } = this.resolveEmbeddedLinuxGuiCommand(slot)
+    const { launchCmd, needsJava, wslSourceBurpJar } = this.resolveEmbeddedLinuxGuiCommand(slot)
     const dispNum = this.allocateX11Display()
     const vncPort = 5900 + dispNum
     const wsPort = 6000 + dispNum
+    const escapedWslSrcJar = wslSourceBurpJar ? wslSourceBurpJar.replace(/'/g, "'\\''") : ""
 
-    // 1. Ensure Xtigervnc + openbox + novnc + websockify + genuine Java 21 LTS (Temurin 21) are present in Kali WSL2.
-    //    NOTE: Kali Rolling (2026) sets `default-jre` to OpenJDK 25, where JEP-486 removed SecurityManager and triggers
-    //    Burp Suite's JRE 25 warning/hang. Installing Temurin 21 LTS into /opt/cyberlab-jre21 fixes all Java 21 Swing tools cleanly!
+    // 1. Ensure Xtigervnc + openbox + novnc + websockify + x11-utils + genuine Java 21 LTS (Temurin 21)
+    //    + native ext4 cached Burp JAR (/opt/cyberlab-burp/burpsuite.jar) are ready inside Kali WSL2!
     const bootstrapCheckAndInstall = [
       "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH",
       "MISSING=0",
       "command -v Xtigervnc >/dev/null 2>&1 || MISSING=1",
       "command -v openbox >/dev/null 2>&1 || MISSING=1",
       "command -v websockify >/dev/null 2>&1 || MISSING=1",
+      "command -v xmessage >/dev/null 2>&1 || MISSING=1",
       "[ -d /usr/share/novnc ] || MISSING=1",
-      ...(slot.slotId === "burp-suite" && !slot.windowsPath
-        ? ["command -v burpsuite >/dev/null 2>&1 || MISSING=1"]
-        : []),
       'if [ "$MISSING" = "1" ]; then',
       "  export DEBIAN_FRONTEND=noninteractive",
       "  apt-get update -qq || true",
-      `  apt-get install -y -qq curl jq tar tigervnc-standalone-server openbox novnc websockify dbus-x11 x11-xserver-utils ${slot.slotId === "burp-suite" && !slot.windowsPath ? "burpsuite" : ""} || true`,
+      "  apt-get install -y -qq curl jq tar tigervnc-standalone-server openbox novnc websockify dbus-x11 x11-xserver-utils x11-utils fonts-dejavu-core || true",
       "fi",
+      ...(slot.slotId === "burp-suite"
+        ? [
+            "mkdir -p /opt/cyberlab-burp",
+            ...(escapedWslSrcJar
+              ? [
+                  `if [ ! -s /opt/cyberlab-burp/burpsuite.jar ] && [ -f '${escapedWslSrcJar}' ]; then cp -f '${escapedWslSrcJar}' /opt/cyberlab-burp/burpsuite.jar && chmod 644 /opt/cyberlab-burp/burpsuite.jar; fi`,
+                ]
+              : []),
+            "if [ ! -s /opt/cyberlab-burp/burpsuite.jar ] && [ -f /usr/share/burpsuite/burpsuite.jar ]; then ln -sf /usr/share/burpsuite/burpsuite.jar /opt/cyberlab-burp/burpsuite.jar; fi",
+            "if [ ! -s /opt/cyberlab-burp/burpsuite.jar ]; then export DEBIAN_FRONTEND=noninteractive; apt-get update -qq || true; apt-get install -y -qq burpsuite || true; [ -f /usr/share/burpsuite/burpsuite.jar ] && ln -sf /usr/share/burpsuite/burpsuite.jar /opt/cyberlab-burp/burpsuite.jar; fi",
+          ]
+        : []),
       ...(needsJava
         ? [
             'if [ ! -x /opt/cyberlab-jre21/bin/java ] && [ ! -x /usr/lib/jvm/java-21-openjdk-amd64/bin/java ]; then',
@@ -1187,12 +1228,14 @@ export class ArsenalSlotManager {
       if (ipLine) wslIp = ipLine
     }
 
-    // 2. Start dedicated Xtigervnc + Openbox (auto-focus + borderless maximized main frame + centered dialogs) + websockify + GUI tool
+    // 2. Start dedicated Xtigervnc + Openbox (<decor>yes</decor> so fixed-size startup wizards render properly
+    //    and resizable main frames auto-maximize!) + websockify + GUI tool
     const sessionScript = [
       'if [ -x /opt/cyberlab-jre21/bin/java ]; then export JAVA_HOME=/opt/cyberlab-jre21; export JAVA21_BIN=/opt/cyberlab-jre21/bin/java; elif [ -x /usr/lib/jvm/java-21-openjdk-amd64/bin/java ]; then export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64; export JAVA21_BIN=/usr/lib/jvm/java-21-openjdk-amd64/bin/java; else export JAVA21_BIN=java; fi',
+      'export BURP_JAR_TARGET=/opt/cyberlab-burp/burpsuite.jar; [ ! -s "$BURP_JAR_TARGET" ] && [ -f /usr/share/burpsuite/burpsuite.jar ] && export BURP_JAR_TARGET=/usr/share/burpsuite/burpsuite.jar',
       'export PATH="${JAVA_HOME:+$JAVA_HOME/bin:}$HOME/.local/bin:$HOME/go/bin:$HOME/.cargo/bin:/opt/opentrap:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"',
-      `pkill -f "Xtigervnc :${dispNum}\\b" 2>/dev/null || true`,
-      `pkill -f "websockify.*:${wsPort}\\b" 2>/dev/null || true`,
+      `pkill -f "Xtigervnc :${dispNum}" 2>/dev/null || true`,
+      `pkill -f "websockify.*:${wsPort}" 2>/dev/null || true`,
       `rm -f /tmp/.X${dispNum}-lock /tmp/.X11-unix/X${dispNum} 2>/dev/null || true`,
       `cat > /tmp/cyberlab-ob-${dispNum}.xml << 'EOF_OB'`,
       `<?xml version="1.0" encoding="UTF-8"?>`,
@@ -1204,14 +1247,10 @@ export class ArsenalSlotManager {
       `  </focus>`,
       `  <desktops><number>1</number></desktops>`,
       `  <applications>`,
-      `    <application type="normal">`,
-      `      <maximized>yes</maximized>`,
-      `      <decor>no</decor>`,
-      `      <focus>yes</focus>`,
-      `    </application>`,
-      `    <application type="dialog">`,
+      `    <application type="*">`,
       `      <decor>yes</decor>`,
       `      <focus>yes</focus>`,
+      `      <maximized>yes</maximized>`,
       `      <position force="no"><x>center</x><y>center</y></position>`,
       `    </application>`,
       `  </applications>`,
@@ -1222,13 +1261,14 @@ export class ArsenalSlotManager {
       "for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do [ -S /tmp/.X11-unix/X" + dispNum + " ] && break; sleep 0.2; done",
       `export DISPLAY=:${dispNum}`,
       "export GDK_SCALE=1",
-      "xsetroot -solid '#090d16' 2>/dev/null || true",
+      "xsetroot -solid '#111827' 2>/dev/null || true",
       ...(slot.slotId === "kali-desktop-stream"
         ? []
         : [`openbox --config-file /tmp/cyberlab-ob-${dispNum}.xml >/dev/null 2>&1 &`, "sleep 0.3"]),
       `websockify --web=/usr/share/novnc 0.0.0.0:${wsPort} 127.0.0.1:${vncPort} >/dev/null 2>&1 &`,
       "WS_PID=$!",
-      `(${launchCmd}) >/tmp/cyberlab-gui-${dispNum}.log 2>&1 &`,
+      `(xmessage -center -timeout 6 -buttons "" "Iniciando ${slot.shortLabel} (Java 21 LTS)... Aguarde alguns segundos." >/dev/null 2>&1 || true) &`,
+      `(${launchCmd} >/tmp/cyberlab-gui-${dispNum}.log 2>&1 || xmessage -center -title "Diagnóstico ${slot.shortLabel}" -file /tmp/cyberlab-gui-${dispNum}.log >/dev/null 2>&1) &`,
       "wait $WS_PID $VNC_PID",
     ].join("\n")
 

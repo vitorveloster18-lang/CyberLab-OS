@@ -556,7 +556,7 @@ export function CyberLabCenterStage() {
   const [findingSev, setFindingSev] = createSignal<"info" | "low" | "medium" | "high" | "critical">("high")
   const [desktopIngestText, setDesktopIngestText] = createSignal("")
   const [showDesktopIngestDrawer, setShowDesktopIngestDrawer] = createSignal(false)
-  const [dismissedInstallerRunId, setDismissedInstallerRunId] = createSignal("")
+  const [dismissedInstallerRunIds, setDismissedInstallerRunIds] = createSignal<string[]>([])
   const [showSlotSettings, setShowSlotSettings] = createSignal(false)
   const [customPathInput, setCustomPathInput] = createSignal("")
   const [customUrlInput, setCustomUrlInput] = createSignal("")
@@ -675,7 +675,7 @@ export function CyberLabCenterStage() {
       {/* Console ao vivo de Instalação Automática (visível quando há um instalador rodando ou recém-concluído) */}
       <Show
         when={(wb.backend.arsenal?.runs ?? []).find(
-          (r) => r.runtime === "installer" && r.runId !== dismissedInstallerRunId(),
+          (r) => r.runtime === "installer" && !dismissedInstallerRunIds().includes(r.runId),
         )}
       >
         {(instRun) => (
@@ -700,10 +700,15 @@ export function CyberLabCenterStage() {
                 </Show>
                 <button
                   type="button"
-                  class="rounded border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-300 hover:border-emerald-500 cursor-pointer"
-                  onClick={() => setDismissedInstallerRunId(instRun().runId)}
+                  class="rounded border border-zinc-700 bg-zinc-900 px-2.5 py-0.5 text-[10.5px] font-medium text-zinc-200 hover:border-emerald-500 hover:text-white cursor-pointer"
+                  onClick={() => {
+                    const allInstIds = (wb.backend.arsenal?.runs ?? [])
+                      .filter((r) => r.runtime === "installer")
+                      .map((r) => r.runId)
+                    setDismissedInstallerRunIds((prev) => Array.from(new Set([...prev, ...allInstIds])))
+                  }}
                 >
-                  Ocultar Log
+                  ✕ Fechar Console
                 </button>
               </div>
             </div>

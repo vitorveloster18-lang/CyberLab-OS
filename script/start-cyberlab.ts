@@ -15,7 +15,7 @@ import net from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-const UI_BUILD_STAMP = "cyberlab-unified-v5.2-jre21-fullscreen-autoinstall"
+const UI_BUILD_STAMP = "cyberlab-unified-v5.3-burp-ext4-opengrep-closefix"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const distDir = path.join(repoRoot, "packages", "app", "dist")
