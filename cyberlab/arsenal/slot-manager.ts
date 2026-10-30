@@ -11,9 +11,12 @@ import {
   writeFileSync,
 } from "node:fs"
 import http from "node:http"
+import https from "node:https"
 import net from "node:net"
 import os from "node:os"
 import path from "node:path"
+import tls from "node:tls"
+import { fileURLToPath } from "node:url"
 import type { ProjectScope } from "../contracts/policy.js"
 import { redactSensitiveContent } from "../evidence/provenance.js"
 import { isPathInsideRoot, type ScopeController } from "../policy/scope.js"
@@ -64,6 +67,9 @@ export interface ArsenalSlotStatus {
   embedUrl: string | null
   daemonRunning: boolean
   companionProxyPort: number | null
+  mcpCapable: boolean
+  mcpConnected: boolean
+  mcpLabel: string | null
   installPowerShell: string
   installKaliWsl: string
   presets: ArsenalPresetCommand[]
@@ -108,6 +114,51 @@ export interface ArsenalOverview {
   categories: Array<{ id: ArsenalCategory; title: string; subtitle: string }>
   slots: ArsenalSlotStatus[]
   runs: ArsenalLiveRun[]
+}
+
+const IN_DOCUMENT_ZOOM_SCRIPT = `<script data-cyberlab-zoom="1">(function(){if(window.__cyberlabZoomHook)return;window.__cyberlabZoomHook=true;window.addEventListener("message",function(ev){var d=ev&&ev.data;if(!d||d.type!=="cyberlab-canvas-control")return;var z=typeof d.zoom==="number"?Math.max(50,Math.min(180,d.zoom))/100:1;document.documentElement.style.zoom=z===1?"":String(z);if(d.mode==="scroll"){document.documentElement.style.overflow="auto";if(document.body)document.body.style.overflow="auto";}});})();</script>`
+
+function injectZoomHelperIntoHtml(rawHtml: Buffer): Buffer {
+  const text = rawHtml.toString("utf8")
+  if (text.includes("data-cyberlab-zoom")) return rawHtml
+  const lower = text.toLowerCase()
+  const closeBody = lower.lastIndexOf("</body>")
+  if (closeBody !== -1) {
+    return Buffer.from(`${text.slice(0, closeBody)}${IN_DOCUMENT_ZOOM_SCRIPT}${text.slice(closeBody)}`, "utf8")
+  }
+  const closeHead = lower.lastIndexOf("</head>")
+  if (closeHead !== -1) {
+    return Buffer.from(`${text.slice(0, closeHead)}${IN_DOCUMENT_ZOOM_SCRIPT}${text.slice(closeHead)}`, "utf8")
+  }
+  return Buffer.from(`${text}${IN_DOCUMENT_ZOOM_SCRIPT}`, "utf8")
+}
+
+const NON_MCP_SLOT_IDS = new Set([
+  "kali-desktop-stream",
+  "veracrypt",
+  "tor-onionshare",
+  "mullvad-opsec",
+])
+
+const CUSTOM_MCP_LABELS: Record<string, string> = {
+  "burp-suite": "Burp MCP (:9876/sse)",
+  opentrap: "OpenTRAP Proxy MCP",
+  mitmweb: "mitmproxy MCP",
+  caido: "Caido GraphQL/MCP",
+  "owasp-zap": "OWASP ZAP API MCP",
+  rea: "REA Native MCP",
+  ghidra: "Ghidra Headless MCP",
+  jadx: "JADX AI MCP",
+  "rizin-cutter": "Rizin / Cutter MCP",
+  wireshark: "TShark PCAP MCP",
+  semgrep: "OpenGrep / Semgrep MCP",
+  "hexstrike-ai": "HexStrike Kali MCP",
+  pentagi: "PentAGI MCP",
+  "pentest-copilot": "Pentest Copilot MCP",
+  betterleaks: "Betterleaks Audit MCP",
+  gef: "GEF Binary Inspector MCP",
+  "atomic-operator": "MITRE ATT&CK MCP",
+  wpprobe: "WPProbe CVE MCP",
 }
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -667,10 +718,146 @@ export class ArsenalSlotManager {
     this.lastProbedAt = new Date().toISOString()
   }
 
+  private readConnectedMcpServerKeys(): Set<string> {
+    const out = new Set<string>()
+    const cfgPath = path.join(this.workspaceRoot, "opencode.json")
+    if (!existsSync(cfgPath)) return out
+    try {
+      const parsed = JSON.parse(readFileSync(cfgPath, "utf8")) as {
+        mcp?: { servers?: Record<string, { disabled?: boolean }> }
+      }
+      const servers = parsed?.mcp?.servers ?? {}
+      for (const [k, v] of Object.entries(servers)) {
+        if (v && !v.disabled) out.add(k)
+      }
+    } catch {
+      // Ignore malformed opencode.json
+    }
+    return out
+  }
+
+  private resolveSlotMcpMeta(def: ArsenalSlotDefinition): {
+    mcpCapable: boolean
+    mcpLabel: string | null
+  } {
+    if (NON_MCP_SLOT_IDS.has(def.slotId)) {
+      return { mcpCapable: false, mcpLabel: null }
+    }
+    const mcpCapable =
+      def.mcpCapable !== undefined
+        ? def.mcpCapable
+        : def.kind === "cli_runner" ||
+          def.kind === "web_embed" ||
+          def.category === "web_proxy_suite" ||
+          def.category === "reverse_mobile" ||
+          def.slotId === "wireshark"
+    if (!mcpCapable) return { mcpCapable: false, mcpLabel: null }
+    const mcpLabel =
+      def.mcpLabel ??
+      CUSTOM_MCP_LABELS[def.slotId] ??
+      `${def.shortLabel} MCP`
+    return { mcpCapable: true, mcpLabel }
+  }
+
+  private toggleSlotMcpInOpenCodeConfig(slot: ArsenalSlotStatus): {
+    connected: boolean
+    message: string
+  } {
+    const cfgPath = path.join(this.workspaceRoot, "opencode.json")
+    let doc: Record<string, unknown> = {}
+    if (existsSync(cfgPath)) {
+      try {
+        doc = JSON.parse(readFileSync(cfgPath, "utf8")) as Record<string, unknown>
+      } catch {
+        doc = {}
+      }
+    }
+    if (!doc.mcp || typeof doc.mcp !== "object") {
+      doc.mcp = { servers: {} }
+    }
+    const mcpObj = doc.mcp as { servers?: Record<string, unknown> }
+    if (!mcpObj.servers || typeof mcpObj.servers !== "object") {
+      mcpObj.servers = {}
+    }
+
+    const key = `cyberlab-${slot.slotId}`
+    const existing = mcpObj.servers[key] as { disabled?: boolean } | undefined
+    if (existing && !existing.disabled) {
+      delete mcpObj.servers[key]
+      writeFileSync(cfgPath, `${JSON.stringify(doc, null, 2)}\n`, "utf8")
+      return {
+        connected: false,
+        message: `Conexão MCP de "${slot.shortLabel}" desconectada do opencode.json.`,
+      }
+    }
+
+    const bridgeScript = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "mcp",
+      "arsenal-mcp-stdio.ts",
+    )
+    const bunBin = process.execPath || "bun"
+
+    let serverEntry: Record<string, unknown>
+    if (slot.slotId === "burp-suite") {
+      serverEntry = {
+        type: "remote",
+        url: "http://127.0.0.1:9876/sse",
+      }
+    } else if (slot.slotId === "rea" && (slot.wslPath || slot.posixPath || slot.windowsPath)) {
+      serverEntry =
+        process.platform === "win32" && !slot.windowsPath
+          ? {
+              type: "local",
+              command: ["wsl.exe", "-d", this.config.preferredWslDistro, "--", "rea", "mcp"],
+            }
+          : {
+              type: "local",
+              command: [slot.windowsPath ?? slot.posixPath ?? "rea", "mcp"],
+            }
+    } else if (slot.slotId === "hexstrike-ai" && (slot.wslPath || slot.posixPath)) {
+      serverEntry =
+        process.platform === "win32"
+          ? {
+              type: "local",
+              command: ["wsl.exe", "-d", this.config.preferredWslDistro, "--", "/usr/local/bin/hexstrike-mcp"],
+            }
+          : {
+              type: "local",
+              command: ["/usr/local/bin/hexstrike-mcp"],
+            }
+    } else {
+      serverEntry = {
+        type: "local",
+        command: [
+          bunBin,
+          "run",
+          bridgeScript,
+          "--slot",
+          slot.slotId,
+          "--workspace",
+          this.workspaceRoot,
+          "--wsl-distro",
+          this.config.preferredWslDistro,
+        ],
+      }
+    }
+
+    mcpObj.servers[key] = serverEntry
+    writeFileSync(cfgPath, `${JSON.stringify(doc, null, 2)}\n`, "utf8")
+    return {
+      connected: true,
+      message: `🔌 MCP "${slot.mcpLabel ?? slot.shortLabel}" conectado ao Agente OpenCode em opencode.json (${key})!`,
+    }
+  }
+
   getOverview(forceRefresh = false): ArsenalOverview {
     if (forceRefresh || !this.lastProbedAt) {
       this.probeEnvironment()
     }
+
+    const connectedMcpKeys = this.readConnectedMcpServerKeys()
 
     const slots: ArsenalSlotStatus[] = this.getAllDefinitions().map((def) => {
       const override = this.config.slotOverrides[def.slotId] ?? {}
@@ -730,6 +917,11 @@ export class ArsenalSlotManager {
         Boolean(override.customEmbedUrl) ||
         def.slotId === "kali-desktop-stream" && this.wslAvailable
 
+      const { mcpCapable, mcpLabel } = this.resolveSlotMcpMeta(def)
+      const mcpConnected =
+        connectedMcpKeys.has(`cyberlab-${def.slotId}`) ||
+        connectedMcpKeys.has(def.slotId)
+
       return {
         slotId: def.slotId,
         name: def.name,
@@ -751,6 +943,9 @@ export class ArsenalSlotManager {
         embedUrl,
         daemonRunning: Boolean(daemon),
         companionProxyPort: override.companionProxyPort ?? def.companionProxyPort ?? null,
+        mcpCapable,
+        mcpConnected,
+        mcpLabel,
         installPowerShell: def.installPowerShell,
         installKaliWsl: def.installKaliWsl,
         presets: def.presets,
@@ -976,11 +1171,13 @@ export class ArsenalSlotManager {
           return
         }
         const ext = path.extname(targetFile).toLowerCase()
+        const rawBuf = readFileSync(targetFile)
+        const bodyBuf = ext === ".html" || ext === ".htm" ? injectZoomHelperIntoHtml(rawBuf) : rawBuf
         res.writeHead(200, {
           "Content-Type": MIME_BY_EXT[ext] ?? "application/octet-stream",
           "Cache-Control": "no-cache",
         })
-        res.end(readFileSync(targetFile))
+        res.end(bodyBuf)
       } catch {
         res.writeHead(500)
         res.end("Static server error")
@@ -1088,7 +1285,11 @@ export class ArsenalSlotManager {
   private async createEmbedHttpProxyServer(
     remoteHosts: string[],
     remotePort: number,
+    options?: { upstreamTls?: boolean },
   ): Promise<{ server: http.Server; localPort: number } | null> {
+    const upstreamTls = Boolean(options?.upstreamTls)
+    const scheme = upstreamTls ? "https" : "http"
+
     const pickHost = async (): Promise<string> => {
       for (const h of remoteHosts) {
         const ok = await new Promise<boolean>((resolve) => {
@@ -1117,53 +1318,112 @@ export class ArsenalSlotManager {
 
     const srv = http.createServer((req, res) => {
       const forwardHeaders: http.OutgoingHttpHeaders = { ...req.headers }
+      const acceptHdr = typeof req.headers.accept === "string" ? req.headers.accept : ""
+      const wantsHtmlDoc = req.method === "GET" && acceptHdr.includes("text/html")
+      if (wantsHtmlDoc) {
+        // Request uncompressed HTML on top-level iframe navigations so we can inject the native page-zoom helper cleanly
+        forwardHeaders["accept-encoding"] = "identity"
+      }
       forwardHeaders.host = `127.0.0.1:${remotePort}`
-      forwardHeaders.origin = `http://127.0.0.1:${remotePort}`
-      forwardHeaders.referer = `http://127.0.0.1:${remotePort}/`
+      forwardHeaders.origin = `${scheme}://127.0.0.1:${remotePort}`
+      forwardHeaders.referer = `${scheme}://127.0.0.1:${remotePort}/`
       if (forwardHeaders["sec-fetch-site"]) {
         forwardHeaders["sec-fetch-site"] = "same-origin"
       }
 
-      const upstreamReq = http.request(
-        {
-          host: cachedUpstreamHost,
-          port: remotePort,
-          method: req.method,
-          path: req.url ?? "/",
-          headers: forwardHeaders,
-        },
-        (upstreamRes) => {
-          const outHeaders: http.OutgoingHttpHeaders = { ...upstreamRes.headers }
-          delete outHeaders["x-frame-options"]
-          delete outHeaders["X-Frame-Options"]
-          const csp = outHeaders["content-security-policy"]
-          if (typeof csp === "string") {
-            const stripped = csp.replace(/frame-ancestors\s+[^;]+;?/gi, "").trim()
-            if (stripped) outHeaders["content-security-policy"] = stripped
-            else delete outHeaders["content-security-policy"]
-          }
-          res.writeHead(upstreamRes.statusCode ?? 200, outHeaders)
-          upstreamRes.pipe(res)
-        },
-      )
+      const handleUpstreamResponse = (upstreamRes: http.IncomingMessage) => {
+        const outHeaders: http.OutgoingHttpHeaders = { ...upstreamRes.headers }
+        delete outHeaders["x-frame-options"]
+        delete outHeaders["X-Frame-Options"]
+        const csp = outHeaders["content-security-policy"]
+        if (typeof csp === "string") {
+          const stripped = csp.replace(/frame-ancestors\s+[^;]+;?/gi, "").trim()
+          if (stripped) outHeaders["content-security-policy"] = stripped
+          else delete outHeaders["content-security-policy"]
+        }
+        // When terminating local self-signed HTTPS (e.g. PentAGI :8443) onto 127.0.0.1 HTTP, normalize Set-Cookie
+        const setCookie = outHeaders["set-cookie"]
+        if (upstreamTls && setCookie) {
+          const list = Array.isArray(setCookie) ? setCookie : [String(setCookie)]
+          outHeaders["set-cookie"] = list.map((c) =>
+            c
+              .replace(/;\s*Secure/gi, "")
+              .replace(/SameSite=Strict/gi, "SameSite=Lax"),
+          )
+        }
+        // Rewrite absolute https://127.0.0.1:8443 Location redirects to relative paths
+        if (upstreamTls && typeof outHeaders.location === "string") {
+          outHeaders.location = outHeaders.location.replace(
+            new RegExp(`^https:\\/\\/(?:127\\.0\\.0\\.1|localhost|[^/]+):${remotePort}`, "i"),
+            "",
+          ) || "/"
+        }
+
+        const ctype = String(outHeaders["content-type"] ?? "").toLowerCase()
+        const cenc = String(outHeaders["content-encoding"] ?? "").toLowerCase()
+        if (wantsHtmlDoc && ctype.includes("text/html") && (!cenc || cenc === "identity")) {
+          const chunks: Buffer[] = []
+          upstreamRes.on("data", (ch: Buffer) => chunks.push(ch))
+          upstreamRes.on("end", () => {
+            const injected = injectZoomHelperIntoHtml(Buffer.concat(chunks))
+            outHeaders["content-length"] = String(injected.byteLength)
+            res.writeHead(upstreamRes.statusCode ?? 200, outHeaders)
+            res.end(injected)
+          })
+          return
+        }
+
+        res.writeHead(upstreamRes.statusCode ?? 200, outHeaders)
+        upstreamRes.pipe(res)
+      }
+
+      const upstreamReq = upstreamTls
+        ? https.request(
+            {
+              host: cachedUpstreamHost,
+              port: remotePort,
+              method: req.method,
+              path: req.url ?? "/",
+              headers: forwardHeaders,
+              rejectUnauthorized: false,
+            },
+            handleUpstreamResponse,
+          )
+        : http.request(
+            {
+              host: cachedUpstreamHost,
+              port: remotePort,
+              method: req.method,
+              path: req.url ?? "/",
+              headers: forwardHeaders,
+            },
+            handleUpstreamResponse,
+          )
 
       upstreamReq.on("error", async () => {
         cachedUpstreamHost = await pickHost()
         if (!res.headersSent) {
           res.writeHead(502, { "Content-Type": "text/plain; charset=utf-8" })
         }
-        res.end("Aguardando inicialização do servidor Web local da ferramenta... Clique em Recarregar Frame em instantes.")
+        res.end("Aguardando inicialização do servidor Web local da ferramenta... Clique em Recarregar em instantes.")
       })
 
       req.pipe(upstreamReq)
     })
 
     srv.on("upgrade", (req, clientSocket, head) => {
-      const upstream = net.connect({ host: cachedUpstreamHost, port: remotePort })
+      const upstream = upstreamTls
+        ? tls.connect({
+            host: cachedUpstreamHost,
+            port: remotePort,
+            rejectUnauthorized: false,
+          })
+        : net.connect({ host: cachedUpstreamHost, port: remotePort })
       upstream.setNoDelay(true)
       clientSocket.on("error", () => upstream.destroy())
       upstream.on("error", () => clientSocket.destroy())
-      upstream.once("connect", () => {
+      const connectEvent = upstreamTls ? "secureConnect" : "connect"
+      upstream.once(connectEvent, () => {
         const headerLines: string[] = [`${req.method ?? "GET"} ${req.url ?? "/"} HTTP/1.1`]
         for (const [k, v] of Object.entries(req.headers)) {
           if (v === undefined) continue
@@ -1171,7 +1431,7 @@ export class ArsenalSlotManager {
           if (low === "host") {
             headerLines.push(`Host: 127.0.0.1:${remotePort}`)
           } else if (low === "origin") {
-            headerLines.push(`Origin: http://127.0.0.1:${remotePort}`)
+            headerLines.push(`Origin: ${scheme}://127.0.0.1:${remotePort}`)
           } else if (low === "sec-fetch-site") {
             headerLines.push("Sec-Fetch-Site: same-origin")
           } else if (Array.isArray(v)) {
@@ -1390,34 +1650,82 @@ export class ArsenalSlotManager {
     const pill = document.getElementById('status_pill');
     const screenEl = document.getElementById('screen');
     const params = new URLSearchParams(window.location.search);
-    let currentMode = params.get('mode') || 'fit';
+    let currentMode = params.get('mode') || 'native';
     let currentZoom = Number(params.get('zoom') || '100');
     let rfb = null;
     let retryTimer = null;
 
+    function installPrecisionZoomHooks(instance) {
+      // NEVER use CSS canvas.style.zoom or CSS transform: scale()!
+      // Instead, drive scaling EXCLUSIVELY through noVNC's own Display._scale (so absX/absY divide pointer coords by the exact same scale!)
+      // and ExtendedDesktopSize (so X11 reflows cleanly to containerSize / zoomFactor in native mode!).
+      instance._updateScale = function () {
+        if (!this._display) return;
+        const z = Math.max(0.6, Math.min(1.8, currentZoom / 100));
+        if (currentMode === 'scroll') {
+          this._display.scale = z;
+        } else if (this._scaleViewport) {
+          const r = screenEl.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) {
+            this._display.autoscale(r.width, r.height);
+          }
+        } else {
+          this._display.scale = 1.0;
+        }
+        this._fixScrollbars();
+      };
+
+      const origRequestRemoteResize = instance._requestRemoteResize.bind(instance);
+      instance._requestRemoteResize = function () {
+        if (!this._resizeSession || this._viewOnly || !this._supportsSetDesktopSize) {
+          return origRequestRemoteResize();
+        }
+        if (this._pendingRemoteResize) return;
+        const r = screenEl.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) return;
+        const z = currentMode === 'native' ? Math.max(0.6, Math.min(1.8, currentZoom / 100)) : 1.0;
+        const desiredW = Math.max(680, Math.floor(r.width / z));
+        const desiredH = Math.max(440, Math.floor(r.height / z));
+        if (desiredW === this._fbWidth && desiredH === this._fbHeight) {
+          this._updateScale();
+          return;
+        }
+        const origScreenSize = this._screenSize;
+        this._screenSize = () => ({ w: desiredW, h: desiredH });
+        try {
+          origRequestRemoteResize();
+        } finally {
+          this._screenSize = origScreenSize;
+        }
+      };
+    }
+
     function applyFraming() {
       if (!rfb) return;
       const canvas = screenEl.querySelector('canvas');
-      if (currentMode === 'fit') {
+      if (canvas) {
+        canvas.style.zoom = '';
+        canvas.style.transform = '';
+      }
+      if (currentMode === 'native') {
         screenEl.classList.remove('scroll-mode');
-        if (canvas) canvas.style.zoom = '';
+        rfb.clipViewport = false;
+        rfb.scaleViewport = true;
+        rfb.resizeSession = true;
+        rfb._requestRemoteResize();
+        rfb._updateScale();
+      } else if (currentMode === 'fit') {
+        screenEl.classList.remove('scroll-mode');
         rfb.resizeSession = false;
         rfb.clipViewport = false;
         rfb.scaleViewport = true;
-      } else if (currentMode === 'native') {
-        screenEl.classList.remove('scroll-mode');
-        if (canvas) canvas.style.zoom = '';
-        rfb.scaleViewport = false;
-        rfb.clipViewport = false;
-        rfb.resizeSession = true;
+        rfb._updateScale();
       } else {
         screenEl.classList.add('scroll-mode');
-        rfb.scaleViewport = false;
         rfb.resizeSession = false;
         rfb.clipViewport = false;
-        if (canvas) {
-          canvas.style.zoom = (Math.max(50, Math.min(160, currentZoom)) / 100).toString();
-        }
+        rfb.scaleViewport = false;
+        rfb._updateScale();
       }
     }
 
@@ -1427,11 +1735,13 @@ export class ArsenalSlotManager {
       const wsUrl = proto + '//' + window.location.host + '/websockify';
       try {
         rfb = new RFB(screenEl, wsUrl);
+        installPrecisionZoomHooks(rfb);
         rfb.background = '#09090b';
         rfb.addEventListener('connect', () => {
           pill.classList.add('hidden');
           applyFraming();
-          setTimeout(applyFraming, 250);
+          setTimeout(applyFraming, 220);
+          setTimeout(applyFraming, 700);
         });
         rfb.addEventListener('disconnect', () => {
           pill.textContent = 'Reconectando tela gráfica...';
@@ -1441,6 +1751,12 @@ export class ArsenalSlotManager {
       } catch {
         retryTimer = setTimeout(connectVnc, 850);
       }
+    }
+
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(() => {
+        if (rfb) applyFraming();
+      }).observe(screenEl);
     }
 
     window.addEventListener('message', (ev) => {
@@ -1724,7 +2040,12 @@ export class ArsenalSlotManager {
       `  </focus>`,
       `  <desktops><number>1</number></desktops>`,
       `  <applications>`,
-      `    <application type="*">`,
+      `    <application type="normal">`,
+      `      <decor>yes</decor>`,
+      `      <focus>yes</focus>`,
+      `      <maximized>yes</maximized>`,
+      `    </application>`,
+      `    <application type="dialog">`,
       `      <decor>yes</decor>`,
       `      <focus>yes</focus>`,
       `      <position force="no"><x>center</x><y>center</y></position>`,
@@ -1732,11 +2053,12 @@ export class ArsenalSlotManager {
       `  </applications>`,
       `</openbox_config>`,
       `EOF_OB`,
-      `Xtigervnc :${dispNum} -rfbport ${vncPort} -SecurityTypes None -AlwaysShared -AcceptSetDesktopSize=1 -geometry 1366x860 -depth 24 -dpi 96 >/dev/null 2>&1 &`,
+      `Xtigervnc :${dispNum} -rfbport ${vncPort} -SecurityTypes None -AlwaysShared -AcceptSetDesktopSize=1 -geometry 1200x780 -depth 24 -dpi 110 >/dev/null 2>&1 &`,
       "VNC_PID=$!",
       "for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do [ -S /tmp/.X11-unix/X" + dispNum + " ] && break; sleep 0.2; done",
       `export DISPLAY=:${dispNum}`,
-      "export GDK_SCALE=1",
+      "export GDK_SCALE=1 GDK_DPI_SCALE=1.12 QT_FONT_DPI=110 _JAVA_OPTIONS='-Dsun.java2d.uiScale=1.12 -Dawt.useSystemAAFontSettings=on -Dswing.aatext=true'",
+      "printf 'Xft.dpi: 110\\nXft.antialias: 1\\nXft.hinting: 1\\nXft.rgba: rgb\\n' | xrdb -merge 2>/dev/null || true",
       "xsetroot -solid '#09090b' 2>/dev/null || true",
       ...(slot.slotId === "kali-desktop-stream"
         ? []
@@ -1943,6 +2265,16 @@ export class ArsenalSlotManager {
     const def = this.getAllDefinitions().find((d) => d.slotId === params.slotId)
     if (!slot || !def) {
       throw new Error(`Slot "${params.slotId}" não encontrado`)
+    }
+
+    // 0a. 1-Click MCP Connection Toggle in opencode.json (`rawArgs === "__toggle_mcp__"`)
+    if (params.rawArgs === "__toggle_mcp__") {
+      const toggled = this.toggleSlotMcpInOpenCodeConfig(slot)
+      return {
+        ok: true,
+        message: toggled.message,
+        overview: this.getOverview(false),
+      }
     }
 
     // 0b. Native Windows File Picker (`rawArgs === "__pick_executable__"`) so the operator can pick any .jar / .exe on disk in 1 click!
@@ -2316,6 +2648,145 @@ export class ArsenalSlotManager {
       }
 
       if (targetEmbedUrl && !def.managedDaemonArgs) {
+        const parsedTarget = (() => {
+          try {
+            return new URL(targetEmbedUrl)
+          } catch {
+            return null
+          }
+        })()
+        const isLocalComposeStack =
+          liveSlot.slotId === "pentagi" || liveSlot.slotId === "pentest-copilot"
+        const remotePort =
+          def.managedDaemonPort ??
+          (parsedTarget?.port ? Number.parseInt(parsedTarget.port, 10) : parsedTarget?.protocol === "https:" ? 443 : 80)
+        const upstreamTls = parsedTarget?.protocol === "https:"
+
+        if (isLocalComposeStack) {
+          // 1. If stack not cloned/installed yet, trigger live streaming installer first
+          if (!liveSlot.installed) {
+            const inst = await this.launchSlot({
+              slotId: liveSlot.slotId,
+              action: "install_tool",
+              runtimeOverride: process.platform === "win32" && this.wslAvailable ? "wsl" : undefined,
+            })
+            return {
+              ok: true,
+              message: `Instalando o stack Docker de ${liveSlot.shortLabel} no Kali WSL2 (acompanhe no Console abaixo!). Assim que concluir, clique novamente em '▶ Abrir Aqui no Centro'.`,
+              run: inst.run,
+              overview: inst.overview,
+            }
+          }
+
+          let wslHostIp = "127.0.0.1"
+          if (process.platform === "win32" && this.wslAvailable) {
+            const ipOut = await this.runAsyncWslRootScript("hostname -I 2>/dev/null | awk '{print $1}'", 5000)
+            const candidateIp = ipOut.replace(/\0/g, "").trim().split(/\r?\n/).pop()?.trim()
+            if (candidateIp && /^\d+\.\d+\.\d+\.\d+$/.test(candidateIp)) {
+              wslHostIp = candidateIp
+            }
+          }
+          const candidateHosts = Array.from(new Set([wslHostIp, "127.0.0.1", "localhost"]))
+          const alreadyUp = await this.waitForTcpPort(candidateHosts, remotePort, 900)
+
+          if (!alreadyUp) {
+            const stackDir = liveSlot.slotId === "pentagi" ? "/opt/pentagi" : "/opt/pentest-copilot"
+            const composeBootScript = [
+              "export DEBIAN_FRONTEND=noninteractive",
+              "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH",
+              'echo "=== Verificando Docker no Kali WSL2 ==="',
+              "if ! command -v docker >/dev/null 2>&1; then apt-get update -qq && (apt-get install -y docker.io docker-compose-v2 || apt-get install -y docker.io docker-compose); fi",
+              "if ! docker info >/dev/null 2>&1; then",
+              '  echo "Iniciando daemon dockerd dentro do Kali WSL2..."',
+              "  nohup dockerd >/tmp/cyberlab-dockerd.log 2>&1 &",
+              "  for i in 1 2 3 4 5 6 7 8 9 10; do docker info >/dev/null 2>&1 && break; sleep 1; done",
+              "fi",
+              `cd ${stackDir}`,
+              liveSlot.slotId === "pentagi"
+                ? 'if [ ! -f .env ] && [ -f .env.example ]; then cp .env.example .env; fi; grep -q "^PENTAGI_LISTEN_IP=" .env && sed -i "s/^PENTAGI_LISTEN_IP=.*/PENTAGI_LISTEN_IP=0.0.0.0/" .env || echo "PENTAGI_LISTEN_IP=0.0.0.0" >> .env'
+                : "true",
+              `echo "=== Subindo containers de ${liveSlot.shortLabel} (porta :${remotePort}) ==="`,
+              "docker compose up -d",
+              'echo "=== Containers iniciados! Aguardando porta Web subir... ==="',
+              `for i in 1 2 3 4 5 6 7 8 9 10 11 12; do (echo >/dev/tcp/127.0.0.1/${remotePort}) >/dev/null 2>&1 && echo "Porta :${remotePort} ativa!" && break; sleep 1; done`,
+            ].join("\n")
+
+            const bootRun =
+              process.platform === "win32" && this.wslAvailable
+                ? this.startStreamingProcess({
+                    slotId: liveSlot.slotId,
+                    slotName: `Docker Compose — ${liveSlot.shortLabel}`,
+                    runtime: "installer",
+                    commandPreview: `[WSL2 ${this.config.preferredWslDistro}] Subindo stack Docker ${liveSlot.shortLabel} (:${remotePort})`,
+                    executable: "wsl.exe",
+                    args: ["-d", this.config.preferredWslDistro, "-u", "root", "--", "bash", "-s"],
+                    stdinPayload: `${composeBootScript}\n`,
+                    cwd: this.workspaceRoot,
+                  })
+                : this.startStreamingProcess({
+                    slotId: liveSlot.slotId,
+                    slotName: `Docker Compose — ${liveSlot.shortLabel}`,
+                    runtime: "installer",
+                    commandPreview: `Subindo stack Docker ${liveSlot.shortLabel} (:${remotePort})`,
+                    executable: "bash",
+                    args: ["-s"],
+                    stdinPayload: `${composeBootScript}\n`,
+                    cwd: this.workspaceRoot,
+                  })
+
+            // Wait briefly in case images were already cached and came up within 3.5s!
+            const cameUpFast = await this.waitForTcpPort(candidateHosts, remotePort, 3500)
+            if (!cameUpFast) {
+              return {
+                ok: true,
+                message: `Subindo containers Docker do ${liveSlot.shortLabel} (na 1ª vez o Docker baixa as imagens oficiais — acompanhe ao vivo no Console abaixo!). Assim que concluir (succeeded), clique em '▶ Abrir Aqui no Centro'.`,
+                run: bootRun,
+                overview: this.getOverview(false),
+              }
+            }
+          }
+
+          const proxy = await this.createEmbedHttpProxyServer(candidateHosts, remotePort, {
+            upstreamTls,
+          })
+          const proxiedUrl = proxy ? `http://127.0.0.1:${proxy.localPort}/` : targetEmbedUrl
+          this.daemons.set(liveSlot.slotId, {
+            child: null,
+            staticServer: proxy?.server ?? null,
+            embedUrl: proxiedUrl,
+          })
+          return {
+            ok: true,
+            message: `${liveSlot.shortLabel} conectado via proxy local seguro (certificado TLS autoassinado tratado automaticamente)!`,
+            embedUrl: proxiedUrl,
+            overview: this.getOverview(false),
+          }
+        }
+
+        // Any other custom/local HTTPS or HTTP embed URL -> proxy loopback to strip X-Frame-Options & self-signed TLS errors
+        if (
+          parsedTarget &&
+          (parsedTarget.hostname === "127.0.0.1" || parsedTarget.hostname === "localhost")
+        ) {
+          const proxy = await this.createEmbedHttpProxyServer(["127.0.0.1", "localhost"], remotePort, {
+            upstreamTls,
+          })
+          if (proxy) {
+            const proxiedUrl = `http://127.0.0.1:${proxy.localPort}${parsedTarget.pathname}${parsedTarget.search}`
+            this.daemons.set(liveSlot.slotId, {
+              child: null,
+              staticServer: proxy.server,
+              embedUrl: proxiedUrl,
+            })
+            return {
+              ok: true,
+              message: `Conectado a ${liveSlot.shortLabel} via ponte local sem bloqueio de iframe/TLS`,
+              embedUrl: proxiedUrl,
+              overview: this.getOverview(false),
+            }
+          }
+        }
+
         return {
           ok: true,
           message: `Conectado ao endereço Web ${targetEmbedUrl}`,

@@ -219,6 +219,41 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
     expect(pentagiDef.posixBinaries).toEqual(["pentagi"])
     expect(pentagiDef.windowsBinaries).not.toContain("docker.exe")
     expect(pentagiDef.installKaliWsl).toContain("/usr/local/bin/pentagi")
+    expect(pentagiDef.installKaliWsl).toContain("PENTAGI_LISTEN_IP=0.0.0.0")
+    expect(pentagiDef.managedDaemonPort).toBe(8443)
+
+    // v5.8 Kali 2026.1 defensive / auditing / debugging / methodology slots
+    for (const newId of ["betterleaks", "gef", "atomic-operator", "wpprobe", "pentest-copilot"]) {
+      const found = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === newId)
+      expect(found).toBeDefined()
+    }
+    expect(OFFICIAL_ARSENAL_SLOTS.length).toBeGreaterThanOrEqual(46)
+
+    // v5.8 MCP capability badges & 1-click opencode.json toggle
+    const preMcpOverview = await ws.getArsenalOverview(false)
+    const mcpCapableSlots = preMcpOverview.slots.filter((s) => s.mcpCapable)
+    expect(mcpCapableSlots.length).toBeGreaterThanOrEqual(38)
+
+    const toggleOn = await ws.launchArsenalSlot({
+      slotId: "betterleaks",
+      action: "run_cli",
+      rawArgs: "__toggle_mcp__",
+    })
+    expect(toggleOn.ok).toBe(true)
+    const connectedSlot = toggleOn.overview.slots.find((s) => s.slotId === "betterleaks")!
+    expect(connectedSlot.mcpConnected).toBe(true)
+
+    const toggleOff = await ws.launchArsenalSlot({
+      slotId: "betterleaks",
+      action: "run_cli",
+      rawArgs: "__toggle_mcp__",
+    })
+    expect(toggleOff.ok).toBe(true)
+    const disconnectedSlot = toggleOff.overview.slots.find((s) => s.slotId === "betterleaks")!
+    expect(disconnectedSlot.mcpConnected).toBe(false)
+
+    // v5.8 CyberChef static HTML server injects in-document zoom hook (never outer iframe CSS transform)
+    expect(chefHtml).toContain("data-cyberlab-zoom")
 
     const caiDef = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === "pentestgpt-cai")!
     expect(caiDef.installKaliWsl).toContain("uv tool install --force --python 3.12 cai-framework")

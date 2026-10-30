@@ -367,6 +367,22 @@ export function CyberLabLeftExplorer() {
                               <Show when={runningHere()}>
                                 <span class="size-2 rounded-full bg-amber-400 animate-pulse" />
                               </Show>
+                              <Show when={slot.mcpCapable}>
+                                <span
+                                  title={
+                                    slot.mcpConnected
+                                      ? `MCP conectado ao Agente OpenCode (${slot.mcpLabel ?? slot.shortLabel})`
+                                      : `Conexão MCP disponível (${slot.mcpLabel ?? slot.shortLabel}) — clique no slot p/ conectar`
+                                  }
+                                  class={`rounded border px-1.5 py-0.2 text-[9px] font-semibold tracking-tight ${
+                                    slot.mcpConnected
+                                      ? "border-emerald-500/60 bg-emerald-500/20 text-emerald-300"
+                                      : "border-violet-500/40 bg-violet-500/15 text-violet-300"
+                                  }`}
+                                >
+                                  {slot.mcpConnected ? "🟢 MCP" : "🔌 MCP"}
+                                </span>
+                              </Show>
                               <span
                                 class={`rounded px-1.5 py-0.2 text-[9.5px] font-medium ${
                                   slot.installed
@@ -577,13 +593,12 @@ export function CyberLabCenterStage() {
     if (slot.kind === "web_embed" && slot.slotId !== "kali-desktop-stream") {
       return "scroll"
     }
-    return "fit"
+    return "native"
   }
 
   const getSlotZoom = (slot: ArsenalSlotStatusDto): number => {
     const savedZoom = zoomBySlot[slot.slotId]
     if (typeof savedZoom === "number") return savedZoom
-    if (slot.slotId === "caido") return 85
     return 100
   }
 
@@ -797,6 +812,36 @@ export function CyberLabCenterStage() {
               </div>
 
               <div class="flex flex-wrap items-center gap-1.5">
+                <Show when={slot().mcpCapable}>
+                  <button
+                    type="button"
+                    disabled={wb.ui.busy}
+                    title={
+                      slot().mcpConnected
+                        ? `Servidor MCP "${slot().mcpLabel ?? slot().shortLabel}" ativo no opencode.json — clique p/ desconectar`
+                        : `Conectar "${slot().mcpLabel ?? slot().shortLabel}" via MCP diretamente ao Agente OpenCode`
+                    }
+                    class={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold cursor-pointer transition-colors ${
+                      slot().mcpConnected
+                        ? "border-emerald-500/60 bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30"
+                        : "border-violet-500/50 bg-violet-600/20 text-violet-200 hover:bg-violet-600/35"
+                    }`}
+                    onClick={() =>
+                      void wb.launchSlot({
+                        slotId: slot().slotId,
+                        action: "run_cli",
+                        rawArgs: "__toggle_mcp__",
+                      })
+                    }
+                  >
+                    <span>
+                      {slot().mcpConnected
+                        ? `🟢 MCP Ativo (${slot().mcpLabel ?? "OpenCode"})`
+                        : `🔌 Conectar MCP`}
+                    </span>
+                  </button>
+                </Show>
+
                 <Show when={slot().companionProxyPort}>
                   {(proxyPort) => (
                     <button
@@ -972,11 +1017,25 @@ export function CyberLabCenterStage() {
                       </button>
                     </Show>
 
-                    {/* Controles de Dimensionamento (Zoom) e Rolagem Vertical */}
+                    {/* Controles de Dimensionamento Preciso (Sem Deslocamento de Cursor!) e Rolagem */}
                     <div class="flex items-center gap-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-1.5 py-0.5">
+                      <Show when={slot().slotId === "kali-desktop-stream"}>
+                        <button
+                          type="button"
+                          title="Nitidez 1:1 nativa com redimensionamento dinâmico X11 e clique exato"
+                          class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
+                            getSlotFraming(slot()) === "native"
+                              ? "bg-emerald-600 text-white"
+                              : "text-v2-text-text-muted hover:text-v2-text-text-strong"
+                          }`}
+                          onClick={() => syncCanvasControl(slot(), "native")}
+                        >
+                          🖥 1:1 Nitidez
+                        </button>
+                      </Show>
                       <button
                         type="button"
-                        title="Enquadrar tudo na tela sem cortar"
+                        title="Enquadrar na tela sem cortar"
                         class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
                           getSlotFraming(slot()) === "fit"
                             ? "bg-emerald-600 text-white"
@@ -988,7 +1047,7 @@ export function CyberLabCenterStage() {
                       </button>
                       <button
                         type="button"
-                        title="Ativar barra de rolagem vertical para descer até o final da ferramenta"
+                        title="Ativar barra de rolagem vertical com precisão 1:1 do mouse"
                         class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
                           getSlotFraming(slot()) === "scroll"
                             ? "bg-emerald-600 text-white"
@@ -1000,22 +1059,20 @@ export function CyberLabCenterStage() {
                       </button>
                       <button
                         type="button"
-                        title="Diminuir zoom (-10%)"
+                        title="Diminuir escala (-10% com precisão exata de clique)"
                         class="rounded px-1.5 py-0.5 text-[10.5px] font-bold text-v2-text-text-base hover:bg-v2-background-bg-base cursor-pointer"
                         onClick={() => {
+                          const curMode = getSlotFraming(slot())
+                          const targetMode = curMode === "fit" ? "native" : curMode
                           const next = Math.max(60, getSlotZoom(slot()) - 10)
-                          syncCanvasControl(
-                            slot(),
-                            slot().slotId === "kali-desktop-stream" ? "scroll" : getSlotFraming(slot()),
-                            next,
-                          )
+                          syncCanvasControl(slot(), targetMode, next)
                         }}
                       >
                         −
                       </button>
                       <button
                         type="button"
-                        title="Restaurar zoom padrão"
+                        title="Restaurar zoom 100%"
                         class="rounded px-1 py-0.5 font-mono text-[10px] text-emerald-400 hover:bg-v2-background-bg-base cursor-pointer"
                         onClick={() => syncCanvasControl(slot(), getSlotFraming(slot()), 100)}
                       >
@@ -1023,15 +1080,13 @@ export function CyberLabCenterStage() {
                       </button>
                       <button
                         type="button"
-                        title="Aumentar zoom (+10%)"
+                        title="Aumentar escala (+10% com precisão exata de clique)"
                         class="rounded px-1.5 py-0.5 text-[10.5px] font-bold text-v2-text-text-base hover:bg-v2-background-bg-base cursor-pointer"
                         onClick={() => {
-                          const next = Math.min(140, getSlotZoom(slot()) + 10)
-                          syncCanvasControl(
-                            slot(),
-                            slot().slotId === "kali-desktop-stream" ? "scroll" : getSlotFraming(slot()),
-                            next,
-                          )
+                          const curMode = getSlotFraming(slot())
+                          const targetMode = curMode === "fit" ? "native" : curMode
+                          const next = Math.min(160, getSlotZoom(slot()) + 10)
+                          syncCanvasControl(slot(), targetMode, next)
                         }}
                       >
                         +
@@ -1100,7 +1155,6 @@ export function CyberLabCenterStage() {
                 >
                   {(url) => {
                     const isVncCanvas = () => url().includes("cyberlab_canvas.html")
-                    const scaleFactor = () => getSlotZoom(slot()) / 100
                     const scrollActive = () => !isVncCanvas() && getSlotFraming(slot()) === "scroll"
                     return (
                       <div
@@ -1108,38 +1162,19 @@ export function CyberLabCenterStage() {
                           scrollActive() ? "overflow-auto" : "overflow-hidden"
                         }`}
                       >
-                        <div
-                          style={{
-                            width: "100%",
-                            height: scrollActive() ? `${Math.round(880 * scaleFactor())}px` : "100%",
-                            "min-height": scrollActive() ? `${Math.round(880 * scaleFactor())}px` : "100%",
-                            position: "relative",
-                            overflow: "hidden",
+                        <iframe
+                          ref={(el) => {
+                            activeToolIframeRef = el
                           }}
-                        >
-                          <iframe
-                            ref={(el) => {
-                              activeToolIframeRef = el
-                            }}
-                            data-slot="cyberlab-real-tool-iframe"
-                            src={`${url()}${url().includes("?") ? "&" : "?"}_cb=${wb.ui.iframeReloadNonce}`}
-                            title={slot().name}
-                            onLoad={() => syncCanvasControl(slot())}
-                            style={
-                              isVncCanvas() || scaleFactor() === 1
-                                ? { width: "100%", height: "100%" }
-                                : {
-                                    width: `${(100 / scaleFactor()).toFixed(3)}%`,
-                                    height: `${(100 / scaleFactor()).toFixed(3)}%`,
-                                    transform: `scale(${scaleFactor()})`,
-                                    "transform-origin": "0 0",
-                                  }
-                            }
-                            class="border-0 bg-zinc-950"
-                            allow="clipboard-read; clipboard-write; fullscreen"
-                            allowfullscreen
-                          />
-                        </div>
+                          data-slot="cyberlab-real-tool-iframe"
+                          src={`${url()}${url().includes("?") ? "&" : "?"}_cb=${wb.ui.iframeReloadNonce}`}
+                          title={slot().name}
+                          onLoad={() => syncCanvasControl(slot())}
+                          style={{ width: "100%", height: "100%" }}
+                          class="h-full w-full border-0 bg-zinc-950"
+                          allow="clipboard-read; clipboard-write; fullscreen"
+                          allowfullscreen
+                        />
                       </div>
                     )
                   }}
@@ -1523,11 +1558,23 @@ export function CyberLabCenterStage() {
                           {slot().shortLabel}
                         </span>
 
-                        {/* Controles Ao Vivo de Enquadramento + Barra de Rolagem Vertical + Zoom */}
+                        {/* Controles Ao Vivo de Nitidez 1:1 + Enquadramento + Rolagem + Zoom Sem Deslocar o Cursor */}
                         <div class="flex items-center gap-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-1.5 py-0.5">
                           <button
                             type="button"
-                            title="Enquadrar 100% da janela na tela central (todos os botões inferiores visíveis)"
+                            title="Resolução X11 nativa 1:1 com zoom sem deslocamento de mouse (padrão recomendado)"
+                            class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
+                              getSlotFraming(slot()) === "native"
+                                ? "bg-emerald-600 text-white"
+                                : "text-v2-text-text-muted hover:text-v2-text-text-strong"
+                            }`}
+                            onClick={() => syncCanvasControl(slot(), "native")}
+                          >
+                            🖥 1:1 Nitidez
+                          </button>
+                          <button
+                            type="button"
+                            title="Enquadrar janela inteira na área central"
                             class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
                               getSlotFraming(slot()) === "fit"
                                 ? "bg-emerald-600 text-white"
@@ -1535,11 +1582,11 @@ export function CyberLabCenterStage() {
                             }`}
                             onClick={() => syncCanvasControl(slot(), "fit")}
                           >
-                            📐 Ajustar Tudo
+                            📐 Ajustar
                           </button>
                           <button
                             type="button"
-                            title="Ativar barras de rolagem vertical e horizontal (ideal p/ ler em tamanho maior e rolar até os botões inferiores)"
+                            title="Ativar barras de rolagem mantendo 100% de precisão do clique em qualquer zoom"
                             class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
                               getSlotFraming(slot()) === "scroll"
                                 ? "bg-emerald-600 text-white"
@@ -1551,30 +1598,34 @@ export function CyberLabCenterStage() {
                           </button>
                           <button
                             type="button"
-                            title="Diminuir zoom (-10%)"
+                            title="Diminuir escala (-10% mantendo precisão exata do mouse)"
                             class="rounded px-1.5 py-0.5 text-[10.5px] font-bold text-v2-text-text-base hover:bg-v2-background-bg-base cursor-pointer"
                             onClick={() => {
+                              const curMode = getSlotFraming(slot())
+                              const targetMode = curMode === "fit" ? "native" : curMode
                               const next = Math.max(60, getSlotZoom(slot()) - 10)
-                              syncCanvasControl(slot(), "scroll", next)
+                              syncCanvasControl(slot(), targetMode, next)
                             }}
                           >
                             −
                           </button>
                           <button
                             type="button"
-                            title="Zoom 100%"
+                            title="Restaurar zoom 100%"
                             class="rounded px-1 py-0.5 font-mono text-[10px] text-emerald-400 hover:bg-v2-background-bg-base cursor-pointer"
-                            onClick={() => syncCanvasControl(slot(), "scroll", 100)}
+                            onClick={() => syncCanvasControl(slot(), getSlotFraming(slot()), 100)}
                           >
                             {getSlotZoom(slot())}%
                           </button>
                           <button
                             type="button"
-                            title="Aumentar zoom (+10%)"
+                            title="Aumentar escala (+10% mantendo precisão exata do mouse)"
                             class="rounded px-1.5 py-0.5 text-[10.5px] font-bold text-v2-text-text-base hover:bg-v2-background-bg-base cursor-pointer"
                             onClick={() => {
-                              const next = Math.min(150, getSlotZoom(slot()) + 10)
-                              syncCanvasControl(slot(), "scroll", next)
+                              const curMode = getSlotFraming(slot())
+                              const targetMode = curMode === "fit" ? "native" : curMode
+                              const next = Math.min(160, getSlotZoom(slot()) + 10)
+                              syncCanvasControl(slot(), targetMode, next)
                             }}
                           >
                             +

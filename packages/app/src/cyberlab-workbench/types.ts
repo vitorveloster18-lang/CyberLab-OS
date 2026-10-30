@@ -40,6 +40,9 @@ export interface ArsenalSlotStatusDto {
   embedUrl: string | null
   daemonRunning: boolean
   companionProxyPort: number | null
+  mcpCapable: boolean
+  mcpConnected: boolean
+  mcpLabel: string | null
   installPowerShell: string
   installKaliWsl: string
   presets: ArsenalPresetDto[]
