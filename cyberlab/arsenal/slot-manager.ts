@@ -1028,7 +1028,7 @@ export class ArsenalSlotManager {
     launchCmd: string
     needsJava: boolean
   } {
-    // 1. Burp Suite: reuse existing Windows BurpSuiteCommunity/Pro .jar directly via /mnt/c/... if present!
+    // 1. Burp Suite: reuse existing Windows BurpSuiteCommunity/Pro .jar directly via /mnt/c/... with Java 21 LTS!
     if (slot.slotId === "burp-suite") {
       if (slot.windowsPath && existsSync(slot.windowsPath)) {
         const winDir = path.dirname(slot.windowsPath)
@@ -1040,9 +1040,13 @@ export class ArsenalSlotManager {
             return {
               needsJava: true,
               launchCmd: [
-                "java",
+                '"$JAVA21_BIN"',
                 "--add-opens=java.desktop/javax.swing=ALL-UNNAMED",
+                "--add-opens=java.desktop/javax.swing.plaf.basic=ALL-UNNAMED",
+                "--add-opens=java.desktop/java.awt=ALL-UNNAMED",
+                "--add-opens=java.desktop/sun.awt.X11=ALL-UNNAMED",
                 "--add-opens=java.base/java.lang=ALL-UNNAMED",
+                "--add-opens=java.base/java.nio=ALL-UNNAMED",
                 "--add-opens=java.base/jdk.internal.org.objectweb.asm=ALL-UNNAMED",
                 "--add-opens=java.base/jdk.internal.org.objectweb.asm.tree=ALL-UNNAMED",
                 "--add-opens=java.base/jdk.internal.org.objectweb.asm.Opcodes=ALL-UNNAMED",
@@ -1124,24 +1128,39 @@ export class ArsenalSlotManager {
     const vncPort = 5900 + dispNum
     const wsPort = 6000 + dispNum
 
-    // 1. Ensure Xtigervnc + openbox + novnc + websockify (+ default-jre if Java GUI) are present in Kali WSL2
+    // 1. Ensure Xtigervnc + openbox + novnc + websockify + genuine Java 21 LTS (Temurin 21) are present in Kali WSL2.
+    //    NOTE: Kali Rolling (2026) sets `default-jre` to OpenJDK 25, where JEP-486 removed SecurityManager and triggers
+    //    Burp Suite's JRE 25 warning/hang. Installing Temurin 21 LTS into /opt/cyberlab-jre21 fixes all Java 21 Swing tools cleanly!
     const bootstrapCheckAndInstall = [
-      "set -e",
       "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH",
       "MISSING=0",
       "command -v Xtigervnc >/dev/null 2>&1 || MISSING=1",
       "command -v openbox >/dev/null 2>&1 || MISSING=1",
       "command -v websockify >/dev/null 2>&1 || MISSING=1",
       "[ -d /usr/share/novnc ] || MISSING=1",
-      ...(needsJava ? ["command -v java >/dev/null 2>&1 || MISSING=1"] : []),
       ...(slot.slotId === "burp-suite" && !slot.windowsPath
         ? ["command -v burpsuite >/dev/null 2>&1 || MISSING=1"]
         : []),
       'if [ "$MISSING" = "1" ]; then',
       "  export DEBIAN_FRONTEND=noninteractive",
       "  apt-get update -qq || true",
-      `  apt-get install -y -qq tigervnc-standalone-server openbox novnc websockify dbus-x11 x11-xserver-utils ${needsJava ? "default-jre" : ""} ${slot.slotId === "burp-suite" && !slot.windowsPath ? "burpsuite" : ""}`,
+      `  apt-get install -y -qq curl jq tar tigervnc-standalone-server openbox novnc websockify dbus-x11 x11-xserver-utils ${slot.slotId === "burp-suite" && !slot.windowsPath ? "burpsuite" : ""} || true`,
       "fi",
+      ...(needsJava
+        ? [
+            'if [ ! -x /opt/cyberlab-jre21/bin/java ] && [ ! -x /usr/lib/jvm/java-21-openjdk-amd64/bin/java ]; then',
+            "  export DEBIAN_FRONTEND=noninteractive",
+            "  apt-get install -y -qq curl jq tar ca-certificates || true",
+            "  apt-get install -y -qq openjdk-21-jre 2>/dev/null || true",
+            "  if [ ! -x /usr/lib/jvm/java-21-openjdk-amd64/bin/java ]; then",
+            "    JRE_URL=$(curl -fsSL https://api.github.com/repos/adoptium/temurin21-binaries/releases/latest | jq -r '.assets[] | select(.name | test(\"OpenJDK21U-jre_x64_linux_hotspot_.*\\\\.tar\\\\.gz$\")) | .browser_download_url' | head -n 1)",
+            '    if [ -n "$JRE_URL" ]; then',
+            '      mkdir -p /opt/cyberlab-jre21 && curl -fsSL "$JRE_URL" -o /tmp/jre21.tar.gz && tar -xzf /tmp/jre21.tar.gz -C /opt/cyberlab-jre21 --strip-components=1 && rm -f /tmp/jre21.tar.gz',
+            "    fi",
+            "  fi",
+            "fi",
+          ]
+        : []),
       "hostname -I 2>/dev/null | awk '{print $1}'",
     ].join("\n")
 
@@ -1155,7 +1174,7 @@ export class ArsenalSlotManager {
           encoding: "utf8",
           stdio: ["pipe", "pipe", "pipe"],
           windowsHide: true,
-          timeout: 180000,
+          timeout: 240000,
         },
       )
       const ipLine = (boot.stdout ?? "")
@@ -1168,20 +1187,32 @@ export class ArsenalSlotManager {
       if (ipLine) wslIp = ipLine
     }
 
-    // 2. Start dedicated Xtigervnc + borderless auto-maximized Openbox + websockify + GUI tool
+    // 2. Start dedicated Xtigervnc + Openbox (auto-focus + borderless maximized main frame + centered dialogs) + websockify + GUI tool
     const sessionScript = [
-      "export PATH=\"$HOME/.local/bin:$HOME/go/bin:$HOME/.cargo/bin:/opt/opentrap:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH\"",
+      'if [ -x /opt/cyberlab-jre21/bin/java ]; then export JAVA_HOME=/opt/cyberlab-jre21; export JAVA21_BIN=/opt/cyberlab-jre21/bin/java; elif [ -x /usr/lib/jvm/java-21-openjdk-amd64/bin/java ]; then export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64; export JAVA21_BIN=/usr/lib/jvm/java-21-openjdk-amd64/bin/java; else export JAVA21_BIN=java; fi',
+      'export PATH="${JAVA_HOME:+$JAVA_HOME/bin:}$HOME/.local/bin:$HOME/go/bin:$HOME/.cargo/bin:/opt/opentrap:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"',
       `pkill -f "Xtigervnc :${dispNum}\\b" 2>/dev/null || true`,
       `pkill -f "websockify.*:${wsPort}\\b" 2>/dev/null || true`,
       `rm -f /tmp/.X${dispNum}-lock /tmp/.X11-unix/X${dispNum} 2>/dev/null || true`,
       `cat > /tmp/cyberlab-ob-${dispNum}.xml << 'EOF_OB'`,
       `<?xml version="1.0" encoding="UTF-8"?>`,
       `<openbox_config xmlns="http://openbox.org/3.4/rc">`,
+      `  <focus>`,
+      `    <focusNew>yes</focusNew>`,
+      `    <followMouse>yes</followMouse>`,
+      `    <raiseOnFocus>yes</raiseOnFocus>`,
+      `  </focus>`,
       `  <desktops><number>1</number></desktops>`,
       `  <applications>`,
       `    <application type="normal">`,
       `      <maximized>yes</maximized>`,
       `      <decor>no</decor>`,
+      `      <focus>yes</focus>`,
+      `    </application>`,
+      `    <application type="dialog">`,
+      `      <decor>yes</decor>`,
+      `      <focus>yes</focus>`,
+      `      <position force="no"><x>center</x><y>center</y></position>`,
       `    </application>`,
       `  </applications>`,
       `</openbox_config>`,
@@ -1190,12 +1221,11 @@ export class ArsenalSlotManager {
       "VNC_PID=$!",
       "for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do [ -S /tmp/.X11-unix/X" + dispNum + " ] && break; sleep 0.2; done",
       `export DISPLAY=:${dispNum}`,
-      "export _JAVA_AWT_WM_NONREPARENTING=1",
       "export GDK_SCALE=1",
       "xsetroot -solid '#090d16' 2>/dev/null || true",
       ...(slot.slotId === "kali-desktop-stream"
         ? []
-        : [`openbox --config-file /tmp/cyberlab-ob-${dispNum}.xml >/dev/null 2>&1 &`]),
+        : [`openbox --config-file /tmp/cyberlab-ob-${dispNum}.xml >/dev/null 2>&1 &`, "sleep 0.3"]),
       `websockify --web=/usr/share/novnc 0.0.0.0:${wsPort} 127.0.0.1:${vncPort} >/dev/null 2>&1 &`,
       "WS_PID=$!",
       `(${launchCmd}) >/tmp/cyberlab-gui-${dispNum}.log 2>&1 &`,
@@ -1275,6 +1305,111 @@ export class ArsenalSlotManager {
     overview: ArsenalOverview
   }> {
     const currentOverview = this.getOverview(false)
+
+    // 0. One-Click Batch Install of ALL Missing Tools (`slotId === "__all_missing__"`)
+    if (params.slotId === "__all_missing__" && params.action === "install_tool") {
+      const missingSlots = currentOverview.slots.filter((s) => !s.installed && !s.isCustom)
+      if (missingSlots.length === 0) {
+        return {
+          ok: true,
+          message: "Todos os 29 slots oficiais já estão instalados e prontos!",
+          overview: currentOverview,
+        }
+      }
+
+      // Order: fast prebuilt releases first -> apt packages -> pip -> cargo last
+      const priorityRank = (id: string): number => {
+        if (["katana", "interactsh", "dalfox", "caido", "opentrap", "capa", "hayabusa-yarax"].includes(id)) return 1
+        if (["sqlmap", "jadx", "ghidra", "burp-suite"].includes(id)) return 2
+        if (["semgrep", "frida-apktool"].includes(id)) return 3
+        if (id === "keyhunter") return 4
+        return 2
+      }
+      const ordered = [...missingSlots].sort((a, b) => priorityRank(a.slotId) - priorityRank(b.slotId))
+
+      if (process.platform === "win32" && !this.wslAvailable) {
+        const psSteps = ordered
+          .filter((s) => s.installPowerShell.trim() && !s.installPowerShell.trim().startsWith("#"))
+          .map(
+            (s, idx) =>
+              `Write-Host "=== [${idx + 1}/${ordered.length}] Instalando ${s.shortLabel} ==="; try { ${s.installPowerShell}; Write-Host "[CONCLUIDO_SLOT] ${s.slotId}" } catch { Write-Host "[AVISO] Falha em ${s.shortLabel}: $_" }`,
+          )
+          .join("\n")
+        const run = this.startStreamingProcess({
+          slotId: "__all_missing__",
+          slotName: `Instalador Completo (${ordered.length} ferramentas)`,
+          runtime: "installer",
+          commandPreview: `Instalação automática de ${ordered.length} ferramentas faltantes via PowerShell`,
+          executable: "powershell.exe",
+          args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", psSteps],
+          cwd: this.workspaceRoot,
+          onStepDone: () => this.probeEnvironment(),
+          onComplete: () => this.probeEnvironment(),
+        })
+        return {
+          ok: true,
+          message: `Instalando ${ordered.length} ferramentas faltantes em lote...`,
+          run,
+          overview: this.getOverview(false),
+        }
+      }
+
+      const bashSteps = [
+        "set +e",
+        "export DEBIAN_FRONTEND=noninteractive",
+        'export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.cargo/bin:/root/go/bin:$PATH"',
+        'echo "=== Preparando base (curl, jq, unzip, tar, ca-certificates) ==="',
+        "apt-get update -qq || true",
+        "apt-get install -y -qq curl jq unzip tar ca-certificates || true",
+        ...ordered.map((s, idx) => {
+          const cleanCmd = s.installKaliWsl.replace(/\bsudo\s+/g, "")
+          return [
+            `echo ""`,
+            `echo "============================================================"`,
+            `echo "  [${idx + 1}/${ordered.length}] Instalando ${s.name}..."`,
+            `echo "============================================================"`,
+            `(${cleanCmd}) && echo "[CONCLUIDO_SLOT] ${s.slotId}" || echo "[AVISO] Falha parcial em ${s.shortLabel} (continuando para a próxima...)"`,
+          ].join("\n")
+        }),
+        'echo ""',
+        'echo "=== TODAS AS ETAPAS FINALIZADAS! ATUALIZANDO SLOTS DO CYBERLAB OS... ==="',
+      ].join("\n")
+
+      const run =
+        process.platform === "win32"
+          ? this.startStreamingProcess({
+              slotId: "__all_missing__",
+              slotName: `Instalador Completo (${ordered.length} ferramentas)`,
+              runtime: "installer",
+              commandPreview: `[WSL2 ${this.config.preferredWslDistro}] Instalando ${ordered.length} ferramentas faltantes em 1 clique`,
+              executable: "wsl.exe",
+              args: ["-d", this.config.preferredWslDistro, "-u", "root", "--", "bash", "-s"],
+              stdinPayload: `${bashSteps}\n`,
+              cwd: this.workspaceRoot,
+              onStepDone: () => this.probeEnvironment(),
+              onComplete: () => this.probeEnvironment(),
+            })
+          : this.startStreamingProcess({
+              slotId: "__all_missing__",
+              slotName: `Instalador Completo (${ordered.length} ferramentas)`,
+              runtime: "installer",
+              commandPreview: `Instalando ${ordered.length} ferramentas faltantes em 1 clique`,
+              executable: "bash",
+              args: ["-s"],
+              stdinPayload: `${bashSteps}\n`,
+              cwd: this.workspaceRoot,
+              onStepDone: () => this.probeEnvironment(),
+              onComplete: () => this.probeEnvironment(),
+            })
+
+      return {
+        ok: true,
+        message: `Instalação em lote iniciada para ${ordered.length} ferramentas! Acompanhe o progresso ao vivo no console.`,
+        run,
+        overview: this.getOverview(false),
+      }
+    }
+
     const slot = currentOverview.slots.find((s) => s.slotId === params.slotId)
     const def = this.getAllDefinitions().find((d) => d.slotId === params.slotId)
     if (!slot || !def) {
@@ -1369,26 +1504,53 @@ export class ArsenalSlotManager {
         }
       }
 
-      // 2c. Managed local Web daemon (e.g. mitmweb :8081, Caido :7000)
+      // 2c. Managed local Web daemon (e.g. mitmweb :8081, Caido :7000 — supports both Windows native AND WSL2 Kali!)
       const targetEmbedUrl = slot.override.customEmbedUrl ?? def.defaultEmbedUrl
       if (def.managedDaemonArgs && slot.resolvedPath && slot.activeRuntime !== "web" && slot.activeRuntime !== "none") {
         let tokenUrl: string | null = null
+        let wslDaemonIp = "127.0.0.1"
+        if (slot.activeRuntime === "wsl" && process.platform === "win32") {
+          try {
+            const ipCheck = spawnSync(
+              "wsl.exe",
+              ["-d", this.config.preferredWslDistro, "--", "hostname", "-I"],
+              { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true, timeout: 3000 },
+            )
+            const firstIp = (ipCheck.stdout ?? "").trim().split(/\s+/)[0]
+            if (firstIp && /^\d+\.\d+\.\d+\.\d+$/.test(firstIp)) wslDaemonIp = firstIp
+          } catch {
+            // Ignore
+          }
+        }
         const child = this.spawnForRuntimeWithPipes(
           slot.activeRuntime,
           slot.resolvedPath,
           def.managedDaemonArgs,
           this.workspaceRoot,
           (chunk) => {
-            const match = chunk.match(/https?:\/\/(?:127\.0\.0\.1|localhost):\d+\/\?token=[a-zA-Z0-9._-]+/i)
-            if (match && !tokenUrl) tokenUrl = match[0]
+            const match = chunk.match(/https?:\/\/(?:127\.0\.0\.1|localhost|0\.0\.0\.0):\d+\/\?token=[a-zA-Z0-9._-]+/i)
+            if (match && !tokenUrl) tokenUrl = match[0].replace("0.0.0.0", "127.0.0.1")
           },
         )
         const port = def.managedDaemonPort ?? 8081
-        await this.waitForTcpPort(["127.0.0.1", "localhost"], port, 4500)
-        const url = tokenUrl ?? targetEmbedUrl ?? `http://127.0.0.1:${port}`
+        const candidateHosts = Array.from(new Set([wslDaemonIp, "127.0.0.1", "localhost"]))
+        await this.waitForTcpPort(candidateHosts, port, 5500)
+
+        const tcpBridges: net.Server[] = []
+        let url = tokenUrl ?? targetEmbedUrl ?? `http://127.0.0.1:${port}`
+        if (slot.activeRuntime === "wsl" && process.platform === "win32" && wslDaemonIp !== "127.0.0.1") {
+          const bridge = await this.createTcpBridgeServer(candidateHosts, port, 0)
+          if (bridge) {
+            tcpBridges.push(bridge.server)
+            const suffix = tokenUrl ? new URL(tokenUrl).search : ""
+            url = `http://127.0.0.1:${bridge.localPort}/${suffix}`
+          }
+        }
+
         this.daemons.set(slot.slotId, {
           child,
           staticServer: null,
+          tcpBridges,
           embedUrl: url,
         })
         return {
@@ -1413,11 +1575,15 @@ export class ArsenalSlotManager {
       )
     }
 
-    // 3. One-Click Official Tool Installation (runs PowerShell or WSL2 Kali installer in live streaming console!)
+    // 3. One-Click Official Tool Installation (prefers WSL2 Kali root unattended install when WSL2 is available!)
     if (params.action === "install_tool") {
+      const canInstallInKali =
+        Boolean(slot.installKaliWsl.trim()) &&
+        !slot.installKaliWsl.trim().startsWith("#") &&
+        slot.slotId !== "cyberchef"
       const useKali =
         params.runtimeOverride === "wsl" ||
-        (process.platform === "win32" && !slot.installPowerShell.trim() && this.wslAvailable)
+        (params.runtimeOverride !== "windows" && process.platform === "win32" && this.wslAvailable && canInstallInKali)
       if (process.platform === "win32" && !useKali) {
         const cmd = slot.installPowerShell
         const run = this.startStreamingProcess({
@@ -1644,6 +1810,7 @@ export class ArsenalSlotManager {
     args: string[]
     stdinPayload?: string
     cwd: string
+    onStepDone?: () => void
     onComplete?: () => void
   }): ArsenalLiveRun {
     const runId = `run-${crypto.randomUUID().slice(0, 8)}`
@@ -1679,8 +1846,10 @@ export class ArsenalSlotManager {
       const text = typeof chunk === "string" ? chunk : chunk.toString("utf8")
       const clean = text.replace(/\0/g, "")
       const split = clean.split(/\r?\n/)
+      let sawStepDone = false
       for (const line of split) {
         if (!line) continue
+        if (line.includes("[CONCLUIDO_SLOT]")) sawStepDone = true
         record.lines.push(line)
         if (record.lines.length > 2500) {
           record.lines.splice(1, record.lines.length - 2500)
@@ -1688,6 +1857,9 @@ export class ArsenalSlotManager {
       }
       record.info.lineCount = record.lines.length
       record.info.outputTail = record.lines.slice(-400).join("\n")
+      if (sawStepDone && opts.onStepDone) {
+        setTimeout(() => opts.onStepDone?.(), 40)
+      }
     }
 
     try {

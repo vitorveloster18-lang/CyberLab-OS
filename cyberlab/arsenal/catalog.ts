@@ -215,13 +215,20 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
       "%ProgramFiles%\\Caido\\Caido.exe",
     ],
     posixBinaries: ["caido-cli", "caido"],
+    posixKnownPaths: [
+      "/usr/local/bin/caido-cli",
+      "/usr/local/bin/caido",
+      "/usr/bin/caido",
+      "~/CyberLab-Tools/caido/caido-cli",
+    ],
     defaultEmbedUrl: "http://127.0.0.1:7000",
     managedDaemonPort: 7000,
-    managedDaemonArgs: ["--listen", "127.0.0.1:7000", "--no-open"],
+    managedDaemonArgs: ["--listen", "0.0.0.0:7000", "--no-open"],
     companionProxyPort: 7000,
-    installPowerShell: "winget install --id Caido.Caido -e",
+    installPowerShell:
+      "winget install --id Caido.Caido -e --accept-source-agreements --accept-package-agreements",
     installKaliWsl:
-      "# Baixe o caido-cli Linux x86_64 em https://caido.io/download para ~/CyberLab-Tools/caido/caido-cli",
+      'sudo apt-get update -qq && sudo apt-get install -y -qq curl jq tar ca-certificates && URL=$(curl -fsSL https://api.caido.io/releases/latest | jq -r \'.links[] | select((.display | ascii_downcase | contains("linux")) and (.link | contains("x86_64"))) | .link\' | head -n 1); [ -z "$URL" ] && URL=$(curl -fsSL https://api.caido.io/releases/latest | jq -r \'.links[] | select(.display == "Linux") | .link\' | head -n 1); curl -fsSL "$URL" -o /tmp/caido.tar.gz && sudo tar -xzf /tmp/caido.tar.gz -C /usr/local/bin && sudo chmod +x /usr/local/bin/caido* && rm -f /tmp/caido.tar.gz',
     presets: [],
   },
   {
@@ -343,9 +350,10 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
     windowsBinaries: ["katana.exe"],
     windowsKnownPaths: ["{toolsRoot}\\bin\\katana.exe", "%USERPROFILE%\\go\\bin\\katana.exe"],
     posixBinaries: ["katana"],
-    posixKnownPaths: ["~/go/bin/katana", "/usr/bin/katana", "~/.pdtm/go/bin/katana"],
+    posixKnownPaths: ["/usr/local/bin/katana", "~/go/bin/katana", "/usr/bin/katana", "~/.pdtm/go/bin/katana"],
     installPowerShell: "go install github.com/projectdiscovery/katana/cmd/katana@latest",
-    installKaliWsl: "go install github.com/projectdiscovery/katana/cmd/katana@latest",
+    installKaliWsl:
+      'sudo apt-get install -y -qq curl jq unzip && URL=$(curl -fsSL https://api.github.com/repos/projectdiscovery/katana/releases/latest | jq -r \'.assets[] | select(.name | test("linux_amd64\\\\.zip$")) | .browser_download_url\' | head -n 1) && curl -fsSL "$URL" -o /tmp/katana.zip && sudo unzip -o /tmp/katana.zip katana -d /usr/local/bin && sudo chmod +x /usr/local/bin/katana && rm -f /tmp/katana.zip',
     presets: [
       {
         id: "katana-js",
@@ -404,10 +412,16 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
       "%USERPROFILE%\\go\\bin\\interactsh-client.exe",
     ],
     posixBinaries: ["interactsh-client"],
-    posixKnownPaths: ["~/go/bin/interactsh-client", "/usr/bin/interactsh-client", "~/.pdtm/go/bin/interactsh-client"],
+    posixKnownPaths: [
+      "/usr/local/bin/interactsh-client",
+      "~/go/bin/interactsh-client",
+      "/usr/bin/interactsh-client",
+      "~/.pdtm/go/bin/interactsh-client",
+    ],
     installPowerShell:
       "go install -v github.com/projectdiscovery/interactsh/cmd/interactsh-client@latest",
-    installKaliWsl: "go install -v github.com/projectdiscovery/interactsh/cmd/interactsh-client@latest",
+    installKaliWsl:
+      'sudo apt-get install -y -qq curl jq unzip && URL=$(curl -fsSL https://api.github.com/repos/projectdiscovery/interactsh/releases/latest | jq -r \'.assets[] | select(.name | test("interactsh-client_.*_linux_amd64\\\\.zip$")) | .browser_download_url\' | head -n 1) && curl -fsSL "$URL" -o /tmp/interactsh.zip && sudo unzip -o /tmp/interactsh.zip interactsh-client -d /usr/local/bin && sudo chmod +x /usr/local/bin/interactsh-client && rm -f /tmp/interactsh.zip',
     presets: [
       {
         id: "interactsh-listen",
@@ -431,9 +445,10 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
     windowsBinaries: ["dalfox.exe"],
     windowsKnownPaths: ["{toolsRoot}\\bin\\dalfox.exe", "%USERPROFILE%\\go\\bin\\dalfox.exe"],
     posixBinaries: ["dalfox"],
-    posixKnownPaths: ["~/go/bin/dalfox", "/usr/bin/dalfox"],
+    posixKnownPaths: ["/usr/local/bin/dalfox", "/usr/bin/dalfox", "~/go/bin/dalfox"],
     installPowerShell: "go install github.com/hahwul/dalfox/v2@latest",
-    installKaliWsl: "go install github.com/hahwul/dalfox/v2@latest",
+    installKaliWsl:
+      'sudo apt-get install -y -qq curl jq && URL=$(curl -fsSL https://api.github.com/repos/hahwul/dalfox/releases/latest | jq -r \'.assets[] | select(.name | test("linux-x86_64\\\\.deb$")) | .browser_download_url\' | head -n 1) && curl -fsSL "$URL" -o /tmp/dalfox.deb && sudo dpkg -i /tmp/dalfox.deb && rm -f /tmp/dalfox.deb',
     presets: [
       {
         id: "dalfox-url",
@@ -727,8 +742,10 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
     licenseNote: "wxWindows / Apache-2.0 (Externo)",
     windowsBinaries: ["frida.exe", "frida-ps.exe", "apktool.bat"],
     posixBinaries: ["frida", "frida-ps", "apktool"],
+    posixKnownPaths: ["/usr/local/bin/frida", "/usr/bin/apktool", "~/.local/bin/frida"],
     installPowerShell: "pip install frida-tools objection",
-    installKaliWsl: "sudo apt update && sudo apt install -y apktool adb && pip3 install --break-system-packages frida-tools objection",
+    installKaliWsl:
+      "sudo apt-get update && sudo apt-get install -y apktool adb python3-pip && sudo python3 -m pip install --break-system-packages frida-tools",
     presets: [
       {
         id: "frida-ps-usb",
@@ -752,11 +769,11 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
     windowsBinaries: ["capa.exe"],
     windowsKnownPaths: ["{toolsRoot}\\bin\\capa.exe"],
     posixBinaries: ["capa"],
-    posixKnownPaths: ["~/CyberLab-Tools/bin/capa", "/usr/local/bin/capa"],
+    posixKnownPaths: ["/usr/local/bin/capa", "~/CyberLab-Tools/bin/capa"],
     installPowerShell:
-      "# Baixe capa-windows.zip oficial em https://github.com/mandiant/capa/releases e extraia capa.exe em C:\\CyberLab-Tools\\bin\\",
+      '$rel = Invoke-RestMethod "https://api.github.com/repos/mandiant/capa/releases/latest"; $u = ($rel.assets | Where-Object { $_.name -match "windows\\.zip$" })[0].browser_download_url; New-Item -ItemType Directory -Force -Path "C:\\CyberLab-Tools\\bin" | Out-Null; Invoke-WebRequest -Uri $u -OutFile "$env:TEMP\\capa.zip"; Expand-Archive -Path "$env:TEMP\\capa.zip" -DestinationPath "C:\\CyberLab-Tools\\bin" -Force',
     installKaliWsl:
-      "# Baixe capa-linux oficial em https://github.com/mandiant/capa/releases para ~/CyberLab-Tools/bin/capa",
+      'sudo apt-get install -y -qq curl jq unzip && URL=$(curl -fsSL https://api.github.com/repos/mandiant/capa/releases/latest | jq -r \'.assets[] | select(.name | test("capa-v[0-9.]+-linux\\\\.zip$")) | .browser_download_url\' | head -n 1) && curl -fsSL "$URL" -o /tmp/capa.zip && sudo unzip -o /tmp/capa.zip capa -d /usr/local/bin && sudo chmod +x /usr/local/bin/capa && rm -f /tmp/capa.zip',
     presets: [
       {
         id: "capa-triage",
@@ -784,9 +801,10 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
     windowsBinaries: ["keyhunter.exe"],
     windowsKnownPaths: ["%USERPROFILE%\\.cargo\\bin\\keyhunter.exe", "{toolsRoot}\\bin\\keyhunter.exe"],
     posixBinaries: ["keyhunter"],
-    posixKnownPaths: ["~/.cargo/bin/keyhunter"],
+    posixKnownPaths: ["/usr/local/bin/keyhunter", "~/.cargo/bin/keyhunter"],
     installPowerShell: "winget install --id Rustlang.Rustup -e; cargo install github-keyhunter",
-    installKaliWsl: "sudo apt update && sudo apt install -y cargo pkg-config libssl-dev && cargo install github-keyhunter",
+    installKaliWsl:
+      "sudo apt-get update && sudo apt-get install -y cargo rustc pkg-config libssl-dev && sudo cargo install github-keyhunter --root /usr/local",
     presets: [
       {
         id: "kh-patterns",
@@ -841,8 +859,10 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
     licenseNote: "LGPL-2.1 (Externo)",
     windowsBinaries: ["semgrep.exe", "opengrep.exe"],
     posixBinaries: ["semgrep", "opengrep"],
+    posixKnownPaths: ["/usr/local/bin/semgrep", "/usr/bin/semgrep", "~/.local/bin/semgrep"],
     installPowerShell: "pip install semgrep",
-    installKaliWsl: "pip3 install --break-system-packages semgrep",
+    installKaliWsl:
+      "sudo apt-get update && sudo apt-get install -y python3-pip && sudo python3 -m pip install --break-system-packages semgrep",
     presets: [
       {
         id: "semgrep-auto",
@@ -922,9 +942,10 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
     windowsBinaries: ["hayabusa.exe", "yr.exe", "yara64.exe", "yara.exe"],
     windowsKnownPaths: ["{toolsRoot}\\bin\\hayabusa.exe", "{toolsRoot}\\bin\\yr.exe"],
     posixBinaries: ["hayabusa", "yr", "yara"],
-    posixKnownPaths: ["~/.cargo/bin/yr", "~/CyberLab-Tools/bin/hayabusa", "/usr/bin/yara"],
+    posixKnownPaths: ["/usr/local/bin/yr", "/usr/bin/yara", "~/.cargo/bin/yr", "~/CyberLab-Tools/bin/hayabusa"],
     installPowerShell: "winget install --id VirusTotal.YARA-X -e",
-    installKaliWsl: "sudo apt update && sudo apt install -y yara && cargo install yara-x-cli",
+    installKaliWsl:
+      'sudo apt-get update && sudo apt-get install -y yara curl jq tar && URL=$(curl -fsSL https://api.github.com/repos/VirusTotal/yara-x/releases/latest | jq -r \'.assets[] | select(.name | test("x86_64-unknown-linux-gnu\\\\.tar\\\\.gz$")) | .browser_download_url\' | head -n 1) && curl -fsSL "$URL" -o /tmp/yarax.tar.gz && sudo tar -xzf /tmp/yarax.tar.gz -C /usr/local/bin && sudo chmod +x /usr/local/bin/yr && rm -f /tmp/yarax.tar.gz',
     presets: [
       {
         id: "yarax-scan",

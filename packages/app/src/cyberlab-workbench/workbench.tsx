@@ -220,6 +220,29 @@ export function CyberLabLeftExplorer() {
               </button>
             </div>
 
+            {/* Botão de 1 Clique para instalar automaticamente todas as ferramentas faltantes */}
+            <Show
+              when={(wb.backend.arsenal?.slots.filter((s) => !s.installed && !s.isCustom).length ?? 0) > 0}
+            >
+              <button
+                type="button"
+                disabled={wb.ui.busy}
+                class="flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-emerald-500 cursor-pointer disabled:opacity-60"
+                onClick={() =>
+                  void wb.launchSlot({
+                    slotId: "__all_missing__",
+                    action: "install_tool",
+                  })
+                }
+              >
+                <span>
+                  ⚡ Instalar Faltantes (
+                  {wb.backend.arsenal?.slots.filter((s) => !s.installed && !s.isCustom).length ?? 0}
+                  ) em 1 Clique
+                </span>
+              </button>
+            </Show>
+
             {/* Formulário Rápido p/ Criar Novo Slot Custom */}
             <Show when={showCustomModal()}>
               <div class="mt-1 flex flex-col gap-1.5 rounded-lg border border-emerald-600/40 bg-v2-background-bg-base p-2.5 text-[11px]">
@@ -533,6 +556,7 @@ export function CyberLabCenterStage() {
   const [findingSev, setFindingSev] = createSignal<"info" | "low" | "medium" | "high" | "critical">("high")
   const [desktopIngestText, setDesktopIngestText] = createSignal("")
   const [showDesktopIngestDrawer, setShowDesktopIngestDrawer] = createSignal(false)
+  const [dismissedInstallerRunId, setDismissedInstallerRunId] = createSignal("")
   const [showSlotSettings, setShowSlotSettings] = createSignal(false)
   const [customPathInput, setCustomPathInput] = createSignal("")
   const [customUrlInput, setCustomUrlInput] = createSignal("")
@@ -646,6 +670,48 @@ export function CyberLabCenterStage() {
             ocultar
           </button>
         </div>
+      </Show>
+
+      {/* Console ao vivo de Instalação Automática (visível quando há um instalador rodando ou recém-concluído) */}
+      <Show
+        when={(wb.backend.arsenal?.runs ?? []).find(
+          (r) => r.runtime === "installer" && r.runId !== dismissedInstallerRunId(),
+        )}
+      >
+        {(instRun) => (
+          <div class="border-b border-emerald-600/40 bg-zinc-950 px-3 py-2 shrink-0">
+            <div class="mb-1 flex items-center justify-between gap-2 text-[11px]">
+              <div class="flex items-center gap-2 font-medium text-emerald-400">
+                <span>
+                  {instRun().status === "running"
+                    ? `⏳ ${instRun().slotName} em andamento...`
+                    : `✅ ${instRun().slotName} finalizado (${instRun().status})`}
+                </span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <Show when={instRun().status === "running"}>
+                  <button
+                    type="button"
+                    class="rounded border border-red-500/40 bg-red-500/15 px-2 py-0.5 text-[10px] text-red-300 hover:bg-red-500/25 cursor-pointer"
+                    onClick={() => void wb.stopRun(instRun().runId)}
+                  >
+                    ⏹ Cancelar
+                  </button>
+                </Show>
+                <button
+                  type="button"
+                  class="rounded border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-300 hover:border-emerald-500 cursor-pointer"
+                  onClick={() => setDismissedInstallerRunId(instRun().runId)}
+                >
+                  Ocultar Log
+                </button>
+              </div>
+            </div>
+            <pre class="max-h-36 overflow-auto rounded border border-zinc-800 bg-black/70 p-2 font-mono text-[10.5px] leading-snug text-emerald-200 whitespace-pre-wrap">
+              {instRun().outputTail}
+            </pre>
+          </div>
+        )}
       </Show>
 
       {/* ===================================================================== */}
@@ -897,7 +963,8 @@ export function CyberLabCenterStage() {
                       src={`${url()}${url().includes("?") ? "&" : "?"}_cb=${wb.ui.iframeReloadNonce}`}
                       title={slot().name}
                       class="h-full w-full flex-1 border-0 bg-zinc-950"
-                      allow="clipboard-read; clipboard-write"
+                      allow="clipboard-read; clipboard-write; fullscreen"
+                      allowfullscreen
                     />
                   )}
                 </Show>
@@ -1290,7 +1357,8 @@ export function CyberLabCenterStage() {
                       src={`${url()}${url().includes("?") ? "&" : "?"}_cb=${wb.ui.iframeReloadNonce}`}
                       title={slot().name}
                       class="h-full w-full flex-1 border-0 bg-zinc-950"
-                      allow="clipboard-read; clipboard-write"
+                      allow="clipboard-read; clipboard-write; fullscreen"
+                      allowfullscreen
                     />
                   </div>
                 )}
