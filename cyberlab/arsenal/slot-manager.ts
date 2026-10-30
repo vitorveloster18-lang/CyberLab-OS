@@ -6,6 +6,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs"
@@ -514,7 +515,7 @@ export class ArsenalSlotManager {
             'CLEAN_PATH=""',
             'IFS=:; for seg in $PATH; do case "$seg" in /mnt/*|"") ;; *) CLEAN_PATH="${CLEAN_PATH:+$CLEAN_PATH:}$seg" ;; esac; done; unset IFS',
             'PATH="$CLEAN_PATH"',
-            'for d in "$HOME/.local/bin" "$HOME/go/bin" "$HOME/.cargo/bin" "$HOME/.pdtm/go/bin" /home/*/.local/bin /home/*/go/bin /home/*/.cargo/bin /home/*/.pdtm/go/bin /root/.local/bin /root/go/bin /root/.cargo/bin /opt/opentrap /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin; do [ -d "$d" ] && PATH="$d:$PATH"; done',
+            'for d in "$HOME/.local/bin" "$HOME/go/bin" "$HOME/.cargo/bin" "$HOME/.pdtm/go/bin" "$HOME/.strix/bin" /home/*/.local/bin /home/*/go/bin /home/*/.cargo/bin /home/*/.pdtm/go/bin /home/*/.strix/bin /root/.local/bin /root/go/bin /root/.cargo/bin /root/.strix/bin /opt/opentrap /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin; do [ -d "$d" ] && PATH="$d:$PATH"; done',
             "export PATH",
             ...allPosixBins.map((token) => {
               if (token.startsWith("~/")) {
@@ -522,9 +523,13 @@ export class ArsenalSlotManager {
                 return `for cand in "$HOME/${sub}" /home/*/${sub} "/root/${sub}"; do if [ -x "$cand" ]; then echo "HIT:${token}=$cand"; break; fi; done`
               }
               if (token.includes("/")) {
-                return token.endsWith(".jar")
-                  ? `p="${token}"; [ -s "$p" ] && echo "HIT:${token}=$p"`
-                  : `p="${token}"; [ -x "$p" ] && echo "HIT:${token}=$p"`
+                if (token.endsWith(".jar")) {
+                  return `p="${token}"; [ -f "$p" ] && [ "$(stat -c%s "$p" 2>/dev/null || echo 0)" -gt 10000000 ] && echo "HIT:${token}=$p"`
+                }
+                if (/\.(yml|yaml|json|html)$/i.test(token)) {
+                  return `p="${token}"; [ -s "$p" ] && echo "HIT:${token}=$p"`
+                }
+                return `p="${token}"; [ -x "$p" ] && echo "HIT:${token}=$p"`
               }
               return `p=$(command -v "${token}" 2>/dev/null | head -n 1); case "$p" in /mnt/*|"") ;; *) echo "HIT:${token}=$p" ;; esac`
             }),
@@ -533,7 +538,7 @@ export class ArsenalSlotManager {
           try {
             const wslProbe = spawnSync(
               "wsl.exe",
-              ["-d", this.config.preferredWslDistro, "--", "bash", "-s"],
+              ["-d", this.config.preferredWslDistro, "-u", "root", "--", "bash", "-s"],
               {
                 input: Buffer.from(`${scriptLines}\n`, "utf8"),
                 encoding: "utf8",
@@ -630,6 +635,13 @@ export class ArsenalSlotManager {
           for (const tmpl of def.posixKnownPaths) {
             const expanded = expandPosixCandidatePath(tmpl, this.config.toolsRootDir)
             if (existsSync(expanded)) {
+              if (expanded.endsWith(".jar")) {
+                try {
+                  if (statSync(expanded).size <= 10_000_000) continue
+                } catch {
+                  continue
+                }
+              }
               posixHit = expanded
               break
             }
@@ -1861,22 +1873,35 @@ export class ArsenalSlotManager {
       const bashSteps = [
         "set +e",
         "export DEBIAN_FRONTEND=noninteractive",
-        'export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.cargo/bin:/root/go/bin:$PATH"',
+        'export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/.cargo/bin:/root/go/bin:/root/.strix/bin:$PATH"',
+        "FAILED_COUNT=0",
+        'FAILED_LIST=""',
         'echo "=== Preparando base (curl, jq, unzip, tar, ca-certificates) ==="',
         "apt-get update -qq || true",
         "apt-get install -y -qq curl jq unzip tar ca-certificates || true",
         ...ordered.map((s, idx) => {
           const cleanCmd = s.installKaliWsl.replace(/\bsudo\s+/g, "")
+          const safeLabel = s.shortLabel.replace(/["$`\\]/g, "")
           return [
             `echo ""`,
             `echo "============================================================"`,
-            `echo "  [${idx + 1}/${ordered.length}] Instalando ${s.name}..."`,
+            `echo "  [${idx + 1}/${ordered.length}] Instalando ${safeLabel}..."`,
             `echo "============================================================"`,
-            `(${cleanCmd}) && echo "[CONCLUIDO_SLOT] ${s.slotId}" || echo "[AVISO] Falha parcial em ${s.shortLabel} (continuando para a próxima...)"`,
+            `if (${cleanCmd}); then`,
+            `  echo "[CONCLUIDO_SLOT] ${s.slotId}"`,
+            `else`,
+            `  FAILED_COUNT=$((FAILED_COUNT + 1))`,
+            `  FAILED_LIST="\${FAILED_LIST} [${safeLabel}]"`,
+            `  echo "[ERRO_SLOT] Falha ao instalar ${safeLabel} (verifique o log acima)"`,
+            `fi`,
           ].join("\n")
         }),
         'echo ""',
-        'echo "=== TODAS AS ETAPAS FINALIZADAS! ATUALIZANDO SLOTS DO CYBERLAB OS... ==="',
+        'if [ "$FAILED_COUNT" -gt 0 ]; then',
+        '  echo "=== FINALIZADO COM $FAILED_COUNT FALHA(S):$FAILED_LIST ==="',
+        "  exit 1",
+        "fi",
+        'echo "=== TODAS AS ETAPAS CONCLUIDAS COM 100% DE SUCESSO! ==="',
       ].join("\n")
 
       const run =
@@ -1982,24 +2007,45 @@ export class ArsenalSlotManager {
       }
 
       if (process.platform === "win32") {
-        // Clean Windows conflicting Burp Pro / old Community / installer .exe in Downloads, then stream fresh Kali CDN install
-        const psCleanup = [
-          'Write-Host "=== [1/2] Removendo instalacoes antigas do Burp Suite (Pro / Community) no Windows ==="',
-          'Get-Process | Where-Object { $_.ProcessName -like "BurpSuite*" } | Stop-Process -Force -ErrorAction SilentlyContinue',
-          'winget uninstall --id PortSwigger.BurpSuite.Professional --silent 2>$null | Out-Null',
-          'winget uninstall --id PortSwigger.BurpSuite.Community --silent 2>$null | Out-Null',
-          '$paths = @("$env:LOCALAPPDATA\\BurpSuitePro","$env:LOCALAPPDATA\\Programs\\BurpSuitePro","$env:ProgramFiles\\BurpSuitePro","$env:LOCALAPPDATA\\BurpSuiteCommunity","$env:LOCALAPPDATA\\Programs\\BurpSuiteCommunity","$env:ProgramFiles\\BurpSuiteCommunity","$env:LOCALAPPDATA\\BurpSuite","$env:APPDATA\\BurpSuite","$env:USERPROFILE\\.BurpSuite","$env:USERPROFILE\\Downloads\\burpsuite_windows-x64_v2026_9_2.exe")',
-          'foreach ($p in $paths) { if (Test-Path $p) { Write-Host "Removendo: $p"; Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue } }',
-          'Write-Host "=== [2/2] Baixando Burp Suite Community Oficial mais recente no Kali WSL2 ==="',
-        ].join("; ")
+        // Non-blocking cleanup (never freezes Bun's 10s HTTP idleTimeout!)
+        const localAppData = process.env.LOCALAPPDATA ?? path.join(os.homedir(), "AppData", "Local")
+        const appData = process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming")
+        const progFiles = process.env.ProgramFiles ?? "C:\\Program Files"
+        const userHome = os.homedir()
+        const winTargets = [
+          path.join(localAppData, "BurpSuitePro"),
+          path.join(localAppData, "Programs", "BurpSuitePro"),
+          path.join(progFiles, "BurpSuitePro"),
+          path.join(localAppData, "BurpSuiteCommunity"),
+          path.join(localAppData, "Programs", "BurpSuiteCommunity"),
+          path.join(progFiles, "BurpSuiteCommunity"),
+          path.join(localAppData, "BurpSuite"),
+          path.join(appData, "BurpSuite"),
+          path.join(userHome, ".BurpSuite"),
+          path.join(userHome, "Downloads", "burpsuite_windows-x64_v2026_9_2.exe"),
+        ]
+        for (const t of winTargets) {
+          try {
+            if (existsSync(t)) rmSync(t, { recursive: true, force: true })
+          } catch {
+            // Ignore locked files; background PowerShell cleans processes below
+          }
+        }
         try {
-          spawnSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", psCleanup], {
-            stdio: "ignore",
-            windowsHide: true,
-            timeout: 45000,
-          })
+          const bgClean = spawn(
+            "powershell.exe",
+            [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-Command",
+              'Get-Process | Where-Object { $_.ProcessName -like "BurpSuite*" } | Stop-Process -Force -ErrorAction SilentlyContinue; winget uninstall --id PortSwigger.BurpSuite.Professional --silent 2>$null | Out-Null; winget uninstall --id PortSwigger.BurpSuite.Community --silent 2>$null | Out-Null',
+            ],
+            { detached: true, stdio: "ignore", windowsHide: true },
+          )
+          bgClean.unref()
         } catch {
-          // Ignore cleanup errors
+          // Ignore
         }
       }
 
@@ -2105,6 +2151,24 @@ export class ArsenalSlotManager {
           }
         }
         if (
+          (slot.slotId === "burp-suite" || slot.slotId === "veracrypt") &&
+          !slot.wslPath &&
+          !slot.posixPath &&
+          !(slot.windowsPath && slot.windowsPath.toLowerCase().endsWith(".jar"))
+        ) {
+          const inst = await this.launchSlot({
+            slotId: slot.slotId,
+            action: "install_tool",
+            runtimeOverride: process.platform === "win32" ? "wsl" : undefined,
+          })
+          return {
+            ok: true,
+            message: `${slot.shortLabel} ainda não estava instalado no Kali WSL2 — baixando agora automaticamente (acompanhe o progresso ao vivo no Console abaixo!). Assim que concluir, clique novamente em '🖥 Abrir Aqui Dentro do CyberLab'.`,
+            run: inst.run,
+            overview: inst.overview,
+          }
+        }
+        if (
           slot.slotId === "burp-suite" &&
           !slot.wslPath &&
           !slot.posixPath &&
@@ -2138,7 +2202,7 @@ export class ArsenalSlotManager {
       let liveSlot = slot
       const targetEmbedUrl = liveSlot.override.customEmbedUrl ?? def.defaultEmbedUrl
 
-      // If a managed Web daemon (mitmweb / caido) is not installed yet and Kali WSL2 is available, auto-install it in Kali WSL2 first!
+      // If a managed Web daemon (mitmweb / caido) is not installed yet and Kali WSL2 is available, auto-install non-blockingly!
       if (
         def.managedDaemonArgs &&
         !liveSlot.resolvedPath &&
@@ -2148,16 +2212,7 @@ export class ArsenalSlotManager {
         !liveSlot.installKaliWsl.trim().startsWith("#")
       ) {
         const cleanInstall = liveSlot.installKaliWsl.replace(/\bsudo\s+/g, "")
-        spawnSync(
-          "wsl.exe",
-          ["-d", this.config.preferredWslDistro, "-u", "root", "--", "bash", "-s"],
-          {
-            input: Buffer.from(`export DEBIAN_FRONTEND=noninteractive\n${cleanInstall}\n`, "utf8"),
-            stdio: ["pipe", "ignore", "ignore"],
-            windowsHide: true,
-            timeout: 180000,
-          },
-        )
+        await this.runAsyncWslRootScript(`export DEBIAN_FRONTEND=noninteractive\n${cleanInstall}`, 180000)
         const refreshed = this.getOverview(true)
         liveSlot = refreshed.slots.find((s) => s.slotId === slot.slotId) ?? liveSlot
       }

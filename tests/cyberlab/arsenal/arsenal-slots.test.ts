@@ -194,9 +194,39 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
     const burpDef = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === "burp-suite")!
     expect(burpDef.windowsKnownPaths?.some((p) => p.includes("%LOCALAPPDATA%\\BurpSuiteCommunity\\"))).toBe(true)
     expect(burpDef.windowsBinaries.includes("BurpSuitePro.exe")).toBe(false)
+    // Burp must never probe wrapper scripts (/usr/local/bin/burpsuite) that cause false-positive "WSL2 Kali" status
+    expect(burpDef.posixBinaries).toEqual([])
+    expect(burpDef.posixKnownPaths).toEqual([
+      "/opt/cyberlab-burp/burpsuite.jar",
+      "/usr/share/burpsuite/burpsuite.jar",
+    ])
     expect(burpDef.installKaliWsl).toContain("portswigger-cdn.net/burp/releases/download?product=desktop")
     expect(burpDef.installKaliWsl).toContain("--i-accept-the-license-agreement")
-    expect(burpDef.installKaliWsl).toContain("unzip -tq /opt/cyberlab-burp/burpsuite.jar")
+    expect(burpDef.installKaliWsl).toContain("unzip -tq /tmp/burpsuite_dl.jar")
+    expect(burpDef.installKaliWsl).not.toContain('[ -z "$BURP_VER" ] &&')
+
+    // v5.7 verified installers for Strix, HexStrike MCP, PentAGI, PentestGPT/CAI, and VeraCrypt
+    const strixDef = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === "strix")!
+    expect(strixDef.installKaliWsl).toContain("usestrix/strix/releases/latest")
+    expect(strixDef.installKaliWsl).toContain("/usr/local/bin/strix")
+
+    const hexDef = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === "hexstrike-ai")!
+    expect(hexDef.installKaliWsl).toContain("flask requests psutil mcp")
+    expect(hexDef.installKaliWsl).not.toContain("-r /opt/hexstrike-ai/requirements.txt")
+    expect(hexDef.installKaliWsl).toContain("/usr/local/bin/hexstrike-server")
+
+    const pentagiDef = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === "pentagi")!
+    expect(pentagiDef.posixBinaries).toEqual(["pentagi"])
+    expect(pentagiDef.windowsBinaries).not.toContain("docker.exe")
+    expect(pentagiDef.installKaliWsl).toContain("/usr/local/bin/pentagi")
+
+    const caiDef = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === "pentestgpt-cai")!
+    expect(caiDef.installKaliWsl).toContain("uv tool install --force --python 3.12 cai-framework")
+    expect(caiDef.installKaliWsl).toContain("/usr/local/bin/cai")
+
+    const veracryptDef = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === "veracrypt")!
+    expect(veracryptDef.installKaliWsl).toContain("veracrypt/VeraCrypt/releases/latest")
+    expect(veracryptDef.installKaliWsl).toContain("/tmp/veracrypt.deb")
 
     const kaliDef = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === "kali-desktop-stream")!
     expect(kaliDef.posixBinaries).toEqual(["startxfce4"])
