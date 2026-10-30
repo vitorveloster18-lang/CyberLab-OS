@@ -1,0 +1,21 @@
+{
+  "id": "opencode-v2-core",
+  "version": "2.1.4",
+  "source": "https://github.com/anomalyco/opencode",
+  "commit": "dae4077a96243257ea0a2086068504b791629f10",
+  "license": {
+    "spdx": "MIT",
+    "reviewStatus": "approved_embed",
+    "reviewNotes": [
+      "Reconstructed lean OpenCode V2 product packages excluding proprietary cloud/SaaS folders.",
+      "Verified MIT license in upstream repository root and package manifests."
+    ]
+  },
+  "integration": {
+    "mode": "embedded",
+    "linuxRequired": false
+  },
+  "dependenciesReviewed": true,
+  "noticesRecorded": true,
+  "lastReviewedAt": "2026-10-26T00:00:00.000Z"
+}

@@ -1,0 +1,12 @@
+{
+  "$comment": "Opcional: copie para .cyberlab/external-tools.json ou config/external-tools.json caso algum binário externo não esteja em .cyberlab/bin nem no PATH do sistema.",
+  "binaryPaths": {
+    "nmap": "/usr/bin/nmap",
+    "nuclei": ".cyberlab/bin/nuclei",
+    "ffuf": ".cyberlab/bin/ffuf",
+    "tshark": "/usr/bin/tshark",
+    "opentrap.AppImage": ".cyberlab/bin/opentrap.AppImage",
+    "mvt-android": "/home/user/.local/bin/mvt-android",
+    "analyzeHeadless": "/opt/ghidra/support/analyzeHeadless"
+  }
+}

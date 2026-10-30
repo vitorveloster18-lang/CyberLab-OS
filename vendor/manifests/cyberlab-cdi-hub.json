@@ -1,0 +1,22 @@
+{
+  "id": "cyberlab-cdi-hub",
+  "version": "2.0.0",
+  "source": "https://github.com/vitorveloster18-lang/CyberLab-OS",
+  "commit": "first-party",
+  "license": {
+    "spdx": "MIT",
+    "reviewStatus": "approved_embed",
+    "reviewNotes": [
+      "First-party MIT Bidirectional Multi-CDI Partner Hub & HMAC-SHA256 Gateway (cyberlab/partners/cdi-hub.ts + integrations/partners/chat_py_bridge.py).",
+      "Supports single-specialist routing, parallel multi-CDI collaboration, and governed CDI-initiated state/evidence/file reads, SHA-256 artifact creation, and capability execution."
+    ]
+  },
+  "integration": {
+    "mode": "embedded",
+    "executorId": "cdi-bidirectional-gateway",
+    "linuxRequired": false
+  },
+  "dependenciesReviewed": true,
+  "noticesRecorded": true,
+  "lastReviewedAt": "2026-10-27T00:00:00.000Z"
+}

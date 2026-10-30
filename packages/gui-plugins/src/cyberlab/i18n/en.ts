@@ -1,0 +1,16 @@
+export default {
+  "tab.title": "CyberLab",
+  "settings.title": "CyberLab OS",
+  "settings.description": "Escopo de segurança, Agentes CDI bidirecionais (Kairós, Naia, Salem, Nova) e motores externos.",
+  "settings.scope.title": "Escopo & Proteção de Alvos",
+  "settings.scope.description": "Controla quais IPs, domínios e URLs podem ser testados pelas ferramentas e pela IA.",
+  "settings.cdi.title": "Agentes Externos CDI (Portas 8788–8791)",
+  "settings.cdi.description": "Comunicação bidirecional autenticada por HMAC-SHA256 com Kairós, Naia, Salem e Nova.",
+  "settings.engines.title": "Motores Externos Opcionais",
+  "settings.engines.description": "Integração opcional com nmap, nuclei, ffuf, tshark e pasta .cyberlab/inbox.",
+  "command.open": "Abrir Painel CyberLab",
+  "command.settings": "Abrir Configurações do CyberLab & CDIs",
+  "command.slash.description": "Abre o painel de ferramentas de segurança, CDIs e evidências do CyberLab OS",
+  "command.category.view": "Visualização",
+  "command.category.security": "CyberLab OS",
+}
