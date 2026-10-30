@@ -1073,13 +1073,28 @@ export function CyberLabCenterStage() {
                 <Show
                   when={slot().embedUrl}
                   fallback={
-                    <div class="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-                      <div class="text-[14px] font-semibold text-v2-text-text-strong">
-                        {slot().name} pronto para abrir no palco central
+                    <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+                      <div class="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+                        <div class="text-[14px] font-semibold text-v2-text-text-strong">
+                          {slot().name} pronto para abrir no palco central
+                        </div>
+                        <p class="max-w-lg text-[12px] text-v2-text-text-muted">
+                          Clique em <strong>"▶ Abrir Aqui no Centro"</strong> acima para iniciar a interface real com ajuste de escala (Zoom) e barra de rolagem vertical.
+                        </p>
                       </div>
-                      <p class="max-w-lg text-[12px] text-v2-text-text-muted">
-                        Clique em <strong>"▶ Abrir Aqui no Centro"</strong> acima para iniciar a interface real com ajuste de escala (Zoom) e barra de rolagem vertical.
-                      </p>
+                      <Show when={wb.selectedRunForActiveSlot()}>
+                        {(run) => (
+                          <div class="border-t border-zinc-800 bg-zinc-950 p-3 text-left shrink-0 max-h-[48%] overflow-auto">
+                            <div class="mb-1 flex items-center justify-between text-[11px] font-semibold text-emerald-400">
+                              <span>📦 Console de Instalação / Inicialização ao Vivo ({run().status})</span>
+                              <span class="font-mono text-[10px] text-zinc-400">{run().runtime}</span>
+                            </div>
+                            <pre class="font-mono text-[11px] leading-relaxed text-emerald-100/95 whitespace-pre-wrap">
+                              {`$ ${run().commandPreview}\n\n${run().outputTail || "(executando pacotes no Kali WSL2...)"}`}
+                            </pre>
+                          </div>
+                        )}
+                      </Show>
                     </div>
                   }
                 >
@@ -1319,6 +1334,23 @@ export function CyberLabCenterStage() {
                               : `🖥 Abrir ${slot().shortLabel} Aqui Dentro do CyberLab`}
                           </button>
 
+                          <Show when={slot().slotId === "burp-suite"}>
+                            <button
+                              type="button"
+                              disabled={wb.ui.busy}
+                              class="rounded-lg border border-amber-500/60 bg-amber-600/20 px-3.5 py-2 text-[11.5px] font-semibold text-amber-300 hover:bg-amber-600/35 cursor-pointer disabled:opacity-50"
+                              onClick={() =>
+                                void wb.launchSlot({
+                                  slotId: "burp-suite",
+                                  action: "launch_desktop",
+                                  rawArgs: "__clean_reinstall_burp__",
+                                })
+                              }
+                            >
+                              🧹 Limpar Versões Antigas + Baixar Burp Community Oficial
+                            </button>
+                          </Show>
+
                           <button
                             type="button"
                             class="rounded-lg border border-v2-border-border-base bg-v2-background-bg-base px-3.5 py-2 text-[12px] font-medium text-v2-text-text-strong hover:border-emerald-500 cursor-pointer"
@@ -1411,7 +1443,7 @@ export function CyberLabCenterStage() {
                           </div>
                           <ul class="list-disc pl-4 space-y-1 text-[11.5px] text-v2-text-text-base">
                             <li>
-                              <strong>Burp Suite Community (`:8080`)</strong>: Melhor ergonomia manual para Proxy, Repeater multi-abas, Decoder, Comparer e extensões BApp (Autorize, Param Miner). Ao clicar em <strong>"Abrir Aqui Dentro do CyberLab"</strong>, o CyberLab reutiliza o <code>.jar</code> do seu Burp já instalado no Windows dentro do Canvas Central!
+                              <strong>Burp Suite Community (`:8080`)</strong>: Melhor ergonomia manual para Proxy, Repeater multi-abas, Decoder, Comparer e extensões BApp (Autorize, Param Miner). Use <strong>"🧹 Limpar Versões Antigas + Baixar Burp Community Oficial"</strong> para instalar o <code>burpsuite.jar</code> oficial mais recente da PortSwigger CDN sem conflito com instaladores antigos!
                             </li>
                             <li>
                               <strong>OpenTRAP (Kali WSL2)</strong>: Entrega gratuitamente os 3 recursos bloqueados no Burp Community — <strong>Intruder sem limite de velocidade</strong>, <strong>Scanner Ativo real (OWASP ZAP)</strong> e <strong>Collaborator OAST nativo (Interactsh)</strong>!
@@ -1423,6 +1455,20 @@ export function CyberLabCenterStage() {
                         </div>
                       </Show>
                     </div>
+
+                    <Show when={wb.selectedRunForActiveSlot()}>
+                      {(run) => (
+                        <div class="rounded-xl border border-emerald-600/40 bg-zinc-950 p-3.5 text-left space-y-1.5">
+                          <div class="flex items-center justify-between text-[11.5px] font-semibold text-emerald-400">
+                            <span>📦 Console ao Vivo — {slot().shortLabel} ({run().status})</span>
+                            <span class="font-mono text-[10.5px] text-zinc-400">{run().runtime}</span>
+                          </div>
+                          <pre class="max-h-60 overflow-auto font-mono text-[11px] leading-relaxed text-emerald-100/95 whitespace-pre-wrap">
+                            {`$ ${run().commandPreview}\n\n${run().outputTail || "(aguardando saída do instalador...)"}`}
+                          </pre>
+                        </div>
+                      )}
+                    </Show>
 
                     {/* Ingestão de Exportações / Requests / Achados da GUI para SHA-256 + Agente IA */}
                     <div class="rounded-xl border border-v2-border-border-base bg-v2-background-bg-deep/40 p-4 space-y-2.5">

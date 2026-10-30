@@ -333,8 +333,6 @@ export class ArsenalSlotManager {
       path.join(localAppData, "Programs", "BurpSuiteCommunity"),
       path.join(progFiles, "BurpSuiteCommunity"),
       path.join(userHome, "BurpSuiteCommunity"),
-      path.join(localAppData, "BurpSuitePro"),
-      path.join(localAppData, "Programs", "BurpSuitePro"),
       path.join(localAppData, "Microsoft", "WinGet", "Links"),
       path.join(localAppData, "Programs", "caido"),
       path.join(localAppData, "Programs", "Caido"),
@@ -1284,12 +1282,11 @@ export class ArsenalSlotManager {
           path.join(localAppData, "Programs", "BurpSuiteCommunity"),
           path.join(progFiles, "BurpSuiteCommunity"),
           path.join(userHome, "BurpSuiteCommunity"),
+          path.join(localAppData, "BurpSuite"),
+          path.join(progFiles, "BurpSuite"),
           path.join(this.config.toolsRootDir, "BurpSuite"),
           this.config.toolsRootDir,
           ...extraDownloadDirs,
-          path.join(localAppData, "BurpSuitePro"),
-          path.join(localAppData, "Programs", "BurpSuitePro"),
-          path.join(progFiles, "BurpSuitePro"),
         ].filter(Boolean),
       ),
     )
@@ -1481,12 +1478,15 @@ export class ArsenalSlotManager {
         "-Dawt.useSystemAAFontSettings=on",
         "-Dswing.aatext=true",
         '-jar "$BURP_JAR_TARGET"',
+        "--suppress-jre-check",
+        "--disable-check-for-updates-dialog",
         "--disable-auto-update",
+        "--i-accept-the-license-agreement",
       ].join(" ")
       return {
         needsJava: true,
         ...(wslSourceBurpJar ? { wslSourceBurpJar } : {}),
-        launchCmd: `("$JAVA21_BIN" ${burpFlags} || (grep -qi "UnsupportedClassVersionError" "$GUI_LOG" && /usr/bin/java ${burpFlags}))`,
+        launchCmd: `(rm -f "$HOME/.BurpSuite/UserConfigPro.json" 2>/dev/null || true; "$JAVA21_BIN" ${burpFlags} || (grep -qi "UnsupportedClassVersionError" "$GUI_LOG" && /usr/bin/java ${burpFlags}))`,
       }
     }
 
@@ -1502,12 +1502,12 @@ export class ArsenalSlotManager {
       }
     }
 
-    // 3. Kali full XFCE desktop stream (with panel + Kali menu + terminal — never a blank blue wall!)
+    // 3. Kali full XFCE desktop stream (isolated from WSLg Wayland/D-Bus, with compositor off for snappy X11 rendering!)
     if (slot.slotId === "kali-desktop-stream") {
       return {
         needsJava: false,
         launchCmd:
-          "(command -v startxfce4 >/dev/null 2>&1 && dbus-launch --exit-with-session startxfce4) || (openbox & sleep 0.6 && (xfce4-terminal || xterm))",
+          "export XDG_CURRENT_DESKTOP=XFCE DESKTOP_SESSION=xfce; if command -v startxfce4 >/dev/null 2>&1; then (sleep 2 && xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null || true) & dbus-launch --exit-with-session startxfce4; else openbox & sleep 0.6 && (xfce4-terminal || xterm); fi",
       }
     }
 
@@ -1549,6 +1549,38 @@ export class ArsenalSlotManager {
     return { needsJava: false, launchCmd: `'${fallback.replace(/'/g, "'\\''")}'` }
   }
 
+  private runAsyncWslRootScript(script: string, timeoutMs = 180000): Promise<string> {
+    return new Promise((resolve) => {
+      const proc = spawn(
+        "wsl.exe",
+        ["-d", this.config.preferredWslDistro, "-u", "root", "--", "bash", "-s"],
+        {
+          cwd: this.workspaceRoot,
+          stdio: ["pipe", "pipe", "ignore"],
+          windowsHide: true,
+        },
+      )
+      let out = ""
+      const timer = setTimeout(() => {
+        this.terminateProcessTree(proc)
+        resolve(out)
+      }, timeoutMs)
+      proc.stdout?.on("data", (chunk: Buffer) => {
+        out += chunk.toString("utf8")
+      })
+      proc.once("close", () => {
+        clearTimeout(timer)
+        resolve(out)
+      })
+      proc.once("error", () => {
+        clearTimeout(timer)
+        resolve(out)
+      })
+      proc.stdin?.write(`${script}\n`)
+      proc.stdin?.end()
+    })
+  }
+
   private async startEmbeddedGuiCanvas(slot: ArsenalSlotStatus): Promise<{
     embedUrl: string
     message: string
@@ -1567,8 +1599,7 @@ export class ArsenalSlotManager {
     const escapedWslSrcJar = wslSourceBurpJar ? wslSourceBurpJar.replace(/'/g, "'\\''") : ""
     const canvasHtmlB64 = Buffer.from(this.buildCyberLabCanvasHtml(slot.shortLabel), "utf8").toString("base64")
 
-    // 1. Ensure Xtigervnc + openbox + novnc + websockify + x11-utils + genuine Java 21 LTS
-    //    + any missing Linux GUI package (zaproxy, wireshark, ghidra, jadx, xfce4) are installed in Kali WSL2!
+    // 1. Non-blocking async check in Kali WSL2 (never freezes Bun's HTTP event loop!)
     const bootstrapCheckAndInstall = [
       "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH",
       "export DEBIAN_FRONTEND=noninteractive",
@@ -1578,9 +1609,10 @@ export class ArsenalSlotManager {
       "command -v websockify >/dev/null 2>&1 || MISSING=1",
       "command -v xmessage >/dev/null 2>&1 || MISSING=1",
       "[ -d /usr/share/novnc ] || MISSING=1",
+      "[ -f /usr/lib/x86_64-linux-gnu/libXtst.so.6 ] || MISSING=1",
       'if [ "$MISSING" = "1" ]; then',
       "  apt-get update -qq || true",
-      "  apt-get install -y -qq curl jq tar tigervnc-standalone-server openbox novnc websockify dbus-x11 x11-xserver-utils x11-utils fonts-dejavu-core || true",
+      "  apt-get install -y -qq curl jq unzip tar file tigervnc-standalone-server openbox novnc websockify dbus-x11 x11-xserver-utils x11-utils fonts-dejavu-core libxtst6 libxi6 libxrender1 libxext6 libxfixes3 libxrandr2 libxcomposite1 libxdamage1 libxkbcommon0 libgbm1 libdrm2 libnss3 libnspr4 libfreetype6 fontconfig || true",
       "fi",
       ...(slot.slotId === "owasp-zap"
         ? [
@@ -1602,15 +1634,9 @@ export class ArsenalSlotManager {
             "if ! command -v jadx-gui >/dev/null 2>&1; then apt-get update -qq || true; apt-get install -y -qq jadx || true; fi",
           ]
         : []),
-      ...(slot.slotId === "kali-desktop-stream"
-        ? [
-            "if ! command -v startxfce4 >/dev/null 2>&1; then apt-get update -qq || true; apt-get install -y -qq --no-install-recommends xfce4 xfce4-terminal thunar dbus-x11 kali-menu xterm || true; fi",
-          ]
-        : []),
       ...(slot.slotId === "burp-suite"
         ? [
             "mkdir -p /opt/cyberlab-burp",
-            // Remove broken symlink if present
             "[ -L /opt/cyberlab-burp/burpsuite.jar ] && [ ! -e /opt/cyberlab-burp/burpsuite.jar ] && rm -f /opt/cyberlab-burp/burpsuite.jar",
             ...(escapedWslSrcJar
               ? [
@@ -1624,19 +1650,15 @@ export class ArsenalSlotManager {
                 ]
               : []),
             "if [ ! -s /opt/cyberlab-burp/burpsuite.jar ] && [ -s /usr/share/burpsuite/burpsuite.jar ]; then ln -sf /usr/share/burpsuite/burpsuite.jar /opt/cyberlab-burp/burpsuite.jar; fi",
-            "if [ ! -s /opt/cyberlab-burp/burpsuite.jar ]; then apt-get update -qq || true; apt-get install -y -qq burpsuite || true; [ -s /usr/share/burpsuite/burpsuite.jar ] && ln -sf /usr/share/burpsuite/burpsuite.jar /opt/cyberlab-burp/burpsuite.jar; fi",
           ]
         : []),
       ...(needsJava
         ? [
             'if [ ! -x /opt/cyberlab-jre21/bin/java ] && [ ! -x /usr/lib/jvm/java-21-openjdk-amd64/bin/java ]; then',
             "  apt-get install -y -qq curl jq tar ca-certificates || true",
-            "  apt-get install -y -qq openjdk-21-jre 2>/dev/null || true",
-            "  if [ ! -x /usr/lib/jvm/java-21-openjdk-amd64/bin/java ]; then",
-            "    JRE_URL=$(curl -fsSL https://api.github.com/repos/adoptium/temurin21-binaries/releases/latest | jq -r '.assets[] | select(.name | test(\"OpenJDK21U-jre_x64_linux_hotspot_.*\\\\.tar\\\\.gz$\")) | .browser_download_url' | head -n 1)",
-            '    if [ -n "$JRE_URL" ]; then',
-            '      mkdir -p /opt/cyberlab-jre21 && curl -fsSL "$JRE_URL" -o /tmp/jre21.tar.gz && tar -xzf /tmp/jre21.tar.gz -C /opt/cyberlab-jre21 --strip-components=1 && rm -f /tmp/jre21.tar.gz',
-            "    fi",
+            "  JRE_URL=$(curl -fsSL https://api.github.com/repos/adoptium/temurin21-binaries/releases/latest | jq -r '.assets[] | select(.name | test(\"OpenJDK21U-jre_x64_linux_hotspot_.*\\\\.tar\\\\.gz$\")) | .browser_download_url' | head -n 1)",
+            '  if [ -n "$JRE_URL" ]; then',
+            '    mkdir -p /opt/cyberlab-jre21 && curl -fsSL "$JRE_URL" -o /tmp/jre21.tar.gz && tar -xzf /tmp/jre21.tar.gz -C /opt/cyberlab-jre21 --strip-components=1 && rm -f /tmp/jre21.tar.gz',
             "  fi",
             "fi",
           ]
@@ -1646,18 +1668,8 @@ export class ArsenalSlotManager {
 
     let wslIp = "127.0.0.1"
     if (useWsl) {
-      const boot = spawnSync(
-        "wsl.exe",
-        ["-d", this.config.preferredWslDistro, "-u", "root", "--", "bash", "-s"],
-        {
-          input: Buffer.from(`${bootstrapCheckAndInstall}\n`, "utf8"),
-          encoding: "utf8",
-          stdio: ["pipe", "pipe", "pipe"],
-          windowsHide: true,
-          timeout: 300000,
-        },
-      )
-      const ipLine = (boot.stdout ?? "")
+      const bootOut = await this.runAsyncWslRootScript(bootstrapCheckAndInstall, 180000)
+      const ipLine = bootOut
         .replace(/\0/g, "")
         .trim()
         .split(/\r?\n/)
@@ -1667,10 +1679,13 @@ export class ArsenalSlotManager {
       if (ipLine) wslIp = ipLine
     }
 
-    // 2. Start dedicated spacious 1366x860 Xtigervnc + Openbox (normal decorations, no forced maximize on dialogs!)
-    //    + clean zero-chrome CyberLab Canvas HTML + GUI tool running in native $HOME (fast ext4!)
+    // 2. Start dedicated spacious 1366x860 Xtigervnc + Openbox
+    //    CRITICAL WSL2 FIX: unset SESSION_MANAGER, DBUS_SESSION_BUS_ADDRESS, and WAYLAND_DISPLAY so WSLg
+    //    never hijacks XFCE4 / GTK3 / Qt6 / Burp Chromium windows away from Xtigervnc :dispNum!
     const sessionScript = [
       'cd "$HOME" 2>/dev/null || cd /tmp',
+      "unset SESSION_MANAGER DBUS_SESSION_BUS_ADDRESS WAYLAND_DISPLAY",
+      "export XDG_SESSION_TYPE=x11 GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb NO_AT_BRIDGE=1",
       'CLEAN_PATH=""',
       'IFS=:; for seg in $PATH; do case "$seg" in /mnt/*|"") ;; *) CLEAN_PATH="${CLEAN_PATH:+$CLEAN_PATH:}$seg" ;; esac; done; unset IFS',
       'export PATH="$CLEAN_PATH"',
@@ -1932,6 +1947,14 @@ export class ArsenalSlotManager {
           overview: currentOverview,
         }
       }
+      if (
+        slot.slotId === "burp-suite" &&
+        /burpsuite_windows.*\.exe$|installer.*\.exe$|setup.*\.exe$/i.test(path.basename(picked))
+      ) {
+        throw new Error(
+          `O arquivo selecionado (${path.basename(picked)}) é um instalador de Setup do Windows e não o arquivo .jar executável! Clique no botão "🧹 Limpar Antigas + Baixar Burp Community Oficial" para remover as versões conflitantes e baixar o JAR oficial automaticamente.`,
+        )
+      }
       const updated = this.configureSettings({
         slotId: slot.slotId,
         slotOverride: { customExecutablePath: picked },
@@ -1941,6 +1964,47 @@ export class ArsenalSlotManager {
         message: `Arquivo vinculado com sucesso: ${picked}. Clique agora em "Abrir Aqui Dentro" ou "Janela Externa"!`,
         overview: updated,
       }
+    }
+
+    // 0c. 1-Click Clean Wipe of Old Burp Pro/Community + Fresh PortSwigger CDN Burp Community Download!
+    if (params.rawArgs === "__clean_reinstall_burp__" && slot.slotId === "burp-suite") {
+      delete this.config.slotOverrides["burp-suite"]
+      this.saveConfig()
+      const existingBurp = this.daemons.get("burp-suite")
+      if (existingBurp) {
+        if (existingBurp.child) this.terminateProcessTree(existingBurp.child)
+        if (existingBurp.tcpBridges) for (const s of existingBurp.tcpBridges) s.close()
+        if (existingBurp.staticServer) existingBurp.staticServer.close()
+        this.daemons.delete("burp-suite")
+      }
+
+      if (process.platform === "win32") {
+        // Clean Windows conflicting Burp Pro / old Community / installer .exe in Downloads, then stream fresh Kali CDN install
+        const psCleanup = [
+          'Write-Host "=== [1/2] Removendo instalacoes antigas do Burp Suite (Pro / Community) no Windows ==="',
+          'Get-Process | Where-Object { $_.ProcessName -like "BurpSuite*" } | Stop-Process -Force -ErrorAction SilentlyContinue',
+          'winget uninstall --id PortSwigger.BurpSuite.Professional --silent 2>$null | Out-Null',
+          'winget uninstall --id PortSwigger.BurpSuite.Community --silent 2>$null | Out-Null',
+          '$paths = @("$env:LOCALAPPDATA\\BurpSuitePro","$env:LOCALAPPDATA\\Programs\\BurpSuitePro","$env:ProgramFiles\\BurpSuitePro","$env:LOCALAPPDATA\\BurpSuiteCommunity","$env:LOCALAPPDATA\\Programs\\BurpSuiteCommunity","$env:ProgramFiles\\BurpSuiteCommunity","$env:LOCALAPPDATA\\BurpSuite","$env:APPDATA\\BurpSuite","$env:USERPROFILE\\.BurpSuite","$env:USERPROFILE\\Downloads\\burpsuite_windows-x64_v2026_9_2.exe")',
+          'foreach ($p in $paths) { if (Test-Path $p) { Write-Host "Removendo: $p"; Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue } }',
+          'Write-Host "=== [2/2] Baixando Burp Suite Community Oficial mais recente no Kali WSL2 ==="',
+        ].join("; ")
+        try {
+          spawnSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", psCleanup], {
+            stdio: "ignore",
+            windowsHide: true,
+            timeout: 45000,
+          })
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+
+      return this.launchSlot({
+        slotId: "burp-suite",
+        action: "install_tool",
+        runtimeOverride: process.platform === "win32" && this.wslAvailable ? "wsl" : undefined,
+      })
     }
 
     // 1. Stop Web Daemon / Embedded GUI Canvas
@@ -2022,6 +2086,41 @@ export class ArsenalSlotManager {
         (slot.kind === "desktop_gui" || slot.slotId === "kali-desktop-stream") &&
         !slot.override.customEmbedUrl
       ) {
+        // If Kali XFCE Desktop (startxfce4) or Burp Suite JAR is not yet downloaded, trigger live streaming installer so HTTP never times out!
+        if (slot.slotId === "kali-desktop-stream" && !slot.wslPath && !slot.posixPath) {
+          const inst = await this.launchSlot({
+            slotId: slot.slotId,
+            action: "install_tool",
+            runtimeOverride: process.platform === "win32" ? "wsl" : undefined,
+          })
+          return {
+            ok: true,
+            message:
+              "Baixando o ambiente gráfico XFCE completo do Kali WSL2 (1ª vez — acompanhe o progresso ao vivo no Console abaixo!). Assim que concluir, clique em '▶ Abrir Aqui no Centro'.",
+            run: inst.run,
+            overview: inst.overview,
+          }
+        }
+        if (
+          slot.slotId === "burp-suite" &&
+          !slot.wslPath &&
+          !slot.posixPath &&
+          !this.findPreferredWindowsBurpJar(slot)
+        ) {
+          const inst = await this.launchSlot({
+            slotId: slot.slotId,
+            action: "install_tool",
+            runtimeOverride: process.platform === "win32" && this.wslAvailable ? "wsl" : undefined,
+          })
+          return {
+            ok: true,
+            message:
+              "Baixando o Burp Suite Community Oficial mais recente direto da PortSwigger CDN (acompanhe no Console abaixo!). Ao terminar, clique em '🖥 Abrir Burp Suite Aqui Dentro'.",
+            run: inst.run,
+            overview: inst.overview,
+          }
+        }
+
         const guiCanvas = await this.startEmbeddedGuiCanvas(slot)
         return {
           ok: true,

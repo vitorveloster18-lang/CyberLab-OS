@@ -175,6 +175,15 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
     expect(mitmDef.managedDaemonArgs).toContain("0.0.0.0")
     const burpDef = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === "burp-suite")!
     expect(burpDef.windowsKnownPaths?.some((p) => p.includes("%LOCALAPPDATA%\\BurpSuiteCommunity\\"))).toBe(true)
+    expect(burpDef.windowsBinaries.includes("BurpSuitePro.exe")).toBe(false)
+    expect(burpDef.installKaliWsl).toContain("portswigger-cdn.net/burp/releases/download?product=desktop")
+    expect(burpDef.installKaliWsl).toContain("--i-accept-the-license-agreement")
+    expect(burpDef.installKaliWsl).toContain("unzip -tq /opt/cyberlab-burp/burpsuite.jar")
+
+    const kaliDef = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === "kali-desktop-stream")!
+    expect(kaliDef.posixBinaries).toEqual(["startxfce4"])
+    expect(kaliDef.installKaliWsl).toContain("xfce4-terminal")
+    expect(kaliDef.installKaliWsl).toContain("kali-themes")
 
     await ws.launchArsenalSlot({ slotId: "cyberchef", action: "stop_web" })
   }, 25_000)

@@ -15,7 +15,7 @@ import net from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-const UI_BUILD_STAMP = "cyberlab-unified-v5.4-framing-scroll-mitmweb-caido-burp-xfce"
+const UI_BUILD_STAMP = "cyberlab-unified-v5.5-clean-burp-cdn-kali-xfce-wslg-fix"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const distDir = path.join(repoRoot, "packages", "app", "dist")
