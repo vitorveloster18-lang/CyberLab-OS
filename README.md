@@ -1,4 +1,4 @@
-# CyberLab OS — Real Arsenal Edition (v5.8)
+# CyberLab OS — Real Arsenal Edition (v5.9)
 
 **CyberLab OS** é um ambiente unificado de engenharia de segurança autorizada, Bug Bounty, auditoria Web/API, engenharia reversa, análise de segredos/SAST/SCA, resposta a incidentes (DFIR/Sigma), validação Purple Team (MITRE ATT&CK) e cooperação multi-agentes construído diretamente sobre o núcleo do **OpenCode V2** (`anomalyco/opencode` v2.1.4, licença `MIT`).
 
@@ -109,10 +109,11 @@ Ao clicar no botão **`CyberLab`** no topo de qualquer sessão (ou abrir `/cyber
 1. **Coluna Esquerda Retrátil (`Slots` + `Pastas & Arquivos`)**:
    - Busca instantânea, filtro por categoria, selos de runtime (`Windows`, `WSL2 Kali`, `Web Local`, `Não instalado`), selos **`🔌 MCP` / `🟢 MCP`**, botão **`⚡ Instalar Faltantes em 1 Clique`**, criador de **`+ Slot` personalizado** e explorador de arquivos do workspace (`.`, `.cyberlab/outputs`, `.cyberlab/imports`) com barra de rolagem dedicada sempre preservada.
 2. **Palco Central Expansível (`Ferramenta Ativa`, `Escopo`, `5 Labs`, `4 CDIs`, `Custódia SHA-256`, `Guia`)**:
+   - **Aba Horizontal Superior Retrátil na Vertical (`▲ Recolher Topo` / `▼ Controles & Abas`)**: todas as faixas de abas, status do slot, MCP, Proxy e barra de controles da ferramenta ficam agrupadas em uma gaveta superior retrátil na vertical — recolhendo automaticamente ao abrir ferramentas gráficas/Web em uma fita única de `28px` sem quebrar linha (com acesso rápido a `🟢 MCP`, Proxy, Zoom `1:1`/`Ajustar`/`−/+`, `📋 SHA-256` e `⛶ Ampliar`), liberando altura máxima para a janela da ferramenta sem perder nenhuma configuração.
    - **Nitidez Nativa `110 DPI` e Janela Maximizada**: servidores `Xtigervnc` iniciam em `110 DPI` (`Xft.dpi: 110` + `uiScale` em Java/GTK/Qt) e o Openbox maximiza automaticamente janelas principais (`type="normal"`), mantendo caixas de diálogo centralizadas em tamanho natural.
    - **Zoom Preciso `60%–160%` com `0px` de Deslocamento de Mouse**:
-     - Em vez de aplicar `CSS zoom` no `<canvas>` ou `transform: scale()` no `<iframe>` (o que desalinhava as coordenadas de clique), o CyberLab OS v5.8 integra os controles **`🖥 1:1 Nitidez`**, **`📐 Ajustar`** e **`↕ Rolagem`** diretamente aos hooks internos `_requestRemoteResize` (`ExtendedDesktopSize`) e `Display._scale` (`absX`/`absY`) do `noVNC`, e injeta zoom nativo interno (`document.documentElement.style.zoom`) nas ferramentas Web HTML.
-     - Use **`⛶ Ampliar`** para recolher temporariamente as duas barras laterais e dedicar 100% da largura da tela à ferramenta ativa.
+     - Em vez de aplicar `CSS zoom` no `<canvas>` ou `transform: scale()` no `<iframe>` (o que desalinhava as coordenadas de clique), o CyberLab OS integra os controles **`🖥 1:1 Nitidez`**, **`📐 Ajustar`** e **`↕ Rolagem`** diretamente aos hooks internos `_requestRemoteResize` (`ExtendedDesktopSize`) e `Display._scale` (`absX`/`absY`) do `noVNC`, e injeta zoom nativo interno (`document.documentElement.style.zoom`) nas ferramentas Web HTML.
+     - Use **`⛶ Ampliar`** para recolher simultaneamente as duas barras laterais e a gaveta superior, dedicando quase 100% da tela à ferramenta ativa.
 3. **Coluna Direita Retrátil (`Agente OpenCode V2`)**:
    - Chat completo do OpenCode V2 ao lado da ferramenta ativa; qualquer saída de CLI ou captura manual de GUI pode ser enviada ao Agente em 1 clique (**`🤖 Enviar p/ Agente OpenCode →`**) ou gravada no cofre criptográfico (**`🔒 Salvar SHA-256`**).
 
@@ -263,7 +264,7 @@ Podem ser provisionados, iniciados, auditados, corrigidos (*live patch*) e resta
 
 ---
 
-## 8. Histórico de Evolução (v1.0 → v5.8), Testes, CI e Licenciamento MIT
+## 8. Histórico de Evolução (v1.0 → v5.9), Testes, CI e Licenciamento MIT
 
 ### Resumo das Versões Recentes
 - **v1.0 – v4.0**: Fundação sobre OpenCode V2 (`2.1.4`), governança anti-TOCTOU, cofre `SHA-256`, 4 CDIs autônomos (`8788–8791`), 5 Laboratórios de Treino e ativação dos 9 Modelos Gratuitos do OpenCode Zen.
@@ -271,6 +272,7 @@ Podem ser provisionados, iniciados, auditados, corrigidos (*live patch*) e resta
 - **v5.5 – v5.6**: Integração oficial do **REA (`morluto/rea`)** com MCP para Ghidra/JADX/JS, agentes autônomos externos (`Strix`, `Shannon`, `HexStrike MCP`, `PentAGI`, `PentestGPT/CAI`), forense mobile (`MVT`) e suíte de OpSec/Criptografia (`Tor/OnionShare`, `VeraCrypt`, `Mullvad/GrapheneOS`).
 - **v5.7**: Correção cirúrgica dos instaladores WSL2 (`Strix` standalone, `HexStrike` wheels puros, `PentAGI`, `CAI` via `uv` Python 3.12, `VeraCrypt` `.deb` oficial), validação real `> 10 MB` do `burpsuite.jar` (eliminando falso positivo na barra lateral) e status honesto (`exit 1`) no instalador em lote.
 - **v5.8**: Nitidez nativa `110 DPI` + eliminação total de deslocamento do cursor no zoom (`60%–160%`) via hooks internos `Display._scale` / `ExtendedDesktopSize` do `noVNC` e zoom interno de documento HTML; selos **`🔌 MCP` / `🟢 MCP`** e ponte **`cyberlab/mcp/arsenal-mcp-stdio.ts`** em 1 clique; suporte a TLS autoassinado local para abertura do **`PentAGI (:8443)`**; e assimilação de 5 ferramentas MIT do Kali 2026.1 (**`Betterleaks`**, **`GEF`**, **`Atomic-Operator`**, **`WPProbe`** e **`Pentest Copilot`**), totalizando **46 slots oficiais**.
+- **v5.9**: **Aba Horizontal Superior Retrátil na Vertical (`▲ Recolher Topo` / `▼ Controles & Abas`)** que recolhe todas as faixas de abas, status, MCP, Proxy e barra de controles em uma fita única de `28px` (recolhimento automático ao abrir ferramentas gráficas/Web + sincronização imediata de resolução `noVNC`), além de aumento de timeout e re-tentativa automática no boot frio do WSL2 `kali-linux`.
 
 ### Comandos de Verificação Local e CI (Linux + Windows PowerShell)
 

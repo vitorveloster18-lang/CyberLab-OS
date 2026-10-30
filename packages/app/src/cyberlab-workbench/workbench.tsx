@@ -617,15 +617,35 @@ export function CyberLabCenterStage() {
     }
   }
 
+  const triggerCanvasResizeSync = () => {
+    if (typeof window === "undefined") return
+    window.requestAnimationFrame(() => {
+      const s = wb.activeSlot()
+      if (s) syncCanvasControl(s)
+      window.setTimeout(() => {
+        const s2 = wb.activeSlot()
+        if (s2) syncCanvasControl(s2)
+      }, 110)
+    })
+  }
+
+  const toggleTopDrawer = (next?: boolean) => {
+    wb.toggleTopControls(next)
+    triggerCanvasResizeSync()
+  }
+
   const toggleMaximizeCenter = () => {
-    const bothClosed = !wb.ui.leftSidebarOpen && !wb.ui.rightAgentOpen
-    if (bothClosed) {
+    const allCollapsed = !wb.ui.leftSidebarOpen && !wb.ui.rightAgentOpen && !wb.ui.topControlsOpen
+    if (allCollapsed) {
       wb.toggleLeftSidebar(true)
       wb.toggleRightAgent(true)
+      wb.toggleTopControls(true)
     } else {
       wb.toggleLeftSidebar(false)
       wb.toggleRightAgent(false)
+      wb.toggleTopControls(false)
     }
+    triggerCanvasResizeSync()
   }
 
   const navItems: Array<{ id: CenterViewMode; label: string }> = [
@@ -637,81 +657,340 @@ export function CyberLabCenterStage() {
     { id: "guide", label: "Guia PowerShell + WSL2" },
   ]
 
+  const activeNavLabel = createMemo(
+    () => navItems.find((i) => i.id === wb.ui.centerView)?.label ?? "Ferramenta Ativa",
+  )
+
   return (
     <section
       data-slot="cyberlab-center-stage"
       class="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-v2-background-bg-base select-text overflow-hidden"
     >
-      {/* BARRA SUPERIOR ULTRA-COMPACTA DO PALCO CENTRAL */}
-      <header class="flex flex-wrap items-center justify-between gap-2 border-b border-v2-border-border-base bg-v2-background-bg-deep/75 px-3 py-1.5 shrink-0">
-        <div class="flex items-center gap-1.5 overflow-x-auto">
-          <Show when={!wb.ui.leftSidebarOpen}>
-            <button
-              type="button"
-              class="inline-flex items-center gap-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-base px-2 py-1 text-[11px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
-              onClick={() => wb.toggleLeftSidebar(true)}
-            >
-              <Icon name="chevron-right" class="size-3 text-emerald-500" />
-              <span>Pastas & Slots</span>
-            </button>
-          </Show>
-
-          <For each={navItems}>
-            {(item) => (
+      {/* ABA HORIZONTAL RETRÁTIL NA VERTICAL: quando recolhida, vira uma fita fina de 28px sem quebrar linha */}
+      <Show
+        when={wb.ui.topControlsOpen}
+        fallback={
+          <div
+            data-slot="cyberlab-top-rail-collapsed"
+            class="flex h-[28px] shrink-0 items-center justify-between gap-2 border-b border-v2-border-border-base bg-v2-background-bg-deep/90 px-2 text-[10.5px] select-none overflow-x-auto [scrollbar-width:none]"
+          >
+            <div class="flex items-center gap-1.5 whitespace-nowrap min-w-0">
               <button
                 type="button"
-                class={`rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                  wb.ui.centerView === item.id
-                    ? "bg-emerald-600 text-white"
-                    : "text-v2-text-text-muted hover:bg-v2-background-bg-base hover:text-v2-text-text-strong"
-                }`}
-                onClick={() => wb.setCenterView(item.id)}
+                title="Expandir aba superior com todas as abas, MCP, Proxy, configuração e controles"
+                class="inline-flex items-center gap-1 rounded border border-emerald-600/60 bg-emerald-600/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-600/25 cursor-pointer"
+                onClick={() => toggleTopDrawer(true)}
               >
-                {item.label}
+                <span>▼ Controles & Abas</span>
               </button>
-            )}
-          </For>
-        </div>
 
-        <div class="flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            disabled={wb.ui.probing}
-            title="Re-escanear todas as ferramentas do Windows + WinGet + Kali WSL2"
-            class="inline-flex items-center gap-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-base px-2 py-1 text-[11px] text-v2-text-text-base hover:border-emerald-500 hover:text-emerald-400 cursor-pointer"
-            onClick={() => void wb.refreshArsenalOnly(true)}
-          >
-            <Icon name="refresh" class={`size-3.5 ${wb.ui.probing ? "animate-spin text-emerald-400" : ""}`} />
-            <span>{wb.ui.probing ? "Escaneando..." : "Atualizar Slots"}</span>
-          </button>
+              <Show when={!wb.ui.leftSidebarOpen}>
+                <button
+                  type="button"
+                  title="Expandir coluna esquerda (Slots & Pastas)"
+                  class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-1.5 py-0.5 text-[10px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                  onClick={() => {
+                    wb.toggleLeftSidebar(true)
+                    triggerCanvasResizeSync()
+                  }}
+                >
+                  » Slots
+                </button>
+              </Show>
 
-          <button
-            type="button"
-            title={
-              wb.ui.rightAgentOpen
-                ? "Recolher painel estreito do Agente OpenCode à direita"
-                : "Abrir painel estreito do Agente OpenCode à direita"
-            }
-            class={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-medium cursor-pointer ${
-              wb.ui.rightAgentOpen
-                ? "border-emerald-600/50 bg-emerald-600/15 text-emerald-500"
-                : "border-v2-border-border-base bg-v2-background-bg-base text-v2-text-text-base hover:border-emerald-500"
-            }`}
-            onClick={() => wb.toggleRightAgent()}
-          >
-            <span>{wb.ui.rightAgentOpen ? "Agente IA »" : "« Agente IA"}</span>
-          </button>
+              <Show
+                when={wb.ui.centerView === "tool" && wb.activeSlot()}
+                fallback={
+                  <span class="rounded bg-emerald-600/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                    {activeNavLabel()}
+                  </span>
+                }
+              >
+                {(s) => (
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <span
+                      class={`inline-block size-1.5 rounded-full shrink-0 ${
+                        s().embedUrl || s().installed ? "bg-emerald-500" : "bg-amber-400"
+                      }`}
+                    />
+                    <span class="truncate max-w-[180px] font-semibold text-v2-text-text-strong">
+                      {s().shortLabel}
+                    </span>
 
-          <button
-            type="button"
-            title="Fechar modo Antigravity e voltar ao chat tela cheia"
-            class="inline-flex size-6 items-center justify-center rounded-md border border-v2-border-border-base bg-v2-background-bg-base text-v2-text-text-muted hover:text-v2-text-text-strong cursor-pointer"
-            onClick={() => wb.toggleWorkbench(false)}
-          >
-            <Icon name="close" class="size-3.5" />
-          </button>
-        </div>
-      </header>
+                    <Show when={s().mcpCapable}>
+                      <button
+                        type="button"
+                        disabled={wb.ui.busy}
+                        title={
+                          s().mcpConnected
+                            ? `MCP Ativo (${s().mcpLabel ?? s().shortLabel}) — clique p/ desconectar`
+                            : `Conectar ${s().shortLabel} ao Agente IA via MCP`
+                        }
+                        class={`rounded border px-1.5 py-0 text-[9.5px] font-semibold cursor-pointer ${
+                          s().mcpConnected
+                            ? "border-emerald-500/50 bg-emerald-600/20 text-emerald-300"
+                            : "border-violet-500/40 bg-violet-600/15 text-violet-300"
+                        }`}
+                        onClick={() =>
+                          void wb.launchSlot({
+                            slotId: s().slotId,
+                            action: "run_cli",
+                            rawArgs: "__toggle_mcp__",
+                          })
+                        }
+                      >
+                        {s().mcpConnected ? "🟢 MCP" : "🔌 MCP"}
+                      </button>
+                    </Show>
+
+                    <Show when={s().companionProxyPort}>
+                      {(proxyPort) => (
+                        <button
+                          type="button"
+                          title={`Abrir Navegador Isolado no Proxy :${proxyPort()}`}
+                          class="rounded bg-sky-600/80 px-1.5 py-0 text-[9.5px] font-medium text-white hover:bg-sky-500 cursor-pointer"
+                          onClick={() =>
+                            void wb.launchProxyBrowser({
+                              proxyPort: proxyPort(),
+                              startUrl: "https://example.com",
+                            })
+                          }
+                        >
+                          🌐 :{proxyPort()}
+                        </button>
+                      )}
+                    </Show>
+                  </div>
+                )}
+              </Show>
+            </div>
+
+            <div class="flex items-center gap-1 whitespace-nowrap shrink-0">
+              <Show when={wb.ui.centerView === "tool" && wb.activeSlot()}>
+                {(s) => (
+                  <Show when={s().embedUrl}>
+                    <div class="flex items-center gap-0.5 rounded border border-v2-border-border-base bg-v2-background-bg-base px-1 py-0">
+                      <button
+                        type="button"
+                        title="Nitidez 1:1 nativa sem deslocar cursor"
+                        class={`rounded px-1 text-[9.5px] cursor-pointer ${
+                          getSlotFraming(s()) === "native"
+                            ? "bg-emerald-600 text-white"
+                            : "text-v2-text-text-muted hover:text-v2-text-text-strong"
+                        }`}
+                        onClick={() => syncCanvasControl(s(), "native")}
+                      >
+                        1:1
+                      </button>
+                      <button
+                        type="button"
+                        title="Ajustar tudo na janela"
+                        class={`rounded px-1 text-[9.5px] cursor-pointer ${
+                          getSlotFraming(s()) === "fit"
+                            ? "bg-emerald-600 text-white"
+                            : "text-v2-text-text-muted hover:text-v2-text-text-strong"
+                        }`}
+                        onClick={() => syncCanvasControl(s(), "fit")}
+                      >
+                        Ajustar
+                      </button>
+                      <button
+                        type="button"
+                        title="Rolagem mantendo precisão de mouse"
+                        class={`rounded px-1 text-[9.5px] cursor-pointer ${
+                          getSlotFraming(s()) === "scroll"
+                            ? "bg-emerald-600 text-white"
+                            : "text-v2-text-text-muted hover:text-v2-text-text-strong"
+                        }`}
+                        onClick={() => syncCanvasControl(s(), "scroll")}
+                      >
+                        ↕
+                      </button>
+                      <button
+                        type="button"
+                        title="Diminuir zoom (-10%)"
+                        class="px-1 font-bold text-v2-text-text-base hover:text-emerald-400 cursor-pointer"
+                        onClick={() => {
+                          const cur = getSlotFraming(s())
+                          syncCanvasControl(s(), cur === "fit" ? "native" : cur, Math.max(60, getSlotZoom(s()) - 10))
+                        }}
+                      >
+                        −
+                      </button>
+                      <button
+                        type="button"
+                        title="Restaurar 100%"
+                        class="px-0.5 font-mono text-[9.5px] text-emerald-400 cursor-pointer"
+                        onClick={() => syncCanvasControl(s(), getSlotFraming(s()), 100)}
+                      >
+                        {getSlotZoom(s())}%
+                      </button>
+                      <button
+                        type="button"
+                        title="Aumentar zoom (+10%)"
+                        class="px-1 font-bold text-v2-text-text-base hover:text-emerald-400 cursor-pointer"
+                        onClick={() => {
+                          const cur = getSlotFraming(s())
+                          syncCanvasControl(s(), cur === "fit" ? "native" : cur, Math.min(160, getSlotZoom(s()) + 10))
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    <Show when={s().kind === "desktop_gui"}>
+                      <button
+                        type="button"
+                        title="Gravar evidência em SHA-256 ou enviar trecho p/ Agente IA"
+                        class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-1.5 py-0 text-[9.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                        onClick={() => setShowDesktopIngestDrawer((v) => !v)}
+                      >
+                        📋 SHA-256
+                      </button>
+                    </Show>
+
+                    <button
+                      type="button"
+                      title="Reconectar / recarregar canvas da ferramenta"
+                      class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-1.5 py-0 text-[9.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                      onClick={() => wb.setUi("iframeReloadNonce", (n) => n + 1)}
+                    >
+                      ↻
+                    </button>
+
+                    <button
+                      type="button"
+                      title="Fechar instância gráfica ativa"
+                      class="rounded border border-red-500/40 bg-red-500/10 px-1.5 py-0 text-[9.5px] text-red-400 hover:bg-red-500/20 cursor-pointer"
+                      onClick={() =>
+                        void wb.launchSlot({
+                          slotId: s().slotId,
+                          action: "stop_web",
+                        })
+                      }
+                    >
+                      ⏹
+                    </button>
+                  </Show>
+                )}
+              </Show>
+
+              <button
+                type="button"
+                title="Ampliar ferramenta ocultando/restaurando painéis laterais e topo"
+                class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-1.5 py-0 text-[9.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                onClick={toggleMaximizeCenter}
+              >
+                {!wb.ui.leftSidebarOpen && !wb.ui.rightAgentOpen ? "◫ Painéis" : "⛶ Ampliar"}
+              </button>
+
+              <button
+                type="button"
+                title={wb.ui.rightAgentOpen ? "Recolher Agente IA à direita" : "Abrir Agente IA à direita"}
+                class={`rounded border px-1.5 py-0 text-[9.5px] font-medium cursor-pointer ${
+                  wb.ui.rightAgentOpen
+                    ? "border-emerald-600/50 bg-emerald-600/15 text-emerald-400"
+                    : "border-v2-border-border-base bg-v2-background-bg-base text-v2-text-text-base hover:border-emerald-500"
+                }`}
+                onClick={() => {
+                  wb.toggleRightAgent()
+                  triggerCanvasResizeSync()
+                }}
+              >
+                {wb.ui.rightAgentOpen ? "IA »" : "« IA"}
+              </button>
+            </div>
+          </div>
+        }
+      >
+        <header
+          data-slot="cyberlab-top-drawer"
+          class="flex flex-wrap items-center justify-between gap-2 border-b border-v2-border-border-base bg-v2-background-bg-deep/75 px-3 py-1.5 shrink-0"
+        >
+          <div class="flex items-center gap-1.5 overflow-x-auto">
+            <Show when={!wb.ui.leftSidebarOpen}>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-base px-2 py-1 text-[11px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                onClick={() => {
+                  wb.toggleLeftSidebar(true)
+                  triggerCanvasResizeSync()
+                }}
+              >
+                <Icon name="chevron-right" class="size-3 text-emerald-500" />
+                <span>Pastas & Slots</span>
+              </button>
+            </Show>
+
+            <For each={navItems}>
+              {(item) => (
+                <button
+                  type="button"
+                  class={`rounded-md px-2.5 py-1 text-[11.5px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                    wb.ui.centerView === item.id
+                      ? "bg-emerald-600 text-white"
+                      : "text-v2-text-text-muted hover:bg-v2-background-bg-base hover:text-v2-text-text-strong"
+                  }`}
+                  onClick={() => wb.setCenterView(item.id)}
+                >
+                  {item.label}
+                </button>
+              )}
+            </For>
+          </div>
+
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              title="Recolher todas as barras superiores na vertical para liberar espaço máximo para a ferramenta"
+              class="inline-flex items-center gap-1 rounded-md border border-emerald-600/50 bg-emerald-600/15 px-2 py-1 text-[11px] font-semibold text-emerald-400 hover:bg-emerald-600/25 cursor-pointer"
+              onClick={() => toggleTopDrawer(false)}
+            >
+              <span>▲ Recolher Topo</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={wb.ui.probing}
+              title="Re-escanear todas as ferramentas do Windows + WinGet + Kali WSL2"
+              class="inline-flex items-center gap-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-base px-2 py-1 text-[11px] text-v2-text-text-base hover:border-emerald-500 hover:text-emerald-400 cursor-pointer"
+              onClick={() => void wb.refreshArsenalOnly(true)}
+            >
+              <Icon name="refresh" class={`size-3.5 ${wb.ui.probing ? "animate-spin text-emerald-400" : ""}`} />
+              <span>{wb.ui.probing ? "Escaneando..." : "Atualizar Slots"}</span>
+            </button>
+
+            <button
+              type="button"
+              title={
+                wb.ui.rightAgentOpen
+                  ? "Recolher painel estreito do Agente OpenCode à direita"
+                  : "Abrir painel estreito do Agente OpenCode à direita"
+              }
+              class={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-medium cursor-pointer ${
+                wb.ui.rightAgentOpen
+                  ? "border-emerald-600/50 bg-emerald-600/15 text-emerald-500"
+                  : "border-v2-border-border-base bg-v2-background-bg-base text-v2-text-text-base hover:border-emerald-500"
+              }`}
+              onClick={() => {
+                wb.toggleRightAgent()
+                triggerCanvasResizeSync()
+              }}
+            >
+              <span>{wb.ui.rightAgentOpen ? "Agente IA »" : "« Agente IA"}</span>
+            </button>
+
+            <button
+              type="button"
+              title="Fechar modo Antigravity e voltar ao chat tela cheia"
+              class="inline-flex size-6 items-center justify-center rounded-md border border-v2-border-border-base bg-v2-background-bg-base text-v2-text-text-muted hover:text-v2-text-text-strong cursor-pointer"
+              onClick={() => wb.toggleWorkbench(false)}
+            >
+              <Icon name="close" class="size-3.5" />
+            </button>
+          </div>
+        </header>
+      </Show>
 
       {/* Banner discreto de feedback */}
       <Show when={wb.ui.notice || wb.ui.error}>
@@ -789,103 +1068,104 @@ export function CyberLabCenterStage() {
       <Show when={wb.ui.centerView === "tool" && wb.activeSlot()}>
         {(slot) => (
           <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {/* Sub-barra da ferramenta ativa */}
-            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-v2-border-border-base bg-v2-background-bg-deep/40 px-3 py-2 shrink-0">
-              <div class="flex items-center gap-2 min-w-0">
-                <span class="rounded bg-emerald-600/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-500">
-                  {kindBadgeLabel(slot().kind)}
-                </span>
-                <h2 class="truncate text-[13.5px] font-semibold text-v2-text-text-strong">
-                  {slot().name}
-                </h2>
-                <span
-                  class={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                    slot().installed
-                      ? "bg-emerald-600/20 text-emerald-400"
-                      : "bg-amber-500/20 text-amber-400"
-                  }`}
-                >
-                  {slot().installed
-                    ? `Pronto (${runtimeBadgeLabel(slot().activeRuntime)})`
-                    : "Aguardando instalação externa"}
-                </span>
-              </div>
-
-              <div class="flex flex-wrap items-center gap-1.5">
-                <Show when={slot().mcpCapable}>
-                  <button
-                    type="button"
-                    disabled={wb.ui.busy}
-                    title={
-                      slot().mcpConnected
-                        ? `Servidor MCP "${slot().mcpLabel ?? slot().shortLabel}" ativo no opencode.json — clique p/ desconectar`
-                        : `Conectar "${slot().mcpLabel ?? slot().shortLabel}" via MCP diretamente ao Agente OpenCode`
-                    }
-                    class={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold cursor-pointer transition-colors ${
-                      slot().mcpConnected
-                        ? "border-emerald-500/60 bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30"
-                        : "border-violet-500/50 bg-violet-600/20 text-violet-200 hover:bg-violet-600/35"
+            {/* Sub-barra da ferramenta ativa + painel de configuração (recolhem junto com a aba vertical superior!) */}
+            <Show when={wb.ui.topControlsOpen}>
+              <div class="flex flex-wrap items-center justify-between gap-2 border-b border-v2-border-border-base bg-v2-background-bg-deep/40 px-3 py-2 shrink-0">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="rounded bg-emerald-600/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-500">
+                    {kindBadgeLabel(slot().kind)}
+                  </span>
+                  <h2 class="truncate text-[13.5px] font-semibold text-v2-text-text-strong">
+                    {slot().name}
+                  </h2>
+                  <span
+                    class={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      slot().installed
+                        ? "bg-emerald-600/20 text-emerald-400"
+                        : "bg-amber-500/20 text-amber-400"
                     }`}
-                    onClick={() =>
-                      void wb.launchSlot({
-                        slotId: slot().slotId,
-                        action: "run_cli",
-                        rawArgs: "__toggle_mcp__",
-                      })
-                    }
                   >
-                    <span>
-                      {slot().mcpConnected
-                        ? `🟢 MCP Ativo (${slot().mcpLabel ?? "OpenCode"})`
-                        : `🔌 Conectar MCP`}
-                    </span>
-                  </button>
-                </Show>
+                    {slot().installed
+                      ? `Pronto (${runtimeBadgeLabel(slot().activeRuntime)})`
+                      : "Aguardando instalação externa"}
+                  </span>
+                </div>
 
-                <Show when={slot().companionProxyPort}>
-                  {(proxyPort) => (
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <Show when={slot().mcpCapable}>
                     <button
                       type="button"
-                      class="inline-flex items-center gap-1 rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-sky-500 cursor-pointer"
+                      disabled={wb.ui.busy}
+                      title={
+                        slot().mcpConnected
+                          ? `Servidor MCP "${slot().mcpLabel ?? slot().shortLabel}" ativo no opencode.json — clique p/ desconectar`
+                          : `Conectar "${slot().mcpLabel ?? slot().shortLabel}" via MCP diretamente ao Agente OpenCode`
+                      }
+                      class={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold cursor-pointer transition-colors ${
+                        slot().mcpConnected
+                          ? "border-emerald-500/60 bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30"
+                          : "border-violet-500/50 bg-violet-600/20 text-violet-200 hover:bg-violet-600/35"
+                      }`}
                       onClick={() =>
-                        void wb.launchProxyBrowser({
-                          proxyPort: proxyPort(),
-                          startUrl: "https://example.com",
+                        void wb.launchSlot({
+                          slotId: slot().slotId,
+                          action: "run_cli",
+                          rawArgs: "__toggle_mcp__",
                         })
                       }
                     >
-                      <span>🌐 Navegador Proxy (:{proxyPort()})</span>
+                      <span>
+                        {slot().mcpConnected
+                          ? `🟢 MCP Ativo (${slot().mcpLabel ?? "OpenCode"})`
+                          : `🔌 Conectar MCP`}
+                      </span>
                     </button>
-                  )}
-                </Show>
+                  </Show>
 
-                <button
-                  type="button"
-                  class="rounded-md border border-v2-border-border-base bg-v2-background-bg-base px-2.5 py-1 text-[11px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
-                  onClick={() => {
-                    setCustomPathInput(slot().override.customExecutablePath ?? slot().resolvedPath ?? "")
-                    setCustomUrlInput(slot().override.customEmbedUrl ?? slot().embedUrl ?? "")
-                    setToolsRootInput(wb.backend.arsenal?.environment.toolsRootDir ?? "C:\\CyberLab-Tools")
-                    setShowSlotSettings((v) => !v)
-                  }}
-                >
-                  ⚙ Configurar / Instalar
-                </button>
+                  <Show when={slot().companionProxyPort}>
+                    {(proxyPort) => (
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1 rounded-md bg-sky-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-sky-500 cursor-pointer"
+                        onClick={() =>
+                          void wb.launchProxyBrowser({
+                            proxyPort: proxyPort(),
+                            startUrl: "https://example.com",
+                          })
+                        }
+                      >
+                        <span>🌐 Navegador Proxy (:{proxyPort()})</span>
+                      </button>
+                    )}
+                  </Show>
 
-                <Show when={slot().isCustom}>
                   <button
                     type="button"
-                    class="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-[11px] text-red-400 hover:bg-red-500/20 cursor-pointer"
-                    onClick={() => void wb.removeCustomSlot(slot().slotId)}
+                    class="rounded-md border border-v2-border-border-base bg-v2-background-bg-base px-2.5 py-1 text-[11px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                    onClick={() => {
+                      setCustomPathInput(slot().override.customExecutablePath ?? slot().resolvedPath ?? "")
+                      setCustomUrlInput(slot().override.customEmbedUrl ?? slot().embedUrl ?? "")
+                      setToolsRootInput(wb.backend.arsenal?.environment.toolsRootDir ?? "C:\\CyberLab-Tools")
+                      setShowSlotSettings((v) => !v)
+                    }}
                   >
-                    Remover Slot
+                    ⚙ Configurar / Instalar
                   </button>
-                </Show>
-              </div>
-            </div>
 
-            {/* Painel retrátil de Configuração / Instalação Rápida (PowerShell + WSL2 Kali) */}
-            <Show when={showSlotSettings() || !slot().installed}>
+                  <Show when={slot().isCustom}>
+                    <button
+                      type="button"
+                      class="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-[11px] text-red-400 hover:bg-red-500/20 cursor-pointer"
+                      onClick={() => void wb.removeCustomSlot(slot().slotId)}
+                    >
+                      Remover Slot
+                    </button>
+                  </Show>
+                </div>
+              </div>
+
+              {/* Painel retrátil de Configuração / Instalação Rápida (PowerShell + WSL2 Kali) */}
+              <Show when={showSlotSettings() || !slot().installed}>
               <div class="border-b border-v2-border-border-base bg-v2-background-bg-deep/65 px-3.5 py-2.5 text-[11.5px] shrink-0">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                   <div class="min-w-0 flex-1 space-y-2">
@@ -988,142 +1268,153 @@ export function CyberLabCenterStage() {
                   </div>
                 </div>
               </div>
+              </Show>
             </Show>
 
             {/* MODO A: WEB TOOL EMBUTIDA EM TELA CHEIA NO CENTRO (CyberChef, mitmweb, Caido, Kali Desktop Web) */}
             <Show when={slot().kind === "web_embed"}>
               <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-v2-border-border-base bg-v2-background-bg-base px-3 py-1.5 text-[11px] shrink-0">
-                  <div class="flex flex-wrap items-center gap-1.5 min-w-0">
-                    <button
-                      type="button"
-                      disabled={wb.ui.busy}
-                      class="rounded bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-500 cursor-pointer disabled:opacity-50"
-                      onClick={() =>
-                        void wb.launchSlot({ slotId: slot().slotId, action: "start_web" })
-                      }
-                    >
-                      {wb.ui.busy ? "⏳ Iniciando..." : "▶ Abrir Aqui no Centro"}
-                    </button>
-                    <Show when={slot().daemonRunning}>
+                <Show when={wb.ui.topControlsOpen}>
+                  <div class="flex flex-wrap items-center justify-between gap-2 border-b border-v2-border-border-base bg-v2-background-bg-base px-3 py-1.5 text-[11px] shrink-0">
+                    <div class="flex flex-wrap items-center gap-1.5 min-w-0">
                       <button
                         type="button"
-                        class="rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-[11px] text-red-400 hover:bg-red-500/20 cursor-pointer"
+                        disabled={wb.ui.busy}
+                        class="rounded bg-emerald-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-emerald-500 cursor-pointer disabled:opacity-50"
                         onClick={() =>
-                          void wb.launchSlot({ slotId: slot().slotId, action: "stop_web" })
+                          void wb.launchSlot({ slotId: slot().slotId, action: "start_web" })
                         }
                       >
-                        ⏹ Parar
+                        {wb.ui.busy ? "⏳ Iniciando..." : "▶ Abrir Aqui no Centro"}
                       </button>
-                    </Show>
-
-                    {/* Controles de Dimensionamento Preciso (Sem Deslocamento de Cursor!) e Rolagem */}
-                    <div class="flex items-center gap-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-1.5 py-0.5">
-                      <Show when={slot().slotId === "kali-desktop-stream"}>
+                      <Show when={slot().daemonRunning}>
                         <button
                           type="button"
-                          title="Nitidez 1:1 nativa com redimensionamento dinâmico X11 e clique exato"
+                          class="rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-[11px] text-red-400 hover:bg-red-500/20 cursor-pointer"
+                          onClick={() =>
+                            void wb.launchSlot({ slotId: slot().slotId, action: "stop_web" })
+                          }
+                        >
+                          ⏹ Parar
+                        </button>
+                      </Show>
+
+                      {/* Controles de Dimensionamento Preciso (Sem Deslocamento de Cursor!) e Rolagem */}
+                      <div class="flex items-center gap-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-1.5 py-0.5">
+                        <Show when={slot().slotId === "kali-desktop-stream"}>
+                          <button
+                            type="button"
+                            title="Nitidez 1:1 nativa com redimensionamento dinâmico X11 e clique exato"
+                            class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
+                              getSlotFraming(slot()) === "native"
+                                ? "bg-emerald-600 text-white"
+                                : "text-v2-text-text-muted hover:text-v2-text-text-strong"
+                            }`}
+                            onClick={() => syncCanvasControl(slot(), "native")}
+                          >
+                            🖥 1:1 Nitidez
+                          </button>
+                        </Show>
+                        <button
+                          type="button"
+                          title="Enquadrar na tela sem cortar"
                           class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
-                            getSlotFraming(slot()) === "native"
+                            getSlotFraming(slot()) === "fit"
                               ? "bg-emerald-600 text-white"
                               : "text-v2-text-text-muted hover:text-v2-text-text-strong"
                           }`}
-                          onClick={() => syncCanvasControl(slot(), "native")}
+                          onClick={() => syncCanvasControl(slot(), "fit")}
                         >
-                          🖥 1:1 Nitidez
+                          📐 Ajustar
                         </button>
+                        <button
+                          type="button"
+                          title="Ativar barra de rolagem vertical com precisão 1:1 do mouse"
+                          class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
+                            getSlotFraming(slot()) === "scroll"
+                              ? "bg-emerald-600 text-white"
+                              : "text-v2-text-text-muted hover:text-v2-text-text-strong"
+                          }`}
+                          onClick={() => syncCanvasControl(slot(), "scroll")}
+                        >
+                          ↕ Rolagem
+                        </button>
+                        <button
+                          type="button"
+                          title="Diminuir escala (-10% com precisão exata de clique)"
+                          class="rounded px-1.5 py-0.5 text-[10.5px] font-bold text-v2-text-text-base hover:bg-v2-background-bg-base cursor-pointer"
+                          onClick={() => {
+                            const curMode = getSlotFraming(slot())
+                            const targetMode = curMode === "fit" ? "native" : curMode
+                            const next = Math.max(60, getSlotZoom(slot()) - 10)
+                            syncCanvasControl(slot(), targetMode, next)
+                          }}
+                        >
+                          −
+                        </button>
+                        <button
+                          type="button"
+                          title="Restaurar zoom 100%"
+                          class="rounded px-1 py-0.5 font-mono text-[10px] text-emerald-400 hover:bg-v2-background-bg-base cursor-pointer"
+                          onClick={() => syncCanvasControl(slot(), getSlotFraming(slot()), 100)}
+                        >
+                          {getSlotZoom(slot())}%
+                        </button>
+                        <button
+                          type="button"
+                          title="Aumentar escala (+10% com precisão exata de clique)"
+                          class="rounded px-1.5 py-0.5 text-[10.5px] font-bold text-v2-text-text-base hover:bg-v2-background-bg-base cursor-pointer"
+                          onClick={() => {
+                            const curMode = getSlotFraming(slot())
+                            const targetMode = curMode === "fit" ? "native" : curMode
+                            const next = Math.min(160, getSlotZoom(slot()) + 10)
+                            syncCanvasControl(slot(), targetMode, next)
+                          }}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        title="Recolher todas as barras superiores na vertical"
+                        class="rounded border border-emerald-600/50 bg-emerald-600/15 px-2 py-1 text-[10.5px] font-medium text-emerald-400 hover:bg-emerald-600/25 cursor-pointer"
+                        onClick={() => toggleTopDrawer(false)}
+                      >
+                        ▲ Recolher Topo
+                      </button>
+                      <button
+                        type="button"
+                        title="Recolher/restaurar barras laterais e topo para ampliar o espaço central"
+                        class="rounded border border-v2-border-border-base px-2 py-1 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                        onClick={toggleMaximizeCenter}
+                      >
+                        {!wb.ui.leftSidebarOpen && !wb.ui.rightAgentOpen ? "◫ Painéis" : "⛶ Ampliar"}
+                      </button>
+                      <button
+                        type="button"
+                        class="rounded border border-v2-border-border-base px-2 py-1 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                        onClick={() => wb.setUi("iframeReloadNonce", (n) => n + 1)}
+                      >
+                        ↻ Recarregar
+                      </button>
+                      <Show when={slot().embedUrl}>
+                        {(url) => (
+                          <a
+                            href={url()}
+                            target="_blank"
+                            rel="noreferrer"
+                            class="rounded border border-v2-border-border-base px-2 py-1 text-[10.5px] text-emerald-500 hover:border-emerald-500"
+                          >
+                            ↗ Nova Aba
+                          </a>
+                        )}
                       </Show>
-                      <button
-                        type="button"
-                        title="Enquadrar na tela sem cortar"
-                        class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
-                          getSlotFraming(slot()) === "fit"
-                            ? "bg-emerald-600 text-white"
-                            : "text-v2-text-text-muted hover:text-v2-text-text-strong"
-                        }`}
-                        onClick={() => syncCanvasControl(slot(), "fit")}
-                      >
-                        📐 Ajustar
-                      </button>
-                      <button
-                        type="button"
-                        title="Ativar barra de rolagem vertical com precisão 1:1 do mouse"
-                        class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
-                          getSlotFraming(slot()) === "scroll"
-                            ? "bg-emerald-600 text-white"
-                            : "text-v2-text-text-muted hover:text-v2-text-text-strong"
-                        }`}
-                        onClick={() => syncCanvasControl(slot(), "scroll")}
-                      >
-                        ↕ Rolagem
-                      </button>
-                      <button
-                        type="button"
-                        title="Diminuir escala (-10% com precisão exata de clique)"
-                        class="rounded px-1.5 py-0.5 text-[10.5px] font-bold text-v2-text-text-base hover:bg-v2-background-bg-base cursor-pointer"
-                        onClick={() => {
-                          const curMode = getSlotFraming(slot())
-                          const targetMode = curMode === "fit" ? "native" : curMode
-                          const next = Math.max(60, getSlotZoom(slot()) - 10)
-                          syncCanvasControl(slot(), targetMode, next)
-                        }}
-                      >
-                        −
-                      </button>
-                      <button
-                        type="button"
-                        title="Restaurar zoom 100%"
-                        class="rounded px-1 py-0.5 font-mono text-[10px] text-emerald-400 hover:bg-v2-background-bg-base cursor-pointer"
-                        onClick={() => syncCanvasControl(slot(), getSlotFraming(slot()), 100)}
-                      >
-                        {getSlotZoom(slot())}%
-                      </button>
-                      <button
-                        type="button"
-                        title="Aumentar escala (+10% com precisão exata de clique)"
-                        class="rounded px-1.5 py-0.5 text-[10.5px] font-bold text-v2-text-text-base hover:bg-v2-background-bg-base cursor-pointer"
-                        onClick={() => {
-                          const curMode = getSlotFraming(slot())
-                          const targetMode = curMode === "fit" ? "native" : curMode
-                          const next = Math.min(160, getSlotZoom(slot()) + 10)
-                          syncCanvasControl(slot(), targetMode, next)
-                        }}
-                      >
-                        +
-                      </button>
                     </div>
                   </div>
-
-                  <div class="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      title="Recolher/restaurar barras laterais para ampliar o espaço central"
-                      class="rounded border border-v2-border-border-base px-2 py-1 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
-                      onClick={toggleMaximizeCenter}
-                    >
-                      {!wb.ui.leftSidebarOpen && !wb.ui.rightAgentOpen ? "◫ Painéis" : "⛶ Ampliar"}
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded border border-v2-border-border-base px-2 py-1 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
-                      onClick={() => wb.setUi("iframeReloadNonce", (n) => n + 1)}
-                    >
-                      ↻ Recarregar
-                    </button>
-                    <Show when={slot().embedUrl}>
-                      {(url) => (
-                        <a
-                          href={url()}
-                          target="_blank"
-                          rel="noreferrer"
-                          class="rounded border border-v2-border-border-base px-2 py-1 text-[10.5px] text-emerald-500 hover:border-emerald-500"
-                        >
-                          ↗ Nova Aba
-                        </a>
-                      )}
-                    </Show>
-                  </div>
-                </div>
+                </Show>
 
                 <Show
                   when={slot().embedUrl}
@@ -1134,8 +1425,18 @@ export function CyberLabCenterStage() {
                           {slot().name} pronto para abrir no palco central
                         </div>
                         <p class="max-w-lg text-[12px] text-v2-text-text-muted">
-                          Clique em <strong>"▶ Abrir Aqui no Centro"</strong> acima para iniciar a interface real com ajuste de escala (Zoom) e barra de rolagem vertical.
+                          Clique no botão abaixo para iniciar a interface real no palco central (o topo recolherá automaticamente para maximizar a janela da ferramenta).
                         </p>
+                        <button
+                          type="button"
+                          disabled={wb.ui.busy}
+                          class="mt-1 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-emerald-500 cursor-pointer disabled:opacity-50"
+                          onClick={() =>
+                            void wb.launchSlot({ slotId: slot().slotId, action: "start_web" })
+                          }
+                        >
+                          <span>{wb.ui.busy ? "⏳ Iniciando..." : `▶ Abrir ${slot().shortLabel} Aqui no Centro`}</span>
+                        </button>
                       </div>
                       <Show when={wb.selectedRunForActiveSlot()}>
                         {(run) => (
@@ -1185,75 +1486,85 @@ export function CyberLabCenterStage() {
             {/* MODO B: CLI RUNNER AO VIVO (Nuclei, ffuf, Katana, httpx, Dalfox, sqlmap, Nmap, KeyHunter, Semgrep, Trivy...) */}
             <Show when={slot().kind === "cli_runner"}>
               <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-                {/* Barra de presets + Target + Argumentos + Executar */}
-                <div class="flex flex-col gap-2 border-b border-v2-border-border-base bg-v2-background-bg-base p-3 shrink-0">
-                  <Show when={slot().presets.length > 0}>
-                    <div class="flex flex-wrap items-center gap-1.5">
-                      <span class="text-[10.5px] font-medium text-v2-text-text-muted">Presets rápidos:</span>
-                      <For each={slot().presets}>
-                        {(preset) => (
-                          <button
-                            type="button"
-                            title={preset.description}
-                            class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 hover:text-emerald-400 cursor-pointer"
-                            onClick={() => wb.setUi("cliArgsBySlot", slot().slotId, preset.argsTemplate)}
-                          >
-                            {preset.label}
-                          </button>
-                        )}
-                      </For>
-                    </div>
-                  </Show>
+                {/* Barra de presets + Target + Argumentos + Executar (recolhe junto com a aba vertical superior!) */}
+                <Show when={wb.ui.topControlsOpen}>
+                  <div class="flex flex-col gap-2 border-b border-v2-border-border-base bg-v2-background-bg-base p-3 shrink-0">
+                    <Show when={slot().presets.length > 0}>
+                      <div class="flex flex-wrap items-center gap-1.5">
+                        <span class="text-[10.5px] font-medium text-v2-text-text-muted">Presets rápidos:</span>
+                        <For each={slot().presets}>
+                          {(preset) => (
+                            <button
+                              type="button"
+                              title={preset.description}
+                              class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 hover:text-emerald-400 cursor-pointer"
+                              onClick={() => wb.setUi("cliArgsBySlot", slot().slotId, preset.argsTemplate)}
+                            >
+                              {preset.label}
+                            </button>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
 
-                  <div class="flex flex-wrap items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="Alvo {target} (URL em escopo, IP/domínio ou caminho de arquivo do workspace)"
-                      value={wb.ui.cliTargetBySlot[slot().slotId] ?? ""}
-                      class="min-w-[220px] flex-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-2.5 py-1.5 font-mono text-[11.5px] text-v2-text-text-strong outline-none focus:border-emerald-500"
-                      onInput={(e) => wb.setUi("cliTargetBySlot", slot().slotId, e.currentTarget.value)}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Argumentos da ferramenta real (usa {target} e {workspace})"
-                      value={wb.ui.cliArgsBySlot[slot().slotId] ?? ""}
-                      class="min-w-[260px] flex-[1.4] rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-2.5 py-1.5 font-mono text-[11.5px] text-v2-text-text-strong outline-none focus:border-emerald-500"
-                      onInput={(e) => wb.setUi("cliArgsBySlot", slot().slotId, e.currentTarget.value)}
-                    />
-                    <select
-                      value={wb.ui.cliRuntimeBySlot[slot().slotId] ?? "auto"}
-                      class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-2 py-1.5 text-[11px] text-v2-text-text-strong"
-                      onChange={(e) =>
-                        wb.setUi(
-                          "cliRuntimeBySlot",
-                          slot().slotId,
-                          e.currentTarget.value as "auto" | "windows" | "wsl" | "linux_mac",
-                        )
-                      }
-                    >
-                      <option value="auto">Auto (Win / WSL2)</option>
-                      <option value="windows">Windows PowerShell</option>
-                      <option value="wsl">WSL2 Kali Linux</option>
-                    </select>
-                    <button
-                      type="button"
-                      disabled={wb.ui.busy}
-                      class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3.5 py-1.5 text-[12px] font-semibold text-white hover:bg-emerald-500 disabled:opacity-50 cursor-pointer"
-                      onClick={() => {
-                        const rt = wb.ui.cliRuntimeBySlot[slot().slotId]
-                        void wb.launchSlot({
-                          slotId: slot().slotId,
-                          action: "run_cli",
-                          target: wb.ui.cliTargetBySlot[slot().slotId] ?? "",
-                          rawArgs: wb.ui.cliArgsBySlot[slot().slotId] ?? "",
-                          ...(rt && rt !== "auto" ? { runtimeOverride: rt } : {}),
-                        })
-                      }}
-                    >
-                      <span>▶ Executar Ferramenta Real</span>
-                    </button>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Alvo {target} (URL em escopo, IP/domínio ou caminho de arquivo do workspace)"
+                        value={wb.ui.cliTargetBySlot[slot().slotId] ?? ""}
+                        class="min-w-[220px] flex-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-2.5 py-1.5 font-mono text-[11.5px] text-v2-text-text-strong outline-none focus:border-emerald-500"
+                        onInput={(e) => wb.setUi("cliTargetBySlot", slot().slotId, e.currentTarget.value)}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Argumentos da ferramenta real (usa {target} e {workspace})"
+                        value={wb.ui.cliArgsBySlot[slot().slotId] ?? ""}
+                        class="min-w-[260px] flex-[1.4] rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-2.5 py-1.5 font-mono text-[11.5px] text-v2-text-text-strong outline-none focus:border-emerald-500"
+                        onInput={(e) => wb.setUi("cliArgsBySlot", slot().slotId, e.currentTarget.value)}
+                      />
+                      <select
+                        value={wb.ui.cliRuntimeBySlot[slot().slotId] ?? "auto"}
+                        class="rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-2 py-1.5 text-[11px] text-v2-text-text-strong"
+                        onChange={(e) =>
+                          wb.setUi(
+                            "cliRuntimeBySlot",
+                            slot().slotId,
+                            e.currentTarget.value as "auto" | "windows" | "wsl" | "linux_mac",
+                          )
+                        }
+                      >
+                        <option value="auto">Auto (Win / WSL2)</option>
+                        <option value="windows">Windows PowerShell</option>
+                        <option value="wsl">WSL2 Kali Linux</option>
+                      </select>
+                      <button
+                        type="button"
+                        disabled={wb.ui.busy}
+                        class="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3.5 py-1.5 text-[12px] font-semibold text-white hover:bg-emerald-500 disabled:opacity-50 cursor-pointer"
+                        onClick={() => {
+                          const rt = wb.ui.cliRuntimeBySlot[slot().slotId]
+                          void wb.launchSlot({
+                            slotId: slot().slotId,
+                            action: "run_cli",
+                            target: wb.ui.cliTargetBySlot[slot().slotId] ?? "",
+                            rawArgs: wb.ui.cliArgsBySlot[slot().slotId] ?? "",
+                            ...(rt && rt !== "auto" ? { runtimeOverride: rt } : {}),
+                          })
+                        }}
+                      >
+                        <span>▶ Executar Ferramenta Real</span>
+                      </button>
+                      <button
+                        type="button"
+                        title="Recolher barras superiores na vertical para ampliar o terminal"
+                        class="rounded-md border border-emerald-600/50 bg-emerald-600/15 px-2.5 py-1.5 text-[11px] font-medium text-emerald-400 hover:bg-emerald-600/25 cursor-pointer"
+                        onClick={() => toggleTopDrawer(false)}
+                      >
+                        ▲ Recolher Topo
+                      </button>
+                    </div>
                   </div>
-                </div>
+                </Show>
 
                 {/* Console de Saída em Tempo Real ocupando todo o centro */}
                 <div class="flex min-h-0 flex-1 flex-col bg-zinc-950 text-zinc-100">
@@ -1551,150 +1862,160 @@ export function CyberLabCenterStage() {
               >
                 {(url) => (
                   <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-v2-border-border-base bg-v2-background-bg-base px-3 py-1 text-[11px] shrink-0">
-                      <div class="flex flex-wrap items-center gap-2 min-w-0">
-                        <span class="inline-block size-2 rounded-full bg-emerald-500" />
-                        <span class="font-medium text-emerald-400">
-                          {slot().shortLabel}
-                        </span>
+                    <Show when={wb.ui.topControlsOpen}>
+                      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-v2-border-border-base bg-v2-background-bg-base px-3 py-1 text-[11px] shrink-0">
+                        <div class="flex flex-wrap items-center gap-2 min-w-0">
+                          <span class="inline-block size-2 rounded-full bg-emerald-500" />
+                          <span class="font-medium text-emerald-400">
+                            {slot().shortLabel}
+                          </span>
 
-                        {/* Controles Ao Vivo de Nitidez 1:1 + Enquadramento + Rolagem + Zoom Sem Deslocar o Cursor */}
-                        <div class="flex items-center gap-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-1.5 py-0.5">
+                          {/* Controles Ao Vivo de Nitidez 1:1 + Enquadramento + Rolagem + Zoom Sem Deslocar o Cursor */}
+                          <div class="flex items-center gap-1 rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-1.5 py-0.5">
+                            <button
+                              type="button"
+                              title="Resolução X11 nativa 1:1 com zoom sem deslocamento de mouse (padrão recomendado)"
+                              class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
+                                getSlotFraming(slot()) === "native"
+                                  ? "bg-emerald-600 text-white"
+                                  : "text-v2-text-text-muted hover:text-v2-text-text-strong"
+                              }`}
+                              onClick={() => syncCanvasControl(slot(), "native")}
+                            >
+                              🖥 1:1 Nitidez
+                            </button>
+                            <button
+                              type="button"
+                              title="Enquadrar janela inteira na área central"
+                              class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
+                                getSlotFraming(slot()) === "fit"
+                                  ? "bg-emerald-600 text-white"
+                                  : "text-v2-text-text-muted hover:text-v2-text-text-strong"
+                              }`}
+                              onClick={() => syncCanvasControl(slot(), "fit")}
+                            >
+                              📐 Ajustar
+                            </button>
+                            <button
+                              type="button"
+                              title="Ativar barras de rolagem mantendo 100% de precisão do clique em qualquer zoom"
+                              class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
+                                getSlotFraming(slot()) === "scroll"
+                                  ? "bg-emerald-600 text-white"
+                                  : "text-v2-text-text-muted hover:text-v2-text-text-strong"
+                              }`}
+                              onClick={() => syncCanvasControl(slot(), "scroll")}
+                            >
+                              ↕ Rolagem
+                            </button>
+                            <button
+                              type="button"
+                              title="Diminuir escala (-10% mantendo precisão exata do mouse)"
+                              class="rounded px-1.5 py-0.5 text-[10.5px] font-bold text-v2-text-text-base hover:bg-v2-background-bg-base cursor-pointer"
+                              onClick={() => {
+                                const curMode = getSlotFraming(slot())
+                                const targetMode = curMode === "fit" ? "native" : curMode
+                                const next = Math.max(60, getSlotZoom(slot()) - 10)
+                                syncCanvasControl(slot(), targetMode, next)
+                              }}
+                            >
+                              −
+                            </button>
+                            <button
+                              type="button"
+                              title="Restaurar zoom 100%"
+                              class="rounded px-1 py-0.5 font-mono text-[10px] text-emerald-400 hover:bg-v2-background-bg-base cursor-pointer"
+                              onClick={() => syncCanvasControl(slot(), getSlotFraming(slot()), 100)}
+                            >
+                              {getSlotZoom(slot())}%
+                            </button>
+                            <button
+                              type="button"
+                              title="Aumentar escala (+10% mantendo precisão exata do mouse)"
+                              class="rounded px-1.5 py-0.5 text-[10.5px] font-bold text-v2-text-text-base hover:bg-v2-background-bg-base cursor-pointer"
+                              onClick={() => {
+                                const curMode = getSlotFraming(slot())
+                                const targetMode = curMode === "fit" ? "native" : curMode
+                                const next = Math.min(160, getSlotZoom(slot()) + 10)
+                                syncCanvasControl(slot(), targetMode, next)
+                              }}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-1.5">
                           <button
                             type="button"
-                            title="Resolução X11 nativa 1:1 com zoom sem deslocamento de mouse (padrão recomendado)"
-                            class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
-                              getSlotFraming(slot()) === "native"
-                                ? "bg-emerald-600 text-white"
-                                : "text-v2-text-text-muted hover:text-v2-text-text-strong"
-                            }`}
-                            onClick={() => syncCanvasControl(slot(), "native")}
+                            title="Recolher todas as barras superiores na vertical para maximizar a altura da ferramenta"
+                            class="rounded border border-emerald-600/50 bg-emerald-600/15 px-2 py-0.5 text-[10.5px] font-medium text-emerald-400 hover:bg-emerald-600/25 cursor-pointer"
+                            onClick={() => toggleTopDrawer(false)}
                           >
-                            🖥 1:1 Nitidez
+                            ▲ Recolher Topo
                           </button>
                           <button
                             type="button"
-                            title="Enquadrar janela inteira na área central"
-                            class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
-                              getSlotFraming(slot()) === "fit"
-                                ? "bg-emerald-600 text-white"
-                                : "text-v2-text-text-muted hover:text-v2-text-text-strong"
-                            }`}
-                            onClick={() => syncCanvasControl(slot(), "fit")}
+                            title="Recolher/restaurar barras laterais e topo para dar espaço máximo à ferramenta"
+                            class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                            onClick={toggleMaximizeCenter}
                           >
-                            📐 Ajustar
+                            {!wb.ui.leftSidebarOpen && !wb.ui.rightAgentOpen ? "◫ Painéis" : "⛶ Ampliar"}
                           </button>
                           <button
                             type="button"
-                            title="Ativar barras de rolagem mantendo 100% de precisão do clique em qualquer zoom"
-                            class={`rounded px-1.5 py-0.5 text-[10px] font-medium cursor-pointer ${
-                              getSlotFraming(slot()) === "scroll"
-                                ? "bg-emerald-600 text-white"
-                                : "text-v2-text-text-muted hover:text-v2-text-text-strong"
-                            }`}
-                            onClick={() => syncCanvasControl(slot(), "scroll")}
+                            title="Escolher outro arquivo .jar ou .exe no Windows"
+                            class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                            onClick={() =>
+                              void wb.launchSlot({
+                                slotId: slot().slotId,
+                                action: "launch_desktop",
+                                rawArgs: "__pick_executable__",
+                              })
+                            }
                           >
-                            ↕ Rolagem
+                            📂 Outra Versão
                           </button>
                           <button
                             type="button"
-                            title="Diminuir escala (-10% mantendo precisão exata do mouse)"
-                            class="rounded px-1.5 py-0.5 text-[10.5px] font-bold text-v2-text-text-base hover:bg-v2-background-bg-base cursor-pointer"
-                            onClick={() => {
-                              const curMode = getSlotFraming(slot())
-                              const targetMode = curMode === "fit" ? "native" : curMode
-                              const next = Math.max(60, getSlotZoom(slot()) - 10)
-                              syncCanvasControl(slot(), targetMode, next)
-                            }}
+                            class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                            onClick={() => setShowDesktopIngestDrawer((v) => !v)}
                           >
-                            −
+                            📋 SHA-256 / IA
                           </button>
                           <button
                             type="button"
-                            title="Restaurar zoom 100%"
-                            class="rounded px-1 py-0.5 font-mono text-[10px] text-emerald-400 hover:bg-v2-background-bg-base cursor-pointer"
-                            onClick={() => syncCanvasControl(slot(), getSlotFraming(slot()), 100)}
+                            class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                            onClick={() => wb.setUi("iframeReloadNonce", (n) => n + 1)}
                           >
-                            {getSlotZoom(slot())}%
+                            ↻ Reconectar
                           </button>
                           <button
                             type="button"
-                            title="Aumentar escala (+10% mantendo precisão exata do mouse)"
-                            class="rounded px-1.5 py-0.5 text-[10.5px] font-bold text-v2-text-text-base hover:bg-v2-background-bg-base cursor-pointer"
-                            onClick={() => {
-                              const curMode = getSlotFraming(slot())
-                              const targetMode = curMode === "fit" ? "native" : curMode
-                              const next = Math.min(160, getSlotZoom(slot()) + 10)
-                              syncCanvasControl(slot(), targetMode, next)
-                            }}
+                            class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                            onClick={() =>
+                              void wb.launchSlot({
+                                slotId: slot().slotId,
+                                action: "launch_desktop",
+                              })
+                            }
                           >
-                            +
+                            🪟 Janela Externa
+                          </button>
+                          <button
+                            type="button"
+                            class="rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[10.5px] text-red-400 hover:bg-red-500/20 cursor-pointer"
+                            onClick={() =>
+                              void wb.launchSlot({
+                                slotId: slot().slotId,
+                                action: "stop_web",
+                              })
+                            }
+                          >
+                            ⏹ Fechar
                           </button>
                         </div>
                       </div>
-                      <div class="flex flex-wrap items-center gap-1.5">
-                        <button
-                          type="button"
-                          title="Recolher/restaurar barras laterais para dar mais espaço à ferramenta"
-                          class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
-                          onClick={toggleMaximizeCenter}
-                        >
-                          {!wb.ui.leftSidebarOpen && !wb.ui.rightAgentOpen ? "◫ Painéis" : "⛶ Ampliar"}
-                        </button>
-                        <button
-                          type="button"
-                          title="Escolher outro arquivo .jar ou .exe no Windows"
-                          class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
-                          onClick={() =>
-                            void wb.launchSlot({
-                              slotId: slot().slotId,
-                              action: "launch_desktop",
-                              rawArgs: "__pick_executable__",
-                            })
-                          }
-                        >
-                          📂 Outra Versão
-                        </button>
-                        <button
-                          type="button"
-                          class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
-                          onClick={() => setShowDesktopIngestDrawer((v) => !v)}
-                        >
-                          📋 SHA-256 / IA
-                        </button>
-                        <button
-                          type="button"
-                          class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
-                          onClick={() => wb.setUi("iframeReloadNonce", (n) => n + 1)}
-                        >
-                          ↻ Reconectar
-                        </button>
-                        <button
-                          type="button"
-                          class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
-                          onClick={() =>
-                            void wb.launchSlot({
-                              slotId: slot().slotId,
-                              action: "launch_desktop",
-                            })
-                          }
-                        >
-                          🪟 Janela Externa
-                        </button>
-                        <button
-                          type="button"
-                          class="rounded border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[10.5px] text-red-400 hover:bg-red-500/20 cursor-pointer"
-                          onClick={() =>
-                            void wb.launchSlot({
-                              slotId: slot().slotId,
-                              action: "stop_web",
-                            })
-                          }
-                        >
-                          ⏹ Fechar
-                        </button>
-                      </div>
-                    </div>
+                    </Show>
 
                     <Show when={showDesktopIngestDrawer()}>
                       <div class="border-b border-v2-border-border-base bg-v2-background-bg-deep/90 p-2.5 space-y-2 shrink-0">

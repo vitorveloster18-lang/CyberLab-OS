@@ -41,6 +41,7 @@ const UI_STORAGE_KEY = "cyberlab.v5.antigravity.ui"
 
 interface StoredUiPrefs {
   open: boolean
+  topControlsOpen: boolean
   leftSidebarOpen: boolean
   leftSidebarTab: LeftSidebarTab
   leftSidebarWidth: number
@@ -92,6 +93,7 @@ function createWorkbenchService() {
 
   const [ui, setUi] = createStore<{
     open: boolean
+    topControlsOpen: boolean
     leftSidebarOpen: boolean
     leftSidebarTab: LeftSidebarTab
     leftSidebarWidth: number
@@ -114,6 +116,7 @@ function createWorkbenchService() {
     error: string
   }>({
     open: Boolean(saved.open),
+    topControlsOpen: saved.topControlsOpen !== false,
     leftSidebarOpen: saved.leftSidebarOpen !== false,
     leftSidebarTab: saved.leftSidebarTab === "files" ? "files" : "slots",
     leftSidebarWidth:
@@ -188,6 +191,7 @@ function createWorkbenchService() {
   const persistUi = () => {
     safeWriteJson(UI_STORAGE_KEY, {
       open: ui.open,
+      topControlsOpen: ui.topControlsOpen,
       leftSidebarOpen: ui.leftSidebarOpen,
       leftSidebarTab: ui.leftSidebarTab,
       leftSidebarWidth: ui.leftSidebarWidth,
@@ -403,6 +407,11 @@ function createWorkbenchService() {
     persistUi()
   }
 
+  function toggleTopControls(next?: boolean) {
+    setUi("topControlsOpen", next ?? !ui.topControlsOpen)
+    persistUi()
+  }
+
   function toggleRightAgent(next?: boolean) {
     setUi("rightAgentOpen", next ?? !ui.rightAgentOpen)
     persistUi()
@@ -426,6 +435,13 @@ function createWorkbenchService() {
       const slot = backend.arsenal?.slots.find((s) => s.slotId === slotId)
       if (slot && !ui.cliArgsBySlot[slotId] && slot.presets[0]?.argsTemplate) {
         setUi("cliArgsBySlot", slotId, slot.presets[0].argsTemplate)
+      }
+      if (slot) {
+        if (slot.embedUrl) {
+          setUi("topControlsOpen", false)
+        } else if (!slot.installed || slot.kind === "cli_runner") {
+          setUi("topControlsOpen", true)
+        }
       }
     })
     persistUi()
@@ -451,10 +467,14 @@ function createWorkbenchService() {
         }
         if (res.embedUrl) {
           setUi("iframeReloadNonce", (n) => n + 1)
+          setUi("topControlsOpen", false)
+        } else if (params.action === "stop_web") {
+          setUi("topControlsOpen", true)
         }
         if (res.ok) setNotice(res.message)
         else setError(res.message)
       })
+      persistUi()
       void browseFiles(ui.currentFilesDir)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -900,6 +920,7 @@ function createWorkbenchService() {
     registerComposer,
     openWorkspace,
     toggleWorkbench,
+    toggleTopControls,
     toggleLeftSidebar,
     setLeftSidebarTab,
     setLeftSidebarWidth,

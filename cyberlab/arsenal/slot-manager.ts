@@ -513,14 +513,14 @@ export class ArsenalSlotManager {
     >()
 
     if (process.platform === "win32") {
-      // 1. Probe WSL2 distros cleanly (handling UTF-16LE output of wsl.exe)
+      // 1. Probe WSL2 distros cleanly (handling UTF-16LE output of wsl.exe and cold Hyper-V VM wakeups)
       this.wslAvailable = false
       this.wslDistros = []
       try {
         const wslList = spawnSync("wsl.exe", ["-l", "-q"], {
           stdio: ["ignore", "pipe", "ignore"],
           windowsHide: true,
-          timeout: 3500,
+          timeout: 20000,
         })
         if (wslList.status === 0 && wslList.stdout) {
           const distros = decodePotentialUtf16Le(wslList.stdout)
@@ -586,32 +586,40 @@ export class ArsenalSlotManager {
             }),
           ].join("\n")
 
-          try {
-            const wslProbe = spawnSync(
-              "wsl.exe",
-              ["-d", this.config.preferredWslDistro, "-u", "root", "--", "bash", "-s"],
-              {
-                input: Buffer.from(`${scriptLines}\n`, "utf8"),
-                encoding: "utf8",
-                stdio: ["pipe", "pipe", "ignore"],
-                windowsHide: true,
-                timeout: 12000,
-              },
-            )
-            if (wslProbe.stdout) {
-              for (const line of wslProbe.stdout.replace(/\0/g, "").split(/\r?\n/)) {
-                if (!line.startsWith("HIT:")) continue
-                const eqIdx = line.indexOf("=")
-                if (eqIdx === -1) continue
-                const key = line.slice(4, eqIdx).trim()
-                const val = line.slice(eqIdx + 1).trim()
-                if (key && val && !val.startsWith("/mnt/")) {
-                  wslResolvedByBin.set(key, val)
+          const runWslProbeOnce = () => {
+            try {
+              const wslProbe = spawnSync(
+                "wsl.exe",
+                ["-d", this.config.preferredWslDistro, "-u", "root", "--", "bash", "-s"],
+                {
+                  input: Buffer.from(`${scriptLines}\n`, "utf8"),
+                  encoding: "utf8",
+                  stdio: ["pipe", "pipe", "ignore"],
+                  windowsHide: true,
+                  timeout: 30000,
+                },
+              )
+              if (wslProbe.stdout) {
+                for (const line of wslProbe.stdout.replace(/\0/g, "").split(/\r?\n/)) {
+                  if (!line.startsWith("HIT:")) continue
+                  const eqIdx = line.indexOf("=")
+                  if (eqIdx === -1) continue
+                  const key = line.slice(4, eqIdx).trim()
+                  const val = line.slice(eqIdx + 1).trim()
+                  if (key && val && !val.startsWith("/mnt/")) {
+                    wslResolvedByBin.set(key, val)
+                  }
                 }
               }
+            } catch {
+              // Ignore WSL probe timeout
             }
-          } catch {
-            // Ignore WSL probe timeout
+          }
+
+          runWslProbeOnce()
+          // If WSL2 VM was cold-booting on the first call and returned 0 hits, run one immediate warm retry
+          if (wslResolvedByBin.size === 0) {
+            runWslProbeOnce()
           }
         }
       }
