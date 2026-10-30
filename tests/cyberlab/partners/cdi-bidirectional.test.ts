@@ -226,11 +226,12 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
       const hubOverview = ws.cdiHub.getOverview()
       expect(hubOverview.inboundActivity.length).toBeGreaterThanOrEqual(6)
     } finally {
-      salemProc.kill("SIGTERM")
-      kairosProc.kill("SIGTERM")
+      salemProc.kill()
+      kairosProc.kill()
+      await Promise.race([Promise.allSettled([salemProc.exited, kairosProc.exited]), Bun.sleep(500)])
       gatewayServer.stop(true)
       ws.close()
-      rmSync(tmpDir, { recursive: true, force: true })
+      rmSync(tmpDir, { recursive: true, force: true, maxRetries: 6, retryDelay: 100 })
     }
   })
 
@@ -267,7 +268,7 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
       }
     } finally {
       ws.close()
-      rmSync(tmpDir, { recursive: true, force: true })
+      rmSync(tmpDir, { recursive: true, force: true, maxRetries: 6, retryDelay: 100 })
     }
   })
 
@@ -454,7 +455,7 @@ print(json.dumps({
       targetServer.stop(true)
       gatewayServer.stop(true)
       ws.close()
-      rmSync(tmpDir, { recursive: true, force: true })
+      rmSync(tmpDir, { recursive: true, force: true, maxRetries: 6, retryDelay: 100 })
     }
   })
 
@@ -631,7 +632,7 @@ print(json.dumps({
     } finally {
       gatewayServer.stop(true)
       manager.closeAll()
-      rmSync(tmpRoot, { recursive: true, force: true })
+      rmSync(tmpRoot, { recursive: true, force: true, maxRetries: 6, retryDelay: 100 })
     }
   })
 })
