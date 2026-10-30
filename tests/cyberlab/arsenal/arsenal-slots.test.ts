@@ -44,6 +44,24 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
     expect(ids).toContain("keyhunter")
     expect(ids).toContain("cyberchef")
     expect(ids).toContain("kali-desktop-stream")
+    // v5.6: REA + all previously deferred tools from TOOL_INVENTORY.md
+    expect(ids).toContain("rea")
+    expect(ids).toContain("mvt")
+    expect(ids).toContain("metasploit")
+    expect(ids).toContain("impacket-hashcat")
+    expect(ids).toContain("strix")
+    expect(ids).toContain("shannon")
+    expect(ids).toContain("hexstrike-ai")
+    expect(ids).toContain("pentagi")
+    expect(ids).toContain("pentestgpt-cai")
+    expect(ids).toContain("tor-onionshare")
+    expect(ids).toContain("veracrypt")
+    expect(ids).toContain("mullvad-opsec")
+    expect(OFFICIAL_ARSENAL_SLOTS.length).toBeGreaterThanOrEqual(41)
+
+    const reaDef = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === "rea")!
+    expect(reaDef.upstreamUrl).toBe("https://github.com/morluto/rea")
+    expect(reaDef.presets.some((p) => p.argsTemplate.includes("--client opencode"))).toBe(true)
 
     expect(windowsPathToWslPath("C:\\Users\\Vitor\\Projetos\\alvo-h1")).toBe("/mnt/c/Users/Vitor/Projetos/alvo-h1")
     expect(splitCommandLineArgs('-u https://app.example.com -H "X-Bug-Bounty: HackerOne-vitor"')).toEqual([

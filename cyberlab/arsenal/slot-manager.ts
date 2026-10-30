@@ -1539,6 +1539,9 @@ export class ArsenalSlotManager {
     if (slot.slotId === "rizin-cutter") {
       return { needsJava: false, launchCmd: "cutter" }
     }
+    if (slot.slotId === "veracrypt") {
+      return { needsJava: false, launchCmd: "veracrypt" }
+    }
 
     const fallback = slot.wslPath ?? slot.posixPath
     if (!fallback) {

@@ -12,6 +12,8 @@ export type ArsenalCategory =
   | "recon_network_ad"
   | "reverse_mobile"
   | "secrets_sast_cloud"
+  | "ai_offensive_agents"
+  | "privacy_opsec_crypto"
   | "cyberchef_dfir_kali"
   | "custom"
 
@@ -72,16 +74,24 @@ export const ARSENAL_CATEGORY_LABELS: Record<ArsenalCategory, { title: string; s
     subtitle: "Nuclei, ffuf, Katana, httpx, Interactsh, Dalfox e sqlmap",
   },
   recon_network_ad: {
-    title: "Recon, Rede, Pacotes & Active Directory",
-    subtitle: "Subfinder, Nmap, Wireshark/tshark, Naabu/DNSx/TLSx, NetExec e BloodHound",
+    title: "Recon, Rede, Exploração & Active Directory",
+    subtitle: "Subfinder, Nmap, Wireshark, Naabu/DNSx/TLSx, NetExec, BloodHound, Metasploit e Impacket/Hashcat",
   },
   reverse_mobile: {
-    title: "Engenharia Reversa, Malware & Mobile",
-    subtitle: "Ghidra, JADX, Rizin/Cutter, Frida/Apktool e Mandiant Capa",
+    title: "Engenharia Reversa, REA, Malware & Mobile",
+    subtitle: "REA (Reverse Engineer Anything), Ghidra, JADX, Rizin/Cutter, Frida/Apktool, Capa e MVT Forensics",
   },
   secrets_sast_cloud: {
     title: "Key Hunting, SAST, SCA & Cloud",
     subtitle: "KeyHunter Rust, Gitleaks, TruffleHog, Semgrep e Aqua Trivy",
+  },
+  ai_offensive_agents: {
+    title: "Agentes Ofensivos de IA & MCPs Autônomos",
+    subtitle: "Strix, Shannon, HexStrike AI (150+ tools MCP), PentAGI, PentestGPT e CAI",
+  },
+  privacy_opsec_crypto: {
+    title: "OpSec, Privacidade, Criptografia & Hardening",
+    subtitle: "Tor/Torsocks, OnionShare, VeraCrypt, Mullvad VPN, Signal e GrapheneOS ADB Auditor",
   },
   cyberchef_dfir_kali: {
     title: "CyberChef Oficial, DFIR & Kali Desktop",
@@ -998,6 +1008,382 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
     installKaliWsl:
       "sudo apt-get update && sudo apt-get install -y xfce4 xfce4-terminal thunar dbus-x11 kali-menu kali-themes x11-xserver-utils x11-utils xterm tigervnc-standalone-server openbox novnc websockify",
     presets: [],
+  },
+
+  // =========================================================================
+  // EXPANSÃO v5.6 — REA + TODAS AS FERRAMENTAS REMANESCENTES DO INVENTÁRIO
+  // =========================================================================
+  {
+    slotId: "rea",
+    name: "REA — Reverse Engineer Anything (Ghidra / JADX / JS / MCP)",
+    shortLabel: "REA (morluto/rea)",
+    category: "reverse_mobile",
+    kind: "cli_runner",
+    tagline: "Motor oficial MIT de engenharia reversa assistida por IA (Binários, APKs, Electron/ASAR) com integração nativa ao MCP do OpenCode!",
+    description:
+      "Conecta binários ELF/PE/Mach-O (via Ghidra Headless no Kali WSL2), APKs (via JADX) e aplicações Electron/ASAR/JS direto ao CLI `rea` e ao servidor MCP nativo do OpenCode V2 (`rea setup --client opencode`), gerando grafos de módulos e evidências verificáveis.",
+    upstreamUrl: "https://github.com/morluto/rea",
+    licenseNote: "MIT Oficial (rea-agents via npm; usa Ghidra/JADX externos)",
+    windowsBinaries: ["rea.cmd", "rea.exe", "rea"],
+    windowsKnownPaths: [
+      "%APPDATA%\\npm\\rea.cmd",
+      "%USERPROFILE%\\AppData\\Roaming\\npm\\rea.cmd",
+    ],
+    posixBinaries: ["rea"],
+    posixKnownPaths: ["/usr/local/bin/rea", "/usr/bin/rea", "~/.npm-global/bin/rea"],
+    installPowerShell: "npm install --global rea-agents",
+    installKaliWsl:
+      "sudo apt-get update && sudo apt-get install -y nodejs npm procps jq && sudo npm install --global rea-agents",
+    presets: [
+      {
+        id: "rea-doctor",
+        label: "Diagnóstico REA + Motores (Ghidra / JADX / OpenCode)",
+        description: "Verifica prontidão do REA, Ghidra, JADX e registro MCP",
+        argsTemplate: "doctor --json",
+      },
+      {
+        id: "rea-connect-opencode",
+        label: "Conectar MCP do REA Direto ao Agente OpenCode",
+        description: "Registra o servidor MCP oficial do REA na configuração do OpenCode",
+        argsTemplate: "setup --client opencode --yes --json",
+      },
+      {
+        id: "rea-analyze-target",
+        label: "Analisar Binário / APK / Pasta ou .asar",
+        description: "Executa engenharia reversa completa com geração de evidências JSON",
+        argsTemplate: "analyze {target} --json",
+      },
+      {
+        id: "rea-analyze-js-electron",
+        label: "Reconstruir App Electron / ASAR / JavaScript",
+        description: "Extrai grafo de módulos, fronteiras IPC Electron e evidências sem código-fonte",
+        argsTemplate: "analyze-javascript-application {target} --json",
+      },
+    ],
+  },
+  {
+    slotId: "mvt",
+    name: "MVT — Mobile Verification Toolkit (Amnesty International)",
+    shortLabel: "MVT Forensics",
+    category: "reverse_mobile",
+    kind: "cli_runner",
+    tagline: "Forense mobile oficial de Android & iOS (detecção de spyware/Pegasus e IOCs da Amnesty Tech)",
+    description:
+      "Executa o Mobile Verification Toolkit (`mvt-android` e `mvt-ios`) no Kali WSL2 para auditar backups Android/iTunes, dumps ADB, SMS, bancos SQLite e pacotes instalados contra indicadores públicos de comprometimento (IOCs).",
+    upstreamUrl: "https://github.com/mvt-project/mvt",
+    licenseNote: "MVT License (Processo Externo Isolado em WSL2)",
+    windowsBinaries: ["mvt-android.exe", "mvt-ios.exe"],
+    posixBinaries: ["mvt-android", "mvt-ios"],
+    posixKnownPaths: ["/usr/local/bin/mvt-android", "/opt/mvt/bin/mvt-android", "~/.local/bin/mvt-android"],
+    installPowerShell:
+      "'apt-get update && apt-get install -y python3-venv python3-pip libusb-1.0-0-dev adb sqlite3 && python3 -m venv /opt/mvt && /opt/mvt/bin/pip install -U pip mvt && ln -sf /opt/mvt/bin/mvt-android /usr/local/bin/mvt-android && ln -sf /opt/mvt/bin/mvt-ios /usr/local/bin/mvt-ios' | wsl -d kali-linux -u root -- bash -s",
+    installKaliWsl:
+      "sudo apt-get update && sudo apt-get install -y python3-venv python3-pip libusb-1.0-0-dev adb sqlite3 && sudo python3 -m venv /opt/mvt && sudo /opt/mvt/bin/pip install -U pip mvt && sudo ln -sf /opt/mvt/bin/mvt-android /usr/local/bin/mvt-android && sudo ln -sf /opt/mvt/bin/mvt-ios /usr/local/bin/mvt-ios",
+    presets: [
+      {
+        id: "mvt-download-iocs",
+        label: "Baixar IOCs Oficiais Atualizados (Amnesty Tech)",
+        description: "Atualiza a base pública de indicadores de spyware do MVT",
+        argsTemplate: "download-iocs",
+      },
+      {
+        id: "mvt-check-backup",
+        label: "Auditar Backup AndroidExtraído ({target})",
+        description: "Verifica pasta de backup Android contra IOCs e grava resultados em exports",
+        argsTemplate: "check-backup --output {exports}/mvt-report {target}",
+      },
+      {
+        id: "mvt-check-adb",
+        label: "Coletar & Auditar Dispositivo Android via ADB",
+        description: "Inspeciona aparelho conectado via USB/ADB em busca de artefatos suspeitos",
+        argsTemplate: "check-adb --output {exports}/mvt-adb",
+      },
+    ],
+  },
+  {
+    slotId: "metasploit",
+    name: "Metasploit Framework Oficial (msfconsole / msfvenom)",
+    shortLabel: "Metasploit",
+    category: "recon_network_ad",
+    kind: "cli_runner",
+    tagline: "Validação de exploração autorizada, módulos auxiliares de enumeração e geração de artefatos de laboratório",
+    description:
+      "Integra o Metasploit Framework oficial (`msfconsole`) instalado nativamente no Kali WSL2 ou Windows, permitindo pesquisar módulos CVE, rodar scanners auxiliares não-interativos (`-q -x`) dentro de alvos em escopo e registrar toda a saída com custódia SHA-256.",
+    upstreamUrl: "https://github.com/rapid7/metasploit-framework",
+    licenseNote: "BSD-3-Clause / Rapid7 (Processo Externo)",
+    windowsBinaries: ["msfconsole.bat", "msfconsole.exe"],
+    windowsKnownPaths: ["C:\\metasploit-framework\\bin\\msfconsole.bat"],
+    posixBinaries: ["msfconsole", "msfvenom"],
+    posixKnownPaths: ["/usr/bin/msfconsole", "/opt/metasploit-framework/bin/msfconsole"],
+    installPowerShell:
+      "'apt-get update && apt-get install -y metasploit-framework' | wsl -d kali-linux -u root -- bash -s",
+    installKaliWsl: "sudo apt-get update && sudo apt-get install -y metasploit-framework",
+    presets: [
+      {
+        id: "msf-search-cve",
+        label: "Pesquisar Módulos / CVEs no Metasploit",
+        description: "Busca módulos exploits e auxiliary correspondentes ao termo {target}",
+        argsTemplate: '-q -x "search {target}; exit"',
+      },
+      {
+        id: "msf-version-db",
+        label: "Verificar Versão & Status do Banco Metasploit",
+        description: "Confere versão de módulos carregados e conexão PostgreSQL",
+        argsTemplate: '-q -x "version; db_status; exit"',
+      },
+    ],
+  },
+  {
+    slotId: "impacket-hashcat",
+    name: "Impacket Suite + Evil-WinRM + Hashcat / John",
+    shortLabel: "Impacket / Hashcat",
+    category: "recon_network_ad",
+    kind: "cli_runner",
+    tagline: "Kerberoasting, AS-REP Roasting, SMB/LDAP dumping e auditoria de força de hashes NTLMv2/JWT/Kerberos",
+    description:
+      "Reúne a suíte oficial Fortra Impacket (`impacket-GetUserSPNs`, `impacket-GetNPUsers`, `impacket-secretsdump`), `evil-winrm` e `hashcat`/`john` para operações completas de Active Directory e auditoria de senhas/JWTs.",
+    upstreamUrl: "https://github.com/fortra/impacket",
+    licenseNote: "Apache-2.0 / MIT (Externo em Kali WSL2 / Windows)",
+    windowsBinaries: ["hashcat.exe", "GetUserSPNs.py"],
+    posixBinaries: ["hashcat", "john", "impacket-GetUserSPNs", "evil-winrm"],
+    posixKnownPaths: ["/usr/bin/hashcat", "/usr/bin/john", "/usr/bin/impacket-GetUserSPNs", "/usr/bin/evil-winrm"],
+    installPowerShell: "winget install --id Hashcat.Hashcat -e",
+    installKaliWsl:
+      "sudo apt-get update && sudo apt-get install -y python3-impacket impacket-scripts evil-winrm hashcat john wordlists",
+    presets: [
+      {
+        id: "hashcat-benchmark",
+        label: "Hashcat — Dispositivos & Benchmark Rápido (NTLM / JWT)",
+        description: "Lista GPUs/CPUs detectadas pelo Hashcat",
+        argsTemplate: "-I",
+      },
+      {
+        id: "hashcat-jwt",
+        label: "Hashcat — Auditar Segredo JWT HS256 (-m 16500)",
+        description: "Testa hash/token salvo em {target} contra rockyou.txt",
+        argsTemplate: "-m 16500 -a 0 {target} /usr/share/wordlists/rockyou.txt",
+      },
+    ],
+  },
+  {
+    slotId: "strix",
+    name: "Strix — Autonomous AI Pentesting Agents (usestrix/strix)",
+    shortLabel: "Strix AI",
+    category: "ai_offensive_agents",
+    kind: "cli_runner",
+    tagline: "Agentes autônomos open-source (Apache-2.0) que testam apps dinamicamente, validam PoCs reais e propõem correções",
+    description:
+      "Executa o CLI oficial `strix` (`usestrix/strix`) para orquestrar agentes de pentest que analisam código e endpoints em escopo, validam vulnerabilidades com provas de conceito reais (zero falso-positivo) e salvam relatórios estruturados.",
+    upstreamUrl: "https://github.com/usestrix/strix",
+    licenseNote: "Apache-2.0 Oficial (Processo Externo)",
+    windowsBinaries: ["strix.exe", "strix.cmd"],
+    posixBinaries: ["strix"],
+    posixKnownPaths: ["~/.local/bin/strix", "/usr/local/bin/strix", "/root/.local/bin/strix"],
+    installPowerShell: "pip install -U strix-agent",
+    installKaliWsl:
+      "sudo apt-get update && sudo apt-get install -y curl pipx python3-venv && (curl -sSL https://strix.ai/install | bash || PIPX_BIN_DIR=/usr/local/bin sudo pipx install strix-agent)",
+    presets: [
+      {
+        id: "strix-help",
+        label: "Verificar Versão & Opções do Strix AI",
+        description: "Exibe comandos e provedores LLM suportados pelo Strix",
+        argsTemplate: "--help",
+      },
+      {
+        id: "strix-scan-target",
+        label: "Executar Avaliação Strix no Alvo / Repositório ({target})",
+        description: "Inicia avaliação dinâmica com validação de PoC contra {target}",
+        argsTemplate: "--target {target}",
+      },
+    ],
+  },
+  {
+    slotId: "shannon",
+    name: "Shannon — AI Pentester for Web Apps & APIs (KeygraphHQ)",
+    shortLabel: "Shannon AI",
+    category: "ai_offensive_agents",
+    kind: "cli_runner",
+    tagline: "Pentester autônomo Web/API ('No exploit, no report') rodando 100% desacoplado como ferramenta externa",
+    description:
+      "Como o Shannon possui licença AGPL-3.0, nenhum código dele entra no repositório MIT do CyberLab OS: este slot executa diretamente o pacote oficial `@keygraph/shannon` instalado externamente no seu sistema para auditar aplicações Web e APIs.",
+    upstreamUrl: "https://github.com/KeygraphHQ/shannon",
+    licenseNote: "AGPL-3.0 (100% Externo via CLI Oficial — zero código embutido)",
+    windowsBinaries: ["shannon.cmd", "shannon"],
+    windowsKnownPaths: ["%APPDATA%\\npm\\shannon.cmd"],
+    posixBinaries: ["shannon"],
+    posixKnownPaths: ["/usr/local/bin/shannon", "/usr/bin/shannon"],
+    installPowerShell: "npm install --global @keygraph/shannon@latest",
+    installKaliWsl: "sudo apt-get update && sudo apt-get install -y nodejs npm && sudo npm install --global @keygraph/shannon@latest",
+    presets: [
+      {
+        id: "shannon-help",
+        label: "Verificar CLI Oficial do Shannon",
+        description: "Exibe opções de execução e configuração BYOK do Shannon",
+        argsTemplate: "--help",
+      },
+    ],
+  },
+  {
+    slotId: "hexstrike-ai",
+    name: "HexStrike AI MCP — Ponte para 150+ Ferramentas Ofensivas",
+    shortLabel: "HexStrike MCP",
+    category: "ai_offensive_agents",
+    kind: "cli_runner",
+    tagline: "Servidor MCP e API local (MIT) em `/opt/hexstrike-ai` que conecta LLMs a mais de 150 ferramentas do Kali",
+    description:
+      "Instala e gerencia o servidor oficial `0x4m4/hexstrike-ai` em ambiente Python isolado (`/opt/hexstrike-ai`), permitindo iniciar a API REST (`:8888`) ou plugar `hexstrike_mcp.py` diretamente como servidor MCP de ferramentas Kali.",
+    upstreamUrl: "https://github.com/0x4m4/hexstrike-ai",
+    licenseNote: "MIT Oficial (Externo em /opt/hexstrike-ai)",
+    windowsBinaries: [],
+    posixBinaries: ["hexstrike-server"],
+    posixKnownPaths: ["/usr/local/bin/hexstrike-server", "/opt/hexstrike-ai/hexstrike_server.py"],
+    installPowerShell:
+      "'apt-get update && apt-get install -y git python3-venv python3-pip && rm -rf /opt/hexstrike-ai && git clone --depth 1 https://github.com/0x4m4/hexstrike-ai.git /opt/hexstrike-ai && python3 -m venv /opt/hexstrike-ai/venv && /opt/hexstrike-ai/venv/bin/pip install -U pip -r /opt/hexstrike-ai/requirements.txt && ln -sf /opt/hexstrike-ai/hexstrike_server.py /usr/local/bin/hexstrike-server && chmod +x /opt/hexstrike-ai/hexstrike_server.py' | wsl -d kali-linux -u root -- bash -s",
+    installKaliWsl:
+      "sudo apt-get update && sudo apt-get install -y git python3-venv python3-pip && sudo rm -rf /opt/hexstrike-ai && sudo git clone --depth 1 https://github.com/0x4m4/hexstrike-ai.git /opt/hexstrike-ai && sudo python3 -m venv /opt/hexstrike-ai/venv && sudo /opt/hexstrike-ai/venv/bin/pip install -U pip -r /opt/hexstrike-ai/requirements.txt && printf '#!/bin/sh\\nexec /opt/hexstrike-ai/venv/bin/python /opt/hexstrike-ai/hexstrike_server.py \"$@\"\\n' | sudo tee /usr/local/bin/hexstrike-server >/dev/null && sudo chmod +x /usr/local/bin/hexstrike-server",
+    presets: [
+      {
+        id: "hexstrike-help",
+        label: "Verificar Servidor HexStrike AI (:8888)",
+        description: "Testa inicialização e argumentos do HexStrike AI Server",
+        argsTemplate: "--help",
+      },
+    ],
+  },
+  {
+    slotId: "pentagi",
+    name: "PentAGI — Sistema Multi-Agente Autônomo de Pentest (Web UI)",
+    shortLabel: "PentAGI",
+    category: "ai_offensive_agents",
+    kind: "web_embed",
+    tagline: "Plataforma multi-agente autônoma (MIT, vxcontrol/pentagi) com painel Web próprio incorporável no centro",
+    description:
+      "Permite clonar e subir o stack oficial `vxcontrol/pentagi` (Docker Compose em `:8443`) e incorporar a interface Web do PentAGI diretamente no palco central do CyberLab OS.",
+    upstreamUrl: "https://github.com/vxcontrol/pentagi",
+    licenseNote: "MIT Oficial (Stack Docker Externo)",
+    windowsBinaries: ["docker.exe"],
+    posixBinaries: ["pentagi", "docker"],
+    posixKnownPaths: ["/opt/pentagi/docker-compose.yml", "/usr/bin/docker"],
+    defaultEmbedUrl: "https://127.0.0.1:8443",
+    installPowerShell: "git clone https://github.com/vxcontrol/pentagi.git C:\\CyberLab-Tools\\pentagi",
+    installKaliWsl:
+      "sudo apt-get update && sudo apt-get install -y git && sudo rm -rf /opt/pentagi && sudo git clone --depth 1 https://github.com/vxcontrol/pentagi.git /opt/pentagi",
+    presets: [],
+  },
+  {
+    slotId: "pentestgpt-cai",
+    name: "PentestGPT & CAI (Cybersecurity AI Framework)",
+    shortLabel: "PentestGPT / CAI",
+    category: "ai_offensive_agents",
+    kind: "cli_runner",
+    tagline: "Pipelines multi-estágio para Pentest, Bug Bounty e CTF (`GreyDGL/PentestGPT` + `aliasrobotics/cai`)",
+    description:
+      "Executa o PentestGPT ou o framework CAI instalados em ambiente Python isolado (`/opt/cyberlab-ai-pentest`) no Kali WSL2 sem poluir pacotes do sistema.",
+    upstreamUrl: "https://github.com/GreyDGL/PentestGPT",
+    licenseNote: "MIT / Pesquisa Externa (WSL2 Python Venv)",
+    windowsBinaries: ["pentestgpt.exe", "cai.exe"],
+    posixBinaries: ["pentestgpt", "cai"],
+    posixKnownPaths: ["/usr/local/bin/pentestgpt", "/usr/local/bin/cai", "/opt/cyberlab-ai-pentest/bin/cai"],
+    installPowerShell:
+      "'apt-get update && apt-get install -y python3-venv python3-pip git && python3 -m venv /opt/cyberlab-ai-pentest && /opt/cyberlab-ai-pentest/bin/pip install -U pip cai-framework && ln -sf /opt/cyberlab-ai-pentest/bin/cai /usr/local/bin/cai' | wsl -d kali-linux -u root -- bash -s",
+    installKaliWsl:
+      "sudo apt-get update && sudo apt-get install -y python3-venv python3-pip git && sudo python3 -m venv /opt/cyberlab-ai-pentest && sudo /opt/cyberlab-ai-pentest/bin/pip install -U pip cai-framework && sudo ln -sf /opt/cyberlab-ai-pentest/bin/cai /usr/local/bin/cai",
+    presets: [
+      {
+        id: "cai-help",
+        label: "Verificar Agentes CAI Disponíveis",
+        description: "Lista opções e agentes ofensivos/defensivos do CAI",
+        argsTemplate: "--help",
+      },
+    ],
+  },
+  {
+    slotId: "tor-onionshare",
+    name: "Tor + Torsocks + OnionShare (Transporte Anônimo & Entrega E2EE)",
+    shortLabel: "Tor / OnionShare",
+    category: "privacy_opsec_crypto",
+    kind: "cli_runner",
+    tagline: "Proxy anônimo SOCKS5 (`:9050`), roteamento `torsocks` e entrega efêmera de relatórios via OnionShare",
+    description:
+      "Integra os binários oficiais do Tor Project (`tor`, `torsocks`) e `onionshare-cli` para roteamento opcional de reconhecimento passivo ou compartilhamento anônimo criptografado de bundles de evidências.",
+    upstreamUrl: "https://github.com/onionshare/onionshare",
+    licenseNote: "BSD-3-Clause (Tor) / GPL-3.0 (OnionShare Externo)",
+    windowsBinaries: ["tor.exe", "onionshare-cli.exe", "onionshare.exe"],
+    windowsKnownPaths: [
+      "%ProgramFiles%\\OnionShare\\onionshare-cli.exe",
+      "%ProgramFiles%\\OnionShare\\onionshare.exe",
+    ],
+    posixBinaries: ["onionshare-cli", "torsocks", "tor"],
+    posixKnownPaths: ["/usr/bin/onionshare-cli", "/usr/bin/torsocks", "/usr/sbin/tor", "/usr/bin/tor"],
+    companionProxyPort: 9050,
+    installPowerShell: "winget install --id OnionShare.OnionShare -e",
+    installKaliWsl: "sudo apt-get update && sudo apt-get install -y tor torsocks onionshare",
+    presets: [
+      {
+        id: "tor-version-check",
+        label: "Verificar Versão & Ferramentas Tor / OnionShare",
+        description: "Exibe ajuda e modos de compartilhamento seguro",
+        argsTemplate: "--help",
+      },
+    ],
+  },
+  {
+    slotId: "veracrypt",
+    name: "VeraCrypt Oficial — Cofres Criptografados de Evidências",
+    shortLabel: "VeraCrypt",
+    category: "privacy_opsec_crypto",
+    kind: "desktop_gui",
+    tagline: "Volumes criptografados AES-256 / Serpent / Twofish para custódia física de achados críticos e chaves",
+    description:
+      "Abre a interface gráfica oficial do VeraCrypt (em janela nativa do Windows ou dentro do palco central X11/noVNC no Linux/WSL2) para montar e desmontar cofres criptografados onde você guarda dumps e escopos confidenciais.",
+    upstreamUrl: "https://github.com/veracrypt/VeraCrypt",
+    licenseNote: "Apache-2.0 / TrueCrypt 3.0 (Binário Oficial Externo)",
+    windowsBinaries: ["VeraCrypt.exe"],
+    windowsKnownPaths: [
+      "%ProgramFiles%\\VeraCrypt\\VeraCrypt.exe",
+      "C:\\Program Files\\VeraCrypt\\VeraCrypt.exe",
+    ],
+    posixBinaries: ["veracrypt"],
+    posixKnownPaths: ["/usr/bin/veracrypt", "/usr/local/bin/veracrypt"],
+    installPowerShell: "winget install --id IDRIX.VeraCrypt -e",
+    installKaliWsl: "sudo apt-get update && sudo apt-get install -y veracrypt || sudo apt-get install -y cryptsetup",
+    presets: [],
+  },
+  {
+    slotId: "mullvad-opsec",
+    name: "OpSec Check — Mullvad VPN, Signal & GrapheneOS ADB Hardening",
+    shortLabel: "Mullvad / GrapheneOS",
+    category: "privacy_opsec_crypto",
+    kind: "cli_runner",
+    tagline: "Verificação pré-voo de túnel Mullvad VPN, kill-switch e auditoria de hardening/boot Android & GrapheneOS via ADB",
+    description:
+      "Consolida os utilitários de OpSec e privacidade do inventário original: verifica o estado do túnel/kill-switch da Mullvad VPN (`mullvad status`), inspeciona propriedades de segurança SELinux/Verified Boot de aparelhos GrapheneOS/Android via `adb` e valida prontidão de canal seguro externo.",
+    upstreamUrl: "https://github.com/mullvad/mullvadvpn-app",
+    licenseNote: "GPL-3.0 / Apache-2.0 (Somente Consulta de Estado Local)",
+    windowsBinaries: ["mullvad.exe", "adb.exe"],
+    windowsKnownPaths: [
+      "%ProgramFiles%\\Mullvad VPN\\resources\\mullvad.exe",
+      "C:\\Program Files\\Mullvad VPN\\resources\\mullvad.exe",
+      "%LOCALAPPDATA%\\Android\\Sdk\\platform-tools\\adb.exe",
+    ],
+    posixBinaries: ["mullvad", "adb"],
+    posixKnownPaths: ["/usr/bin/mullvad", "/usr/bin/adb"],
+    installPowerShell: "winget install --id MullvadVPN.MullvadVPN -e; winget install --id Google.PlatformTools -e",
+    installKaliWsl: "sudo apt-get update && sudo apt-get install -y adb android-sdk-platform-tools-common curl",
+    presets: [
+      {
+        id: "opsec-status",
+        label: "Verificar Status de Túnel / Dispositivos Conectados",
+        description: "Consulta status do cliente Mullvad ou lista dispositivos ADB",
+        argsTemplate: "status",
+      },
+      {
+        id: "grapheneos-hardening-audit",
+        label: "Auditar Verified Boot, Patch Level & SELinux (GrapheneOS / Android ADB)",
+        description: "Lê propriedades de segurança do dispositivo Android/GrapheneOS via adb shell",
+        argsTemplate: "shell getprop ro.boot.verifiedbootstate",
+      },
+    ],
   },
 ]
 
