@@ -226,9 +226,11 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
       const hubOverview = ws.cdiHub.getOverview()
       expect(hubOverview.inboundActivity.length).toBeGreaterThanOrEqual(6)
     } finally {
+      const waitExit = (p: typeof salemProc) =>
+        p.exitCode !== null ? Promise.resolve() : new Promise<void>((r) => p.once("close", () => r()))
       salemProc.kill()
       kairosProc.kill()
-      await Promise.race([Promise.allSettled([salemProc.exited, kairosProc.exited]), Bun.sleep(500)])
+      await Promise.race([Promise.allSettled([waitExit(salemProc), waitExit(kairosProc)]), Bun.sleep(500)])
       gatewayServer.stop(true)
       ws.close()
       rmSync(tmpDir, { recursive: true, force: true, maxRetries: 6, retryDelay: 100 })
