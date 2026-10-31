@@ -685,5 +685,55 @@ export namespace CyberLab {
     contextText: optional(Schema.String),
     timeoutMs: optional(Schema.Number),
   })
+
+  export const VaultNoteSummaryInfo = Schema.Struct({
+    relativePath: Schema.String,
+    title: Schema.String,
+    folder: Schema.String,
+    tags: Schema.Array(Schema.String),
+    wikiLinks: Schema.Array(Schema.String),
+    snippet: Schema.String,
+    sizeBytes: Schema.Number,
+    updatedAt: Schema.String,
+  })
+
+  export const VaultOverviewInfo = Schema.Struct({
+    vaultRootDir: Schema.String,
+    isCustomPath: Schema.Boolean,
+    notes: Schema.Array(VaultNoteSummaryInfo),
+    allTags: Schema.Array(Schema.String),
+  })
+
+  export const VaultNoteDocumentInfo = Schema.Struct({
+    relativePath: Schema.String,
+    title: Schema.String,
+    content: Schema.String,
+    tags: Schema.Array(Schema.String),
+    wikiLinks: Schema.Array(Schema.String),
+    backlinks: Schema.Array(Schema.String),
+    updatedAt: Schema.String,
+  })
+
+  export const VaultReadInput = Schema.Struct({
+    relativePath: Schema.String,
+  })
+
+  export const VaultWriteInput = Schema.Struct({
+    relativePath: Schema.String,
+    content: Schema.String,
+  })
+
+  export const VaultWriteResult = Schema.Struct({
+    note: VaultNoteDocumentInfo,
+    overview: VaultOverviewInfo,
+  })
+
+  export const VaultDeleteInput = Schema.Struct({
+    relativePath: Schema.String,
+  })
+
+  export const VaultConfigInput = Schema.Struct({
+    customVaultRootDir: optional(Schema.NullOr(Schema.String)),
+  })
 }
 

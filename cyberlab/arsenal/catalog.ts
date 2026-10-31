@@ -1654,6 +1654,104 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
     ].join(" && "),
     presets: [],
   },
+  {
+    slotId: "netcat-ncat",
+    name: "Netcat / Ncat / Socat — Diagnóstico TCP/UDP, Banners & Sockets TLS",
+    shortLabel: "Netcat / Ncat",
+    category: "recon_network_ad",
+    kind: "cli_runner",
+    tagline: "Inspeção rápida de conectividade TCP/UDP, captura de banners de serviço e validação de sockets SSL/TLS",
+    description:
+      "Integra o `ncat` (suíte Nmap com suporte a SSL/TLS), `nc` (`netcat-traditional` / `netcat-openbsd`) e `socat` para diagnóstico direto de portas, leitura de banners de protocolos e testes nos 5 Laboratórios de Treino.",
+    upstreamUrl: "https://nmap.org/ncat/",
+    licenseNote: "NPSL / BSD Externo (Binário do Sistema / Kali)",
+    mcpCapable: true,
+    mcpLabel: "Netcat / Ncat Socket MCP",
+    windowsBinaries: ["ncat.exe", "nc.exe"],
+    windowsKnownPaths: [
+      "%ProgramFiles(x86)%\\Nmap\\ncat.exe",
+      "%ProgramFiles%\\Nmap\\ncat.exe",
+      "{toolsRoot}\\nmap\\ncat.exe",
+    ],
+    posixBinaries: ["ncat", "nc", "netcat"],
+    posixKnownPaths: ["/usr/bin/ncat", "/usr/bin/nc", "/bin/nc"],
+    installPowerShell:
+      "winget install --id Insecure.Nmap --accept-package-agreements --accept-source-agreements",
+    installKaliWsl: [
+      "apt-get update -qq",
+      "apt-get install -y -qq ncat netcat-traditional socat",
+      "command -v ncat >/dev/null 2>&1 || command -v nc >/dev/null 2>&1",
+    ].join(" && "),
+    presets: [
+      {
+        id: "ncat-tcp-check",
+        label: "Testar Conectividade TCP & Serviço (-zv -w 4 {target})",
+        description: "Valida abertura de porta TCP com timeout curto sem travar o terminal (ex.: 127.0.0.1 4096)",
+        argsTemplate: "-zv -w 4 {target}",
+      },
+      {
+        id: "ncat-ssl-check",
+        label: "Testar Socket sobre SSL/TLS (--ssl -zv -w 5 {target})",
+        description: "Verifica handshake TLS direto na porta informada (ex.: alvo.com 443)",
+        argsTemplate: "--ssl -zv -w 5 {target}",
+      },
+      {
+        id: "ncat-help",
+        label: "Listar Opções & Flags do Ncat / Netcat",
+        description: "Exibe parâmetros de timeout, SSL, UDP e proxy",
+        argsTemplate: "--help",
+      },
+    ],
+  },
+  {
+    slotId: "dirsearch",
+    name: "Dirsearch — Descoberta de Diretórios, Rotas & Arquivos Web",
+    shortLabel: "Dirsearch",
+    category: "web_bounty_cli",
+    kind: "cli_runner",
+    tagline: "Enumeração clássica e inteligente de diretórios, endpoints REST, backups e arquivos de configuração Web",
+    description:
+      "Integra o `maurosoria/dirsearch` oficial (instalado externamente no Kali WSL2 ou Python) com suporte a extensões dinâmicas, controle de taxa (`--max-rate`) e cabeçalhos de identificação para escopos autorizados de Bug Bounty.",
+    upstreamUrl: "https://github.com/maurosoria/dirsearch",
+    licenseNote: "GPL-2.0 Externo (Desacoplado fora do Repositório MIT)",
+    mcpCapable: true,
+    mcpLabel: "Dirsearch Web Path MCP",
+    windowsBinaries: ["dirsearch.exe", "dirsearch.cmd"],
+    posixBinaries: ["dirsearch"],
+    posixKnownPaths: ["/usr/bin/dirsearch", "/usr/local/bin/dirsearch", "/opt/dirsearch/venv/bin/dirsearch"],
+    installPowerShell: "pip install -U dirsearch",
+    installKaliWsl: [
+      "apt-get update -qq",
+      "if ! apt-get install -y -qq dirsearch; then apt-get install -y -qq python3-venv python3-pip && rm -rf /opt/dirsearch && python3 -m venv /opt/dirsearch/venv && /opt/dirsearch/venv/bin/pip install -U pip setuptools dirsearch && chmod -R a+rX /opt/dirsearch && ln -sf /opt/dirsearch/venv/bin/dirsearch /usr/local/bin/dirsearch; fi",
+      "command -v dirsearch >/dev/null 2>&1 || [ -x /usr/local/bin/dirsearch ]",
+    ].join(" && "),
+    presets: [
+      {
+        id: "dirsearch-quick",
+        label: "Enumeração Web Padrão (-u {target})",
+        description: "Busca diretórios e extensões comuns sem códigos ANSI de cor",
+        argsTemplate: "-u {target} -e php,html,js,json,txt,bak --no-color -q",
+      },
+      {
+        id: "dirsearch-api",
+        label: "Descoberta de Rotas REST / API / Configs (-u {target})",
+        description: "Focado em endpoints de API, manifestos OpenAPI/Swagger e arquivos YAML/JSON",
+        argsTemplate: "-u {target} -e json,yaml,yml,xml,conf -t 20 --no-color",
+      },
+      {
+        id: "dirsearch-bounty",
+        label: "Modo Bug Bounty com Rate-Limit (--max-rate 15)",
+        description: "Respeita limite de requisições por segundo e injeta header de pesquisador",
+        argsTemplate: "-u {target} --max-rate 15 --random-agent {bounty_header_flag} --no-color",
+      },
+      {
+        id: "dirsearch-help",
+        label: "Opções & Flags do Dirsearch",
+        description: "Exibe filtros HTTP, wordlists e opções de recursão",
+        argsTemplate: "--help",
+      },
+    ],
+  },
 ]
 
 function NewCyberChefInstallPowerShell(): string {

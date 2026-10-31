@@ -15,7 +15,7 @@ import net from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
-const UI_BUILD_STAMP = "cyberlab-unified-v5.9-retractable-top-bar"
+const UI_BUILD_STAMP = "cyberlab-unified-v6.0-obsidian-vault-netcat-dirsearch"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const distDir = path.join(repoRoot, "packages", "app", "dist")

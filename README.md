@@ -1,10 +1,11 @@
-# CyberLab OS — Real Arsenal Edition (v5.9)
+# CyberLab OS — Real Arsenal Edition (v6.0)
 
 **CyberLab OS** é um ambiente unificado de engenharia de segurança autorizada, Bug Bounty, auditoria Web/API, engenharia reversa, análise de segredos/SAST/SCA, resposta a incidentes (DFIR/Sigma), validação Purple Team (MITRE ATT&CK) e cooperação multi-agentes construído diretamente sobre o núcleo do **OpenCode V2** (`anomalyco/opencode` v2.1.4, licença `MIT`).
 
 Toda a operação roda em **uma única aplicação unificada na porta `:4096`**, combinando:
-- **Layout Antigravity em 3 Colunas Retráteis**: **Pastas, Arquivos & Slots** à esquerda, a **Ferramenta Real** ocupando todo o palco central (via Web UI local, motor gráfico `X11/noVNC` em `110 DPI` com zoom `1:1` sem deslocamento de cursor ou console ao vivo), e o **Agente OpenCode V2** (com os **9 modelos gratuitos nativos do OpenCode Zen**) em painel estreito retrátil à direita.
-- **46 Slots Oficiais de Ferramentas Externas Reais + Slots Personalizados Ilimitados**: integração híbrida transparente entre **Windows PowerShell** e **WSL2 Kali Linux (`kali-linux`)**, mantendo binários pesados ou copyleft 100% fora da árvore `MIT` do repositório (`C:\CyberLab-Tools`, `WinGet`, `PATH` ou `/opt/...` no Kali WSL2).
+- **Layout Antigravity em 3 Colunas Retráteis + Topo Retrátil (`28px`)**: **Pastas, Arquivos & Slots** à esquerda, a **Ferramenta Real** ocupando todo o palco central (via Web UI local, motor gráfico `X11/noVNC` em `110 DPI` com zoom `1:1` sem deslocamento de cursor ou console ao vivo), e o **Agente OpenCode V2** (com os **9 modelos gratuitos nativos do OpenCode Zen**) em painel estreito retrátil à direita.
+- **Cofre Flutuante de Notas & Comandos Compatível com Obsidian (`📓 Notas & Comandos` / `Alt+N`)**: janela flutuante arrastável, gaveta lateral ou pílula minimizável que abre **por cima** da ferramenta central (sem encolher o Burp Suite ou Ghidra!), salvando arquivos `.md` reais no disco com `#tags`, `[[WikiLinks]]` clicáveis, Backlinks, checklists interativos (`- [ ]`) e blocos de comando com botões em 1 clique (`📋 Copiar`, `⚡ Injetar no CLI`, `▶ Executar`, `🤖 IA`) — podendo compartilhar exatamente a mesma pasta de Vault do Obsidian Desktop.
+- **48 Slots Oficiais de Ferramentas Externas Reais + Slots Personalizados Ilimitados**: integração híbrida transparente entre **Windows PowerShell** e **WSL2 Kali Linux (`kali-linux`)**, mantendo binários pesados ou copyleft 100% fora da árvore `MIT` do repositório (`C:\CyberLab-Tools`, `WinGet`, `PATH` ou `/opt/...` no Kali WSL2).
 - **Conexão MCP Supervisionada em 1 Clique (`🔌 MCP` / `🟢 MCP`)**: selos visuais na barra lateral e ativação direta no `opencode.json` para conectar as ferramentas externas ao Agente IA respeitando a Trava de Escopo e redação automática de segredos.
 - **4 Parceiros Cognitivos CDI Autônomos (`Kairós:8788`, `Naia:8789`, `Salem:8790`, `Nova:8791`)**: gateway bidirecional assinado por `HMAC-SHA256` com autonomia horizontal.
 - **Governança de Escopo Bug Bounty, Cofre Forense `SHA-256` e 5 Laboratórios Internos de Treino**.
@@ -142,7 +143,7 @@ O CyberLab OS já traz ativos e visíveis os **9 modelos gratuitos do provedor O
 
 ---
 
-## 5. Catálogo Completo dos 46 Slots Oficiais + Slots Personalizados
+## 5. Catálogo Completo dos 48 Slots Oficiais + Slots Personalizados
 
 Todas as ferramentas abaixo são instaladas e executadas **externamente** ao repositório `MIT` do CyberLab OS:
 
@@ -155,11 +156,12 @@ Todas as ferramentas abaixo são instaladas e executadas **externamente** ao rep
 | `caido` | **Caido** | `web_embed` (`:7000`) | UI Web rápida em Rust iniciada com `--allow-guests` (uso imediato sem conta) |
 | `owasp-zap` | **OWASP ZAP** | `desktop_gui` (`noVNC` + Janela) | Active Scanner completo, AJAX Spider e HUD integrados ao palco central |
 
-### 5.2 Auditoria Web, Bug Bounty, Fuzzing & OAST (`8 slots`)
+### 5.2 Auditoria Web, Bug Bounty, Fuzzing & OAST (`9 slots`)
 | Slot ID | Ferramenta | Modo | Destaques |
 |---|---|---|---|
 | `nuclei` | **ProjectDiscovery Nuclei** | `cli_runner` | Varredura baseada nos 11.000+ templates YAML oficiais (`🔌 MCP`) |
 | `ffuf` | **ffuf** | `cli_runner` | Descoberta rápida de diretórios, rotas e parâmetros Web (`🔌 MCP`) |
+| `dirsearch` | **Dirsearch** (`maurosoria/dirsearch`) | `cli_runner` | Scanner inteligente de diretórios, extensões, backups e endpoints ocultos com recursão (`🔌 MCP`) |
 | `katana` | **ProjectDiscovery Katana** | `cli_runner` | Crawler Web moderno com extração de endpoints JS e modo headless (`🔌 MCP`) |
 | `httpx` | **ProjectDiscovery httpx** | `cli_runner` | Sondagem HTTP multi-propósito (status, títulos, tech stack, hashes TLS) (`🔌 MCP`) |
 | `interactsh` | **Interactsh Client** | `cli_runner` | Monitoramento Out-of-Band (OAST DNS/HTTP/SMTP) (`🔌 MCP`) |
@@ -167,11 +169,12 @@ Todas as ferramentas abaixo são instaladas e executadas **externamente** ao rep
 | `sqlmap` | **sqlmap** | `cli_runner` | Auditoria de injeção SQL supervisionada pela Trava de Escopo (`🔌 MCP`) |
 | `wpprobe` | **WPProbe** *(Kali 2026.1)* | `cli_runner` | Inventário rápido de plugins WordPress e correlação com base pública de CVEs (`🔌 MCP`) |
 
-### 5.3 Reconhecimento, Rede, PCAP & Infraestrutura (`7 slots`)
+### 5.3 Reconhecimento, Rede, PCAP & Infraestrutura (`8 slots`)
 | Slot ID | Ferramenta | Modo | Destaques |
 |---|---|---|---|
 | `subfinder` | **ProjectDiscovery Subfinder** | `cli_runner` | Enumeração passiva de subdomínios (`🔌 MCP`) |
 | `nmap` | **Nmap** | `cli_runner` | Descoberta de portas, serviços (`-sV`) e scripts NSE de auditoria (`🔌 MCP`) |
+| `netcat-ncat` | **Netcat / Ncat** (`ncat` & `nc`) | `cli_runner` | Sondagem TCP/UDP, captura de banners, inspeção SSL/TLS (`--ssl`) e listeners de diagnóstico (`🔌 MCP`) |
 | `naabu-dnsx-tlsx` | **DNSx & TLSx** | `cli_runner` | Resolução DNS em massa, verificação de takeover e inspeção TLS/X.509 (`🔌 MCP`) |
 | `wireshark` | **Wireshark GUI & `tshark`** | `desktop_gui` | Interface gráfica completa embutida via `noVNC` (preseed não-interativo) + `tshark` (`🔌 MCP`) |
 | `netexec` | **NetExec (`nxc`)** | `cli_runner` | Auditoria de postura em protocolos corporativos SMB/LDAP/WinRM/Kerberos (`🔌 MCP`) |
@@ -264,7 +267,7 @@ Podem ser provisionados, iniciados, auditados, corrigidos (*live patch*) e resta
 
 ---
 
-## 8. Histórico de Evolução (v1.0 → v5.9), Testes, CI e Licenciamento MIT
+## 8. Histórico de Evolução (v1.0 → v6.0), Testes, CI e Licenciamento MIT
 
 ### Resumo das Versões Recentes
 - **v1.0 – v4.0**: Fundação sobre OpenCode V2 (`2.1.4`), governança anti-TOCTOU, cofre `SHA-256`, 4 CDIs autônomos (`8788–8791`), 5 Laboratórios de Treino e ativação dos 9 Modelos Gratuitos do OpenCode Zen.
@@ -273,6 +276,7 @@ Podem ser provisionados, iniciados, auditados, corrigidos (*live patch*) e resta
 - **v5.7**: Correção cirúrgica dos instaladores WSL2 (`Strix` standalone, `HexStrike` wheels puros, `PentAGI`, `CAI` via `uv` Python 3.12, `VeraCrypt` `.deb` oficial), validação real `> 10 MB` do `burpsuite.jar` (eliminando falso positivo na barra lateral) e status honesto (`exit 1`) no instalador em lote.
 - **v5.8**: Nitidez nativa `110 DPI` + eliminação total de deslocamento do cursor no zoom (`60%–160%`) via hooks internos `Display._scale` / `ExtendedDesktopSize` do `noVNC` e zoom interno de documento HTML; selos **`🔌 MCP` / `🟢 MCP`** e ponte **`cyberlab/mcp/arsenal-mcp-stdio.ts`** em 1 clique; suporte a TLS autoassinado local para abertura do **`PentAGI (:8443)`**; e assimilação de 5 ferramentas MIT do Kali 2026.1 (**`Betterleaks`**, **`GEF`**, **`Atomic-Operator`**, **`WPProbe`** e **`Pentest Copilot`**), totalizando **46 slots oficiais**.
 - **v5.9**: **Aba Horizontal Superior Retrátil na Vertical (`▲ Recolher Topo` / `▼ Controles & Abas`)** que recolhe todas as faixas de abas, status, MCP, Proxy e barra de controles em uma fita única de `28px` (recolhimento automático ao abrir ferramentas gráficas/Web + sincronização imediata de resolução `noVNC`), além de aumento de timeout e re-tentativa automática no boot frio do WSL2 `kali-linux`.
+- **v6.0**: **Cofre Flutuante & Acoplável Compatível com Obsidian (`📓 Notas & Comandos` / `Alt+N`)** salvando notas `.md` reais em disco (`<workspace>/vault/` ou pasta compartilhada com o Obsidian Desktop) com `#tags`, `[[WikiLinks]]`, Backlinks, checklists interativos e execução/injeção de comandos em 1 clique sem deslocar nem encolher a ferramenta do palco central, além dos slots oficiais **`netcat-ncat`** e **`dirsearch`** (**48 slots oficiais**).
 
 ### Comandos de Verificação Local e CI (Linux + Windows PowerShell)
 

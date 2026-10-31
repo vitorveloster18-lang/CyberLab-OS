@@ -159,6 +159,8 @@ const CUSTOM_MCP_LABELS: Record<string, string> = {
   gef: "GEF Binary Inspector MCP",
   "atomic-operator": "MITRE ATT&CK MCP",
   wpprobe: "WPProbe CVE MCP",
+  "netcat-ncat": "Netcat / Ncat Socket MCP",
+  dirsearch: "Dirsearch Web Path MCP",
 }
 
 const MIME_BY_EXT: Record<string, string> = {

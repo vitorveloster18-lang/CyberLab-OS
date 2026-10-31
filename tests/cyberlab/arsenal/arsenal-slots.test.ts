@@ -222,17 +222,35 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
     expect(pentagiDef.installKaliWsl).toContain("PENTAGI_LISTEN_IP=0.0.0.0")
     expect(pentagiDef.managedDaemonPort).toBe(8443)
 
-    // v5.8 Kali 2026.1 defensive / auditing / debugging / methodology slots
-    for (const newId of ["betterleaks", "gef", "atomic-operator", "wpprobe", "pentest-copilot"]) {
+    // v5.8 Kali 2026.1 defensive / auditing / debugging / methodology slots + v6.0 Netcat & Dirsearch
+    for (const newId of [
+      "betterleaks",
+      "gef",
+      "atomic-operator",
+      "wpprobe",
+      "pentest-copilot",
+      "netcat-ncat",
+      "dirsearch",
+    ]) {
       const found = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === newId)
       expect(found).toBeDefined()
     }
-    expect(OFFICIAL_ARSENAL_SLOTS.length).toBeGreaterThanOrEqual(46)
+    expect(OFFICIAL_ARSENAL_SLOTS.length).toBeGreaterThanOrEqual(48)
 
-    // v5.8 MCP capability badges & 1-click opencode.json toggle
+    const netcatDef = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === "netcat-ncat")!
+    expect(netcatDef.mcpCapable).toBe(true)
+    expect(netcatDef.posixBinaries).toContain("ncat")
+    expect(netcatDef.windowsBinaries).toContain("ncat.exe")
+
+    const dirsearchDef = OFFICIAL_ARSENAL_SLOTS.find((s) => s.slotId === "dirsearch")!
+    expect(dirsearchDef.mcpCapable).toBe(true)
+    expect(dirsearchDef.upstreamUrl).toBe("https://github.com/maurosoria/dirsearch")
+    expect(dirsearchDef.installKaliWsl).toContain("/usr/local/bin/dirsearch")
+
+    // v5.8 / v6.0 MCP capability badges & 1-click opencode.json toggle
     const preMcpOverview = await ws.getArsenalOverview(false)
     const mcpCapableSlots = preMcpOverview.slots.filter((s) => s.mcpCapable)
-    expect(mcpCapableSlots.length).toBeGreaterThanOrEqual(38)
+    expect(mcpCapableSlots.length).toBeGreaterThanOrEqual(40)
 
     const toggleOn = await ws.launchArsenalSlot({
       slotId: "betterleaks",
@@ -270,4 +288,71 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
 
     await ws.launchArsenalSlot({ slotId: "cyberchef", action: "stop_web" })
   }, 25_000)
+
+  test("3. Native Obsidian-compatible .md Vault initializes starter notes, parses #tags & [[WikiLinks]], resolves backlinks, and rejects path traversal", async () => {
+    const wsDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-v6-vault-"))
+    const customObsidianDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-v6-custom-obsidian-"))
+    tempDirs.push(wsDir, customObsidianDir)
+    process.env.CYBERLAB_GLOBAL_CONFIG_DIR = path.join(wsDir, ".global-cfg")
+
+    const ws = new CyberLabWorkspace({
+      projectId: "vault-proj-1",
+      workspaceRoot: wsDir,
+      inMemoryDb: true,
+    })
+    workspaces.push(ws)
+
+    const initial = await ws.getVaultOverview()
+    expect(initial.isCustomPath).toBe(false)
+    expect(initial.notes.length).toBeGreaterThanOrEqual(4)
+    expect(initial.allTags).toContain("comandos")
+    expect(initial.allTags).toContain("bugbounty")
+
+    // Read Comandos/Comandos-Rapidos.md and verify starter note has Netcat & Dirsearch commands + backlink from index
+    const cmdNote = await ws.readVaultNote("Comandos/Comandos-Rapidos.md")
+    expect(cmdNote.content).toContain("ncat -zv")
+    expect(cmdNote.content).toContain("dirsearch -u")
+    expect(cmdNote.backlinks).toContain("00-Indice-CyberLab.md")
+
+    // Write a new note with [[WikiLinks]], #tags, and a fenced code block containing fake [[IgnoredLink]] & #ignoredtag
+    const written = await ws.writeVaultNote(
+      "Recon/Alvo-Acme.md",
+      [
+        "# Recon Alvo Acme",
+        "",
+        "#recon #acme",
+        "",
+        "Usar comandos de [[Comandos-Rapidos]] e registrar em [[Diario-Labs|Diário]].",
+        "",
+        "```bash",
+        "#comentario_bash_nao_e_tag [[LinkDentroDeCodigoIgnorado]]",
+        "dirsearch -u https://acme.example -e php,json",
+        "```",
+      ].join("\n"),
+    )
+    expect(written.note.tags).toEqual(["acme", "recon"])
+    expect(written.note.wikiLinks).toEqual(["Comandos-Rapidos", "Diario-Labs"])
+
+    // Verify Comandos-Rapidos now sees Recon/Alvo-Acme.md as a backlink!
+    const updatedCmdNote = await ws.readVaultNote("Comandos/Comandos-Rapidos.md")
+    expect(updatedCmdNote.backlinks).toContain("Recon/Alvo-Acme.md")
+
+    // Reject path traversal outside Vault root
+    await expect(ws.readVaultNote("../../etc/passwd.md")).rejects.toThrow(/Caminho de nota inválido|escapa da raiz/)
+    await expect(ws.writeVaultNote("../escape.md", "# bad")).rejects.toThrow(/Caminho de nota inválido|escapa da raiz/)
+
+    // Delete note cleanly
+    const afterDelete = await ws.deleteVaultNote("Recon/Alvo-Acme.md")
+    expect(afterDelete.notes.some((n) => n.relativePath === "Recon/Alvo-Acme.md")).toBe(false)
+
+    // Switch to a custom external Obsidian folder and back
+    const customOv = await ws.configureVaultRoot(customObsidianDir)
+    expect(customOv.isCustomPath).toBe(true)
+    expect(customOv.vaultRootDir).toBe(path.resolve(customObsidianDir))
+    expect(customOv.notes.length).toBeGreaterThanOrEqual(4)
+
+    const resetOv = await ws.configureVaultRoot(null)
+    expect(resetOv.isCustomPath).toBe(false)
+    expect(resetOv.vaultRootDir).toBe(path.join(wsDir, "vault"))
+  })
 })

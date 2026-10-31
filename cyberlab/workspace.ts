@@ -26,6 +26,11 @@ import {
   type WorkspaceFileEntry,
 } from "./arsenal/slot-manager.js"
 import type { ArsenalRuntimePreference, ArsenalSlotKind } from "./arsenal/catalog.js"
+import {
+  CyberLabObsidianVault,
+  type VaultNoteDocument,
+  type VaultOverview,
+} from "./vault/obsidian-vault.js"
 import { PartnerAuthenticator } from "./partners/authentication.js"
 import { PartnerBridge, type PartnerDispatchOutcome } from "./partners/bridge.js"
 import {
@@ -141,6 +146,7 @@ export class CyberLabWorkspace {
   readonly cdiHub: CdiPartnerHub
   readonly externalControl: ExternalControlPlane
   readonly arsenal: ArsenalSlotManager
+  readonly vault: CyberLabObsidianVault
   private readonly scopePersistencePath: string | null
   private readonly ownedManager?: CyberLabWorkspaceManager
   private initialized = false
@@ -197,6 +203,11 @@ export class CyberLabWorkspace {
       projectId: this.projectId,
       workspaceRoot: this.workspaceRoot,
       scopes: this.scopes,
+      ...(options.inMemoryDb ? { globalConfigDir: path.join(this.workspaceRoot, ".cyberlab") } : {}),
+    })
+    this.vault = new CyberLabObsidianVault({
+      projectId: this.projectId,
+      workspaceRoot: this.workspaceRoot,
       ...(options.inMemoryDb ? { globalConfigDir: path.join(this.workspaceRoot, ".cyberlab") } : {}),
     })
 
@@ -727,6 +738,34 @@ export class CyberLabWorkspace {
   }> {
     await this.ensureInitialized()
     return this.arsenal.readWorkspaceFilePreview(relativeFilePath)
+  }
+
+  async getVaultOverview(): Promise<VaultOverview> {
+    await this.ensureInitialized()
+    return this.vault.getOverview()
+  }
+
+  async readVaultNote(relativePath: string): Promise<VaultNoteDocument> {
+    await this.ensureInitialized()
+    return this.vault.readNote(relativePath)
+  }
+
+  async writeVaultNote(
+    relativePath: string,
+    content: string,
+  ): Promise<{ note: VaultNoteDocument; overview: VaultOverview }> {
+    await this.ensureInitialized()
+    return this.vault.writeNote(relativePath, content)
+  }
+
+  async deleteVaultNote(relativePath: string): Promise<VaultOverview> {
+    await this.ensureInitialized()
+    return this.vault.deleteNote(relativePath)
+  }
+
+  async configureVaultRoot(customDir?: string | null): Promise<VaultOverview> {
+    await this.ensureInitialized()
+    return this.vault.setCustomVaultRoot(customDir)
   }
 
   async persistArsenalOutputToEvidence(params: {

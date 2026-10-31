@@ -708,6 +708,84 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
         }),
       ),
   )
+  .add(
+    HttpApiEndpoint.get("cyberlab.vault.overview", "/api/cyberlab/vault", {
+      query: LocationQuery,
+      success: Location.response(CyberLab.VaultOverviewInfo),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.vault.overview",
+          summary: "List Obsidian-compatible .md notes and tags inside the active CyberLab Vault",
+          description: "Auto-initializes <workspace>/vault with starter command & checklist notes on first use.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.vault.read", "/api/cyberlab/vault/read", {
+      query: LocationQuery,
+      payload: CyberLab.VaultReadInput,
+      success: Location.response(CyberLab.VaultNoteDocumentInfo),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.vault.read",
+          summary: "Read a Markdown note from the Vault with [[WikiLinks]], #tags, and backlinks",
+          description: "Resolves backlinks across all other notes in the Vault.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.vault.write", "/api/cyberlab/vault/write", {
+      query: LocationQuery,
+      payload: CyberLab.VaultWriteInput,
+      success: Location.response(CyberLab.VaultWriteResult),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.vault.write",
+          summary: "Create or update a Markdown (.md) note in the Obsidian-compatible Vault",
+          description: "Persists Markdown content to disk inside the Vault directory.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.vault.delete", "/api/cyberlab/vault/delete", {
+      query: LocationQuery,
+      payload: CyberLab.VaultDeleteInput,
+      success: Location.response(CyberLab.VaultOverviewInfo),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.vault.delete",
+          summary: "Delete a Markdown note from the Vault",
+          description: "Removes the specified .md note safely inside the Vault root.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.put("cyberlab.vault.config", "/api/cyberlab/vault/config", {
+      query: LocationQuery,
+      payload: CyberLab.VaultConfigInput,
+      success: Location.response(CyberLab.VaultOverviewInfo),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.vault.config",
+          summary: "Set or reset a custom Obsidian Vault folder path for the active project",
+          description: "Allows sharing the exact same folder with Obsidian Desktop.",
+        }),
+      ),
+  )
   .annotateMerge(
     OpenApi.annotations({
       title: "cyberlab",

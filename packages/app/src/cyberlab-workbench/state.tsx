@@ -31,6 +31,8 @@ import type {
   ProxyBrowserLaunchResultDto,
   ReadEvidenceDto,
   ScopeDto,
+  VaultNoteDocumentDto,
+  VaultOverviewDto,
   WorkspaceFileEntryDto,
   WorkspaceFilePreviewDto,
   WorkspaceFilesListDto,
@@ -42,6 +44,8 @@ const UI_STORAGE_KEY = "cyberlab.v5.antigravity.ui"
 interface StoredUiPrefs {
   open: boolean
   topControlsOpen: boolean
+  vaultOpen: boolean
+  vaultActiveNotePath: string
   leftSidebarOpen: boolean
   leftSidebarTab: LeftSidebarTab
   leftSidebarWidth: number
@@ -94,6 +98,8 @@ function createWorkbenchService() {
   const [ui, setUi] = createStore<{
     open: boolean
     topControlsOpen: boolean
+    vaultOpen: boolean
+    vaultActiveNotePath: string
     leftSidebarOpen: boolean
     leftSidebarTab: LeftSidebarTab
     leftSidebarWidth: number
@@ -117,6 +123,8 @@ function createWorkbenchService() {
   }>({
     open: Boolean(saved.open),
     topControlsOpen: saved.topControlsOpen !== false,
+    vaultOpen: Boolean(saved.vaultOpen),
+    vaultActiveNotePath: saved.vaultActiveNotePath || "00-Indice-CyberLab.md",
     leftSidebarOpen: saved.leftSidebarOpen !== false,
     leftSidebarTab: saved.leftSidebarTab === "files" ? "files" : "slots",
     leftSidebarWidth:
@@ -149,6 +157,8 @@ function createWorkbenchService() {
     loading: boolean
     status: WorkspaceStatusDto | null
     arsenal: ArsenalOverviewDto | null
+    vault: VaultOverviewDto | null
+    activeVaultNote: VaultNoteDocumentDto | null
     files: WorkspaceFileEntryDto[]
     filePreview: WorkspaceFilePreviewDto | null
     approvals: ApprovalDto[]
@@ -165,6 +175,8 @@ function createWorkbenchService() {
     loading: false,
     status: null,
     arsenal: null,
+    vault: null,
+    activeVaultNote: null,
     files: [],
     filePreview: null,
     approvals: [],
@@ -192,6 +204,8 @@ function createWorkbenchService() {
     safeWriteJson(UI_STORAGE_KEY, {
       open: ui.open,
       topControlsOpen: ui.topControlsOpen,
+      vaultOpen: ui.vaultOpen,
+      vaultActiveNotePath: ui.vaultActiveNotePath,
       leftSidebarOpen: ui.leftSidebarOpen,
       leftSidebarTab: ui.leftSidebarTab,
       leftSidebarWidth: ui.leftSidebarWidth,
@@ -884,8 +898,213 @@ function createWorkbenchService() {
     }
   }
 
+  async function refreshVault(openDefaultIfNone = false): Promise<VaultOverviewDto | null> {
+    try {
+      const overview = await cyberlabFetch<VaultOverviewDto>(serverTarget(), "/api/cyberlab/vault")
+      setBackend("vault", reconcile(overview))
+      if (openDefaultIfNone && (!backend.activeVaultNote || !overview.notes.some((n) => n.relativePath === backend.activeVaultNote?.relativePath))) {
+        const candidate =
+          overview.notes.find((n) => n.relativePath === ui.vaultActiveNotePath)?.relativePath ??
+          overview.notes[0]?.relativePath
+        if (candidate) {
+          await openVaultNote(candidate)
+        }
+      }
+      return overview
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      return null
+    }
+  }
+
+  async function openVaultNote(relativePathOrWikiTarget: string, autoCreateIfMissing = false): Promise<VaultNoteDocumentDto | null> {
+    const raw = relativePathOrWikiTarget.trim()
+    if (!raw) return null
+    let targetPath = raw
+    const existingList = backend.vault?.notes ?? []
+    const normRawNoExt = raw.replace(/\\/g, "/").replace(/\.md$/i, "").toLowerCase()
+    const matched = existingList.find((n) => {
+      const relNoExt = n.relativePath.replace(/\.md$/i, "").toLowerCase()
+      const baseNoExt = relNoExt.split("/").at(-1) ?? relNoExt
+      return relNoExt === normRawNoExt || baseNoExt === normRawNoExt
+    })
+    if (matched) {
+      targetPath = matched.relativePath
+    } else if (!targetPath.toLowerCase().endsWith(".md")) {
+      targetPath = `${targetPath}.md`
+    }
+
+    try {
+      const doc = await cyberlabFetch<VaultNoteDocumentDto>(serverTarget(), "/api/cyberlab/vault/read", {
+        method: "POST",
+        body: JSON.stringify({ relativePath: targetPath }),
+      })
+      batch(() => {
+        setBackend("activeVaultNote", reconcile(doc))
+        setUi("vaultActiveNotePath", doc.relativePath)
+      })
+      persistUi()
+      return doc
+    } catch (err) {
+      if (autoCreateIfMissing) {
+        const baseTitle = targetPath.replace(/\.md$/i, "").split("/").at(-1) ?? targetPath
+        return await saveVaultNote(
+          targetPath,
+          `# ${baseTitle}\n\n#notas\n\nRelacionado a [[00-Indice-CyberLab]].\n`,
+        )
+      }
+      setError(err instanceof Error ? err.message : String(err))
+      return null
+    }
+  }
+
+  async function saveVaultNote(relativePath: string, content: string, silent = false): Promise<VaultNoteDocumentDto | null> {
+    try {
+      const res = await cyberlabFetch<{ note: VaultNoteDocumentDto; overview: VaultOverviewDto }>(
+        serverTarget(),
+        "/api/cyberlab/vault/write",
+        {
+          method: "POST",
+          body: JSON.stringify({ relativePath, content }),
+        },
+      )
+      batch(() => {
+        setBackend("vault", reconcile(res.overview))
+        setBackend("activeVaultNote", reconcile(res.note))
+        setUi("vaultActiveNotePath", res.note.relativePath)
+        if (!silent) setNotice(`Nota salva em vault/${res.note.relativePath}`)
+      })
+      persistUi()
+      return res.note
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      return null
+    }
+  }
+
+  async function deleteVaultNote(relativePath: string): Promise<void> {
+    try {
+      const updated = await cyberlabFetch<VaultOverviewDto>(serverTarget(), "/api/cyberlab/vault/delete", {
+        method: "POST",
+        body: JSON.stringify({ relativePath }),
+      })
+      batch(() => {
+        setBackend("vault", reconcile(updated))
+        if (backend.activeVaultNote?.relativePath === relativePath) {
+          setBackend("activeVaultNote", null)
+        }
+        setNotice(`Nota "${relativePath}" removida do Vault.`)
+      })
+      const nextRel = updated.notes[0]?.relativePath
+      if (nextRel) await openVaultNote(nextRel)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function configureVaultPath(customVaultRootDir?: string | null): Promise<void> {
+    try {
+      const updated = await cyberlabFetch<VaultOverviewDto>(serverTarget(), "/api/cyberlab/vault/config", {
+        method: "PUT",
+        body: JSON.stringify({ customVaultRootDir: customVaultRootDir?.trim() ? customVaultRootDir.trim() : null }),
+      })
+      setBackend("vault", reconcile(updated))
+      setNotice(`Pasta do Vault configurada: ${updated.vaultRootDir}`)
+      if (updated.notes[0]?.relativePath) {
+        await openVaultNote(updated.notes[0].relativePath)
+      } else {
+        setBackend("activeVaultNote", null)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  function toggleVault(next?: boolean): void {
+    const targetOpen = next ?? !ui.vaultOpen
+    setUi("vaultOpen", targetOpen)
+    persistUi()
+    if (targetOpen) {
+      void refreshVault(true)
+    }
+  }
+
+  function injectCommandIntoCli(rawCommand: string, runNow = false): void {
+    const firstLine = rawCommand
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .find((l) => l.length > 0 && !l.startsWith("#"))
+    if (!firstLine) return
+
+    const binToSlotMap: Record<string, string> = {
+      ncat: "netcat-ncat",
+      nc: "netcat-ncat",
+      netcat: "netcat-ncat",
+      dirsearch: "dirsearch",
+      nuclei: "nuclei",
+      ffuf: "ffuf",
+      katana: "katana",
+      httpx: "httpx",
+      subfinder: "subfinder",
+      nmap: "nmap",
+      dalfox: "dalfox",
+      sqlmap: "sqlmap",
+      trivy: "trivy",
+      semgrep: "semgrep",
+      opengrep: "semgrep",
+      betterleaks: "betterleaks",
+      wpprobe: "wpprobe",
+      keyhunter: "keyhunter",
+      "gdb-gef": "gef",
+      "atomic-operator": "atomic-operator",
+      nxc: "netexec",
+      netexec: "netexec",
+    }
+
+    const parts = firstLine.match(/^([a-zA-Z0-9._-]+)(?:\s+(.*))?$/)
+    const leadBin = parts?.[1]?.toLowerCase() ?? ""
+    const restArgs = parts?.[2]?.trim() ?? ""
+    const mappedSlotId = binToSlotMap[leadBin]
+
+    const curSlot = activeSlot()
+    const targetSlotId =
+      mappedSlotId ??
+      (curSlot?.kind === "cli_runner" ? curSlot.slotId : "nuclei")
+    const argsToSet = mappedSlotId ? restArgs : firstLine
+
+    batch(() => {
+      setUi("open", true)
+      setUi("activeSlotId", targetSlotId)
+      setUi("centerView", "tool")
+      setUi("topControlsOpen", true)
+      setUi("cliArgsBySlot", targetSlotId, argsToSet)
+    })
+    persistUi()
+
+    if (runNow) {
+      void launchSlot({
+        slotId: targetSlotId,
+        action: "run_cli",
+        target: ui.cliTargetBySlot[targetSlotId] ?? "",
+        rawArgs: argsToSet,
+      })
+    } else {
+      setNotice(`Comando injetado no slot "${targetSlotId}" (${argsToSet || "sem argumentos"}).`)
+    }
+  }
+
   onMount(() => {
     void refreshAll()
+    if (ui.vaultOpen) {
+      void refreshVault(true)
+    }
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.altKey && (ev.key === "n" || ev.key === "N")) {
+        ev.preventDefault()
+        toggleVault()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
     const fastPoll = window.setInterval(() => {
       if (ui.open && hasRunningJobs()) {
         void refreshArsenalOnly(false)
@@ -897,6 +1116,7 @@ function createWorkbenchService() {
       }
     }, 8000)
     onCleanup(() => {
+      window.removeEventListener("keydown", onKeyDown)
       window.clearInterval(fastPoll)
       window.clearInterval(slowPoll)
     })
@@ -906,6 +1126,7 @@ function createWorkbenchService() {
     const _dir = resolvedDirectory()
     if (_dir && ui.open) {
       void refreshAll()
+      if (ui.vaultOpen) void refreshVault(true)
     }
   })
 
@@ -921,6 +1142,13 @@ function createWorkbenchService() {
     openWorkspace,
     toggleWorkbench,
     toggleTopControls,
+    toggleVault,
+    refreshVault,
+    openVaultNote,
+    saveVaultNote,
+    deleteVaultNote,
+    configureVaultPath,
+    injectCommandIntoCli,
     toggleLeftSidebar,
     setLeftSidebarTab,
     setLeftSidebarWidth,

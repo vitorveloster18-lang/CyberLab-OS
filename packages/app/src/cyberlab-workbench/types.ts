@@ -324,3 +324,32 @@ export interface ProjectsAndLabsOverviewDto {
   projects: ManagedProjectDto[]
   labs: TrainingLabDto[]
 }
+
+export interface VaultNoteSummaryDto {
+  relativePath: string
+  title: string
+  folder: string
+  tags: string[]
+  wikiLinks: string[]
+  snippet: string
+  sizeBytes: number
+  updatedAt: string
+}
+
+export interface VaultOverviewDto {
+  vaultRootDir: string
+  isCustomPath: boolean
+  notes: VaultNoteSummaryDto[]
+  allTags: string[]
+}
+
+export interface VaultNoteDocumentDto {
+  relativePath: string
+  title: string
+  content: string
+  tags: string[]
+  wikiLinks: string[]
+  backlinks: string[]
+  updatedAt: string
+}
+

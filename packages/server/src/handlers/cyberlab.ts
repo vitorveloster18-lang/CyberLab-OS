@@ -853,6 +853,46 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
           }
         }),
       ),
+    )
+    .handle("cyberlab.vault.overview", () =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* Effect.promise(() => ws.getVaultOverview())
+        }),
+      ),
+    )
+    .handle("cyberlab.vault.read", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() => ws.readVaultNote(payload.relativePath))
+        }),
+      ),
+    )
+    .handle("cyberlab.vault.write", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() => ws.writeVaultNote(payload.relativePath, payload.content))
+        }),
+      ),
+    )
+    .handle("cyberlab.vault.delete", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() => ws.deleteVaultNote(payload.relativePath))
+        }),
+      ),
+    )
+    .handle("cyberlab.vault.config", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() => ws.configureVaultRoot(payload.customVaultRootDir ?? null))
+        }),
+      ),
     ),
 )
 

@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { Icon } from "@opencode/ui/icon"
 import { useCyberLabWorkbench, type CyberLabWorkbenchService } from "./state"
 import type { ArsenalRuntimePrefDto, ArsenalSlotKindDto, ArsenalSlotStatusDto, CenterViewMode } from "./types"
+import { CyberLabVaultOverlay } from "./vault-overlay"
 
 function copyText(wb: CyberLabWorkbenchService, text: string, label = "Comando") {
   if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -877,6 +878,19 @@ export function CyberLabCenterStage() {
 
               <button
                 type="button"
+                title="Abrir ou fechar Cofre Flutuante de Notas & Comandos compatível com Obsidian (.md) — Atalho: Alt+N"
+                class={`rounded border px-1.5 py-0 text-[9.5px] font-semibold cursor-pointer ${
+                  wb.ui.vaultOpen
+                    ? "border-violet-500 bg-violet-600/25 text-violet-300"
+                    : "border-violet-500/40 bg-violet-600/10 text-violet-300 hover:bg-violet-600/20"
+                }`}
+                onClick={() => wb.toggleVault()}
+              >
+                📓 Notas
+              </button>
+
+              <button
+                type="button"
                 title="Ampliar ferramenta ocultando/restaurando painéis laterais e topo"
                 class="rounded border border-v2-border-border-base bg-v2-background-bg-base px-1.5 py-0 text-[9.5px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
                 onClick={toggleMaximizeCenter}
@@ -940,6 +954,19 @@ export function CyberLabCenterStage() {
           </div>
 
           <div class="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              title="Abrir Cofre Flutuante de Notas & Comandos compatível com Obsidian (.md) por cima da ferramenta sem perder espaço (Atalho: Alt+N)"
+              class={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] font-semibold cursor-pointer ${
+                wb.ui.vaultOpen
+                  ? "border-violet-400 bg-violet-600 text-white"
+                  : "border-violet-500/50 bg-violet-600/15 text-violet-300 hover:bg-violet-600/25"
+              }`}
+              onClick={() => wb.toggleVault()}
+            >
+              <span>📓 Notas & Comandos</span>
+            </button>
+
             <button
               type="button"
               title="Recolher todas as barras superiores na vertical para liberar espaço máximo para a ferramenta"
@@ -2534,6 +2561,9 @@ sudo mkdir -p /opt/opentrap && cd /opt/opentrap
           </div>
         </div>
       </Show>
+
+      {/* Cofre Flutuante / Lateral Compatível com Obsidian (.md) — abre por cima da ferramenta sem encolher o Centro! */}
+      <CyberLabVaultOverlay />
     </section>
   )
 }
