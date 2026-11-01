@@ -339,7 +339,8 @@ export function CyberLabVaultOverlay() {
         fallback={
           <div
             data-slot="cyberlab-vault-minimized"
-            class="fixed right-4 bottom-4 z-[95] flex items-center gap-2 rounded-full border border-violet-500/60 bg-zinc-950/95 px-3.5 py-1.5 text-[11.5px] shadow-2xl"
+            style={{ "background-color": "#09090b", color: "#f4f4f5" }}
+            class="fixed right-4 bottom-4 z-[95] flex items-center gap-2 rounded-full border border-violet-500 bg-zinc-950 px-3.5 py-1.5 text-[11.5px] shadow-2xl"
           >
             <span class="font-semibold text-violet-300">
               📓 {wb.backend.activeVaultNote?.title ?? "Cofre Obsidian"}
@@ -371,19 +372,25 @@ export function CyberLabVaultOverlay() {
                   top: `${winPos().y}px`,
                   width: `${winSize().w}px`,
                   height: `${winSize().h}px`,
+                  "background-color": "#09090b",
+                  color: "#f4f4f5",
                 }
-              : undefined
+              : {
+                  "background-color": "#09090b",
+                  color: "#f4f4f5",
+                }
           }
           class={
             layout() === "floating"
-              ? "fixed z-[95] flex flex-col overflow-hidden rounded-xl border border-violet-500/50 bg-zinc-950/98 text-zinc-100 shadow-[0_24px_70px_rgba(0,0,0,0.85)] resize"
-              : "fixed top-[28px] right-0 bottom-0 z-[95] flex w-[500px] max-w-[92vw] flex-col overflow-hidden border-l border-violet-500/50 bg-zinc-950/98 text-zinc-100 shadow-2xl"
+              ? "fixed z-[95] flex flex-col overflow-hidden rounded-xl border border-violet-500 bg-zinc-950 text-zinc-100 shadow-[0_24px_70px_rgba(0,0,0,0.92)] resize"
+              : "fixed top-[28px] right-0 bottom-0 z-[95] flex w-[500px] max-w-[92vw] flex-col overflow-hidden border-l border-violet-500 bg-zinc-950 text-zinc-100 shadow-2xl"
           }
         >
           {/* BARRA DE TÍTULO ARRASTÁVEL DO COFRE */}
           <div
             onPointerDown={startHeaderDrag}
-            class={`flex items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-900/95 px-3 py-1.5 select-none shrink-0 ${
+            style={{ "background-color": "#18181b" }}
+            class={`flex items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-900 px-3 py-1.5 select-none shrink-0 ${
               layout() === "floating" ? "cursor-grab active:cursor-grabbing" : ""
             }`}
           >
@@ -513,12 +520,16 @@ export function CyberLabVaultOverlay() {
 
           {/* CONFIGURAÇÃO DE PASTA COMPARTILHADA COM OBSIDIAN DESKTOP */}
           <Show when={showVaultConfig()}>
-            <div class="flex flex-wrap items-center gap-2 border-b border-violet-500/30 bg-zinc-900/90 px-3 py-2 text-[11px] shrink-0">
+            <div
+              style={{ "background-color": "#18181b" }}
+              class="flex flex-wrap items-center gap-2 border-b border-violet-500/40 bg-zinc-900 px-3 py-2 text-[11px] shrink-0"
+            >
               <span class="text-violet-300 font-medium">Pasta do Vault (.md):</span>
               <input
                 type="text"
                 placeholder="Ex.: C:\Users\Voce\Documents\ObsidianVault (vazio = padrão vault/ do projeto)"
                 value={customVaultDirInput()}
+                style={{ "background-color": "#09090b" }}
                 class="min-w-[240px] flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 font-mono text-[10.5px] text-zinc-100 outline-none focus:border-violet-500"
                 onInput={(e) => setCustomVaultDirInput(e.currentTarget.value)}
               />
@@ -548,10 +559,13 @@ export function CyberLabVaultOverlay() {
           </Show>
 
           {/* CORPO PRINCIPAL DO COFRE */}
-          <div class="flex min-h-0 flex-1 overflow-hidden">
+          <div style={{ "background-color": "#09090b" }} class="flex min-h-0 flex-1 overflow-hidden bg-zinc-950">
             {/* COLUNA ESQUERDA DE NOTAS, PASTAS E #TAGS */}
             <Show when={sidebarOpen()}>
-              <div class="flex w-[215px] shrink-0 flex-col border-r border-zinc-800 bg-zinc-900/60 overflow-hidden">
+              <div
+                style={{ "background-color": "#121216" }}
+                class="flex w-[215px] shrink-0 flex-col border-r border-zinc-800 bg-zinc-900 overflow-hidden"
+              >
                 <div class="flex flex-col gap-1.5 border-b border-zinc-800 p-2">
                   <div class="flex items-center gap-1">
                     <input
@@ -685,7 +699,10 @@ export function CyberLabVaultOverlay() {
                 {(note) => (
                   <>
                     {/* Barra de inserção rápida de blocos de comando / checklist / custódia */}
-                    <div class="flex flex-wrap items-center justify-between gap-1.5 border-b border-zinc-800 bg-zinc-900/45 px-2.5 py-1 text-[10.5px] shrink-0">
+                    <div
+                      style={{ "background-color": "#141418" }}
+                      class="flex flex-wrap items-center justify-between gap-1.5 border-b border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[10.5px] shrink-0"
+                    >
                       <div class="flex items-center gap-1 min-w-0">
                         <span class="truncate font-mono text-[10.5px] text-violet-300">
                           {note().relativePath}
@@ -766,11 +783,12 @@ export function CyberLabVaultOverlay() {
                     </div>
 
                     {/* EDITOR + PREVIEW INTERATIVO (SPLIT / EDIT / PREVIEW) */}
-                    <div class="flex min-h-0 flex-1 overflow-hidden">
+                    <div style={{ "background-color": "#09090b" }} class="flex min-h-0 flex-1 overflow-hidden bg-zinc-950">
                       <Show when={editorMode() === "edit" || editorMode() === "split"}>
                         <textarea
                           value={draftContent()}
                           spellcheck={false}
+                          style={{ "background-color": "#09090b", color: "#f4f4f5" }}
                           placeholder="Escreva em Markdown compatível com Obsidian (#tags, [[WikiLinks]], - [ ] checklists e blocos ```bash)..."
                           class={`h-full min-h-0 flex-1 resize-none bg-zinc-950 p-3 font-mono text-[11.5px] leading-relaxed text-zinc-100 outline-none ${
                             editorMode() === "split" ? "border-r border-zinc-800" : ""
@@ -780,7 +798,10 @@ export function CyberLabVaultOverlay() {
                       </Show>
 
                       <Show when={editorMode() === "preview" || editorMode() === "split"}>
-                        <div class="h-full min-h-0 flex-1 overflow-y-auto bg-zinc-950/75 p-3.5 space-y-2 text-[12px] leading-relaxed [scrollbar-width:thin]">
+                        <div
+                          style={{ "background-color": "#0c0c10" }}
+                          class="h-full min-h-0 flex-1 overflow-y-auto bg-zinc-950 p-3.5 space-y-2 text-[12px] leading-relaxed [scrollbar-width:thin]"
+                        >
                           <For each={parsedBlocks()}>
                             {(blk) => {
                               if (blk.kind === "blank") {
@@ -838,8 +859,14 @@ export function CyberLabVaultOverlay() {
                               }
                               if (blk.kind === "code") {
                                 return (
-                                  <div class="rounded-lg border border-zinc-800 bg-black/80 overflow-hidden">
-                                    <div class="flex flex-wrap items-center justify-between gap-1 border-b border-zinc-800 bg-zinc-900/90 px-2.5 py-1 text-[10px]">
+                                  <div
+                                    style={{ "background-color": "#050507" }}
+                                    class="rounded-lg border border-zinc-800 bg-black overflow-hidden"
+                                  >
+                                    <div
+                                      style={{ "background-color": "#18181b" }}
+                                      class="flex flex-wrap items-center justify-between gap-1 border-b border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[10px]"
+                                    >
                                       <span class="font-mono uppercase text-zinc-400">
                                         {blk.lang || "cmd"}
                                       </span>
@@ -904,7 +931,10 @@ export function CyberLabVaultOverlay() {
                     </div>
 
                     {/* RODAPÉ COM BACKLINKS (ESTILO OBSIDIAN) + PASTA ATIVA */}
-                    <div class="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800 bg-zinc-900/80 px-2.5 py-1 text-[10px] text-zinc-400 shrink-0">
+                    <div
+                      style={{ "background-color": "#18181b" }}
+                      class="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[10px] text-zinc-400 shrink-0"
+                    >
                       <div class="flex items-center gap-1.5 min-w-0 overflow-x-auto">
                         <span class="font-medium text-zinc-500 shrink-0">🔗 Backlinks:</span>
                         <Show
