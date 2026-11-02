@@ -359,12 +359,12 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
     expect(resetOv.vaultRootDir).toBe(path.join(wsDir, "vault"))
   })
 
-  test("4. Burp Suite MCP auto-upgrades legacy remote config and bridges stdio JSON-RPC to PortSwigger Ktor SSE server", async () => {
-    const wsDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-v6-burp-mcp-"))
+  test("4. Unified Arsenal MCP Hub consolidates multi-slot opencode.json into 1 process & bridges Burp (:9876 SSE), GhidraMCP (:8080) & JADX-AI-MCP (:8650)", async () => {
+    const wsDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-v61-mcp-hub-"))
     tempDirs.push(wsDir)
     process.env.CYBERLAB_GLOBAL_CONFIG_DIR = path.join(wsDir, ".global-cfg")
 
-    // Seed legacy `type: "remote"` entry in opencode.json
+    // Seed legacy multi-process entries + legacy `type: "remote"` Burp entry in opencode.json
     const openCodeCfgPath = path.join(wsDir, "opencode.json")
     writeFileSync(
       openCodeCfgPath,
@@ -374,6 +374,22 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
             "cyberlab-burp-suite": {
               type: "remote",
               url: "http://127.0.0.1:9876/sse",
+            },
+            "cyberlab-nuclei": {
+              type: "local",
+              command: ["bun", "run", "arsenal-mcp-stdio.ts", "--slot", "nuclei"],
+            },
+            "cyberlab-ghidra": {
+              type: "local",
+              command: ["bun", "run", "arsenal-mcp-stdio.ts", "--slot", "ghidra"],
+            },
+            "cyberlab-jadx": {
+              type: "local",
+              command: ["bun", "run", "arsenal-mcp-stdio.ts", "--slot", "jadx"],
+            },
+            "cyberlab-mitmweb": {
+              type: "local",
+              command: ["bun", "run", "arsenal-mcp-stdio.ts", "--slot", "mitmweb"],
             },
           },
         },
@@ -389,16 +405,19 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
     workspaces.push(ws)
 
     const ov = await ws.getArsenalOverview(false)
-    const burpSlot = ov.slots.find((s) => s.slotId === "burp-suite")!
-    expect(burpSlot.mcpConnected).toBe(true)
+    for (const expectedSlot of ["burp-suite", "nuclei", "ghidra", "jadx", "mitmweb"]) {
+      const s = ov.slots.find((item) => item.slotId === expectedSlot)!
+      expect(s.mcpConnected).toBe(true)
+    }
 
     const migratedDoc = JSON.parse(readFileSync(openCodeCfgPath, "utf8")) as {
       mcp: { servers: Record<string, { type: string; command: string[] }> }
     }
-    expect(migratedDoc.mcp.servers["cyberlab-burp-suite"]!.type).toBe("local")
-    expect(migratedDoc.mcp.servers["cyberlab-burp-suite"]!.command.join(" ")).toContain("arsenal-mcp-stdio.ts")
+    expect(Object.keys(migratedDoc.mcp.servers)).toEqual(["cyberlab-arsenal"])
+    expect(migratedDoc.mcp.servers["cyberlab-arsenal"]!.type).toBe("local")
+    expect(migratedDoc.mcp.servers["cyberlab-arsenal"]!.command).toContain("__hub__")
 
-    // Spin up a mock PortSwigger Ktor MCP SSE server (`GET /` -> `event: endpoint` + `POST /message?sessionId=...`)
+    // 1. Mock PortSwigger Ktor MCP SSE server (:burpPort)
     let activeSseRes: http.ServerResponse | null = null
     const mockBurpServer = http.createServer((req, res) => {
       if (req.method === "GET" && (req.url === "/" || req.url === "/sse")) {
@@ -418,7 +437,6 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
           const msg = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
             id?: number
             method?: string
-            params?: { name?: string }
           }
           res.writeHead(202)
           res.end("Accepted")
@@ -465,8 +483,39 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
       res.end()
     })
 
-    await new Promise<void>((resolve) => mockBurpServer.listen(0, "127.0.0.1", () => resolve()))
-    const addr = mockBurpServer.address() as { port: number }
+    // 2. Mock LaurieWired/GhidraMCP HTTP backend (:ghidraPort)
+    const mockGhidraServer = http.createServer((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" })
+      if (req.url?.startsWith("/health")) {
+        res.end(JSON.stringify({ success: true, data: { status: "ok", ghidra: "12.1.4" } }))
+      } else if (req.url?.startsWith("/decompile")) {
+        res.end(JSON.stringify({ success: true, data: "int check_license(char *key) { return strcmp(key, \"ok\") == 0; }" }))
+      } else {
+        res.end(JSON.stringify({ success: true, data: { program: "crackme.elf" } }))
+      }
+    })
+
+    // 3. Mock zinja-coder/jadx-ai-mcp HTTP backend (:jadxPort)
+    const mockJadxServer = http.createServer((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" })
+      if (req.url?.startsWith("/cache-stats")) {
+        res.end(JSON.stringify({ classes: 142, status: "active" }))
+      } else if (req.url?.startsWith("/current-class")) {
+        res.end(JSON.stringify({ class_name: "com.acme.MainActivity", code: "public class MainActivity extends Activity {}" }))
+      } else {
+        res.end(JSON.stringify({ ok: true }))
+      }
+    })
+
+    await Promise.all([
+      new Promise<void>((resolve) => mockBurpServer.listen(0, "127.0.0.1", () => resolve())),
+      new Promise<void>((resolve) => mockGhidraServer.listen(0, "127.0.0.1", () => resolve())),
+      new Promise<void>((resolve) => mockJadxServer.listen(0, "127.0.0.1", () => resolve())),
+    ])
+    const burpAddr = mockBurpServer.address() as { port: number }
+    const ghidraAddr = mockGhidraServer.address() as { port: number }
+    const jadxAddr = mockJadxServer.address() as { port: number }
+
     const bridgeScript = path.resolve(
       path.dirname(fileURLToPath(import.meta.url)),
       "../../../cyberlab/mcp/arsenal-mcp-stdio.ts",
@@ -479,13 +528,25 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
           jsonrpc: "2.0",
           id: 2,
           method: "tools/call",
-          params: { name: "burp_suite_status", arguments: { ensureExtensionDownloaded: false } },
+          params: { name: "arsenal_mcp_status", arguments: {} },
         }),
         JSON.stringify({
           jsonrpc: "2.0",
           id: 3,
           method: "tools/call",
           params: { name: "burp_suite_get_proxy_history", arguments: { count: 5, offset: 0 } },
+        }),
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 4,
+          method: "tools/call",
+          params: { name: "ghidra_mcp_decompile", arguments: { name: "check_license" } },
+        }),
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 5,
+          method: "tools/call",
+          params: { name: "jadx_mcp_get_class_source", arguments: {} },
         }),
       ].join("\n") + "\n"
 
@@ -496,11 +557,15 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
             "run",
             bridgeScript,
             "--slot",
-            "burp-suite",
+            "__hub__",
             "--workspace",
             wsDir,
             "--burp-port",
-            String(addr.port),
+            String(burpAddr.port),
+            "--ghidra-port",
+            String(ghidraAddr.port),
+            "--jadx-port",
+            String(jadxAddr.port),
           ],
           { stdio: ["pipe", "pipe", "pipe"] },
         )
@@ -508,7 +573,7 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
         child.stdout.on("data", (chunk: Buffer) => {
           acc += chunk.toString("utf8")
           const countLines = acc.trim().split(/\r?\n/).filter(Boolean).length
-          if (countLines >= 3) {
+          if (countLines >= 5) {
             child.stdin.end()
           }
         })
@@ -518,20 +583,36 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
       })
 
       const lines = stdoutText.trim().split(/\r?\n/).filter(Boolean)
-      expect(lines.length).toBeGreaterThanOrEqual(3)
-      const listReply = JSON.parse(lines[0]!) as { result: { tools: Array<{ name: string }> } }
-      expect(listReply.result.tools.map((t) => t.name)).toContain("burp_suite_get_proxy_history")
-      expect(listReply.result.tools.map((t) => t.name)).toContain("burp_suite_create_repeater_tab")
+      expect(lines.length).toBeGreaterThanOrEqual(5)
 
-      const statusReply = JSON.parse(lines[1]!) as { result: { content: Array<{ text: string }> } }
-      expect(statusReply.result.content[0]!.text).toContain("CONECTADO")
+      const listReply = JSON.parse(lines[0]!) as { result: { tools: Array<{ name: string }> } }
+      const toolNames = listReply.result.tools.map((t) => t.name)
+      expect(toolNames).toContain("arsenal_mcp_status")
+      expect(toolNames).toContain("arsenal_run_tool")
+      expect(toolNames).toContain("burp_suite_get_proxy_history")
+      expect(toolNames).toContain("ghidra_mcp_decompile")
+      expect(toolNames).toContain("jadx_mcp_get_class_source")
+
+      const hubStatusReply = JSON.parse(lines[1]!) as { result: { content: Array<{ text: string }> } }
+      expect(hubStatusReply.result.content[0]!.text).toContain("5 slots com 🟢 MCP habilitado")
+      expect(hubStatusReply.result.content[0]!.text).toContain("Burp Suite")
+      expect(hubStatusReply.result.content[0]!.text).toContain("Ghidra")
+      expect(hubStatusReply.result.content[0]!.text).toContain("JADX")
 
       const histReply = JSON.parse(lines[2]!) as { result: { content: Array<{ text: string }> } }
       expect(histReply.result.content[0]!.text).toContain("GET /api/v1/me HTTP/1.1")
       expect(histReply.result.content[0]!.text).toContain("[REDACTED")
       expect(histReply.result.content[0]!.text).not.toContain("supersecret_burp_token_999")
+
+      const ghidraReply = JSON.parse(lines[3]!) as { result: { content: Array<{ text: string }> } }
+      expect(ghidraReply.result.content[0]!.text).toContain("check_license")
+
+      const jadxReply = JSON.parse(lines[4]!) as { result: { content: Array<{ text: string }> } }
+      expect(jadxReply.result.content[0]!.text).toContain("com.acme.MainActivity")
     } finally {
       mockBurpServer.close()
+      mockGhidraServer.close()
+      mockJadxServer.close()
     }
   })
 })

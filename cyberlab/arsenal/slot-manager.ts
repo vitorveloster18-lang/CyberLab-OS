@@ -147,8 +147,8 @@ const CUSTOM_MCP_LABELS: Record<string, string> = {
   caido: "Caido GraphQL/MCP",
   "owasp-zap": "OWASP ZAP API MCP",
   rea: "REA Native MCP",
-  ghidra: "Ghidra Headless MCP",
-  jadx: "JADX AI MCP",
+  ghidra: "Ghidra Live + Headless MCP (:8080)",
+  jadx: "JADX Live + CLI MCP (:8650)",
   "rizin-cutter": "Rizin / Cutter MCP",
   wireshark: "TShark PCAP MCP",
   semgrep: "OpenGrep / Semgrep MCP",
@@ -726,42 +726,155 @@ export class ArsenalSlotManager {
 
     this.cachedSlotProbes = nextCache
     this.lastProbedAt = new Date().toISOString()
+    this.persistProbeCacheSnapshot()
+  }
+
+  private persistProbeCacheSnapshot(): void {
+    try {
+      const cyberlabDir = path.join(this.workspaceRoot, ".cyberlab")
+      mkdirSync(cyberlabDir, { recursive: true })
+      const slotsObj: Record<
+        string,
+        {
+          windowsPath: string | null
+          wslPath: string | null
+          posixPath: string | null
+          localHtmlEntry: string | null
+        }
+      > = {}
+      for (const [slotId, probe] of this.cachedSlotProbes.entries()) {
+        slotsObj[slotId] = probe
+      }
+      writeFileSync(
+        path.join(cyberlabDir, "arsenal-probe-cache.json"),
+        `${JSON.stringify(
+          {
+            updatedAt: this.lastProbedAt,
+            toolsRootDir: this.config.toolsRootDir,
+            preferredWslDistro: this.config.preferredWslDistro,
+            slotOverrides: this.config.slotOverrides,
+            customSlots: this.config.customSlots,
+            slots: slotsObj,
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      )
+    } catch {
+      // Ignore read-only workspace
+    }
+  }
+
+  private getMcpEnabledSlotsFilePath(): string {
+    return path.join(this.workspaceRoot, ".cyberlab", "mcp-enabled-slots.json")
+  }
+
+  private readEnabledHubSlotsFromDisk(): Set<string> {
+    const filePath = this.getMcpEnabledSlotsFilePath()
+    if (!existsSync(filePath)) return new Set<string>()
+    try {
+      const parsed = JSON.parse(readFileSync(filePath, "utf8")) as { enabledSlots?: unknown }
+      if (Array.isArray(parsed.enabledSlots)) {
+        return new Set(parsed.enabledSlots.filter((x): x is string => typeof x === "string" && x.length > 0))
+      }
+    } catch {
+      // Ignore malformed file
+    }
+    return new Set<string>()
+  }
+
+  private writeEnabledHubSlotsToDisk(enabledSlots: Set<string>): void {
+    try {
+      const cyberlabDir = path.join(this.workspaceRoot, ".cyberlab")
+      mkdirSync(cyberlabDir, { recursive: true })
+      writeFileSync(
+        this.getMcpEnabledSlotsFilePath(),
+        `${JSON.stringify(
+          {
+            updatedAt: new Date().toISOString(),
+            enabledSlots: Array.from(enabledSlots).sort(),
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      )
+    } catch {
+      // Ignore read-only workspace
+    }
+  }
+
+  private buildHubServerEntry(): Record<string, unknown> {
+    const bridgeScript = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "mcp",
+      "arsenal-mcp-stdio.ts",
+    )
+    const bunBin = process.execPath || "bun"
+    return {
+      type: "local",
+      command: [
+        bunBin,
+        "run",
+        bridgeScript,
+        "--slot",
+        "__hub__",
+        "--workspace",
+        this.workspaceRoot,
+        "--wsl-distro",
+        this.config.preferredWslDistro,
+      ],
+    }
   }
 
   private readConnectedMcpServerKeys(): Set<string> {
     const out = new Set<string>()
+    const enabledHubSlots = this.readEnabledHubSlotsFromDisk()
     const cfgPath = path.join(this.workspaceRoot, "opencode.json")
     if (!existsSync(cfgPath)) return out
     try {
       const parsed = JSON.parse(readFileSync(cfgPath, "utf8")) as {
         mcp?: { servers?: Record<string, { type?: string; disabled?: boolean; command?: string[] }> }
       }
-      const servers = parsed?.mcp?.servers ?? {}
-      // Auto-upgrade legacy `type: "remote"` cyberlab-burp-suite entries so OpenCode always sees
-      // the resilient stdio <-> Burp MCP (:9876 SSE) bridge even when Burp opens after OpenCode.
-      const burpExisting = servers["cyberlab-burp-suite"]
-      if (burpExisting && burpExisting.type === "remote") {
-        const bridgeScript = path.resolve(
-          path.dirname(fileURLToPath(import.meta.url)),
-          "..",
-          "mcp",
-          "arsenal-mcp-stdio.ts",
-        )
-        const bunBin = process.execPath || "bun"
-        servers["cyberlab-burp-suite"] = {
-          ...(burpExisting.disabled ? { disabled: true } : {}),
-          type: "local",
-          command: [
-            bunBin,
-            "run",
-            bridgeScript,
-            "--slot",
-            "burp-suite",
-            "--workspace",
-            this.workspaceRoot,
-            "--wsl-distro",
-            this.config.preferredWslDistro,
-          ],
+      if (!parsed.mcp || typeof parsed.mcp !== "object") {
+        parsed.mcp = { servers: {} }
+      }
+      if (!parsed.mcp.servers || typeof parsed.mcp.servers !== "object") {
+        parsed.mcp.servers = {}
+      }
+      const servers = parsed.mcp.servers
+
+      // Consolidate legacy per-slot `cyberlab-<slotId>` entries (including 40+ individual bun processes
+      // or legacy `type: "remote"` Burp entries) into a SINGLE ultra-fast `cyberlab-arsenal` Hub server
+      // so Windows never suffers a 45-process startup storm and OpenCode sees 100% of enabled tools!
+      let migratedAny = false
+      for (const [k, v] of Object.entries({ ...servers })) {
+        if (!k.startsWith("cyberlab-") || k === "cyberlab-arsenal") continue
+        const slotId = k.slice("cyberlab-".length)
+        // Preserve native standalone MCP binaries (rea mcp / hexstrike-mcp) if explicitly configured
+        const cmdJoined = Array.isArray(v?.command) ? v.command.join(" ") : ""
+        const isDedicatedNative =
+          (slotId === "rea" || slotId === "hexstrike-ai") &&
+          !cmdJoined.includes("arsenal-mcp-stdio.ts")
+        if (isDedicatedNative) continue
+
+        if (v && !v.disabled) {
+          enabledHubSlots.add(slotId)
+        }
+        delete servers[k]
+        migratedAny = true
+      }
+
+      if (migratedAny) {
+        this.writeEnabledHubSlotsToDisk(enabledHubSlots)
+        if (enabledHubSlots.size > 0) {
+          servers["cyberlab-arsenal"] = this.buildHubServerEntry() as {
+            type?: string
+            disabled?: boolean
+            command?: string[]
+          }
         }
         try {
           writeFileSync(cfgPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8")
@@ -769,6 +882,14 @@ export class ArsenalSlotManager {
           // Ignore read-only workspace
         }
       }
+
+      const hubServer = servers["cyberlab-arsenal"]
+      if (hubServer && !hubServer.disabled) {
+        for (const slotId of enabledHubSlots) {
+          out.add(`cyberlab-${slotId}`)
+        }
+      }
+
       for (const [k, v] of Object.entries(servers)) {
         if (v && !v.disabled) out.add(k)
       }
@@ -805,6 +926,9 @@ export class ArsenalSlotManager {
     connected: boolean
     message: string
   } {
+    // Ensure any legacy per-slot entries are migrated first
+    this.readConnectedMcpServerKeys()
+
     const cfgPath = path.join(this.workspaceRoot, "opencode.json")
     let doc: Record<string, unknown> = {}
     if (existsSync(cfgPath)) {
@@ -822,70 +946,72 @@ export class ArsenalSlotManager {
       mcpObj.servers = {}
     }
 
-    const key = `cyberlab-${slot.slotId}`
-    const existing = mcpObj.servers[key] as { disabled?: boolean } | undefined
-    if (existing && !existing.disabled) {
-      delete mcpObj.servers[key]
+    const dedicatedKey = `cyberlab-${slot.slotId}`
+    const isNativeStandalone =
+      (slot.slotId === "rea" && Boolean(slot.wslPath || slot.posixPath || slot.windowsPath)) ||
+      (slot.slotId === "hexstrike-ai" && Boolean(slot.wslPath || slot.posixPath))
+
+    if (isNativeStandalone) {
+      const existingDedicated = mcpObj.servers[dedicatedKey] as { disabled?: boolean } | undefined
+      if (existingDedicated && !existingDedicated.disabled) {
+        delete mcpObj.servers[dedicatedKey]
+        writeFileSync(cfgPath, `${JSON.stringify(doc, null, 2)}\n`, "utf8")
+        return {
+          connected: false,
+          message: `Conexão MCP dedicada de "${slot.shortLabel}" desconectada do opencode.json.`,
+        }
+      }
+      mcpObj.servers[dedicatedKey] =
+        slot.slotId === "rea"
+          ? process.platform === "win32" && !slot.windowsPath
+            ? {
+                type: "local",
+                command: ["wsl.exe", "-d", this.config.preferredWslDistro, "--", "rea", "mcp"],
+              }
+            : {
+                type: "local",
+                command: [slot.windowsPath ?? slot.posixPath ?? "rea", "mcp"],
+              }
+          : process.platform === "win32"
+            ? {
+                type: "local",
+                command: ["wsl.exe", "-d", this.config.preferredWslDistro, "--", "/usr/local/bin/hexstrike-mcp"],
+              }
+            : {
+                type: "local",
+                command: ["/usr/local/bin/hexstrike-mcp"],
+              }
       writeFileSync(cfgPath, `${JSON.stringify(doc, null, 2)}\n`, "utf8")
       return {
+        connected: true,
+        message: `🔌 MCP Nativo "${slot.mcpLabel ?? slot.shortLabel}" conectado ao Agente OpenCode (${dedicatedKey})!`,
+      }
+    }
+
+    const enabledHubSlots = this.readEnabledHubSlotsFromDisk()
+    const hubServer = mcpObj.servers["cyberlab-arsenal"] as { disabled?: boolean } | undefined
+    const currentlyActive = Boolean(hubServer && !hubServer.disabled && enabledHubSlots.has(slot.slotId))
+
+    if (currentlyActive) {
+      enabledHubSlots.delete(slot.slotId)
+      this.writeEnabledHubSlotsToDisk(enabledHubSlots)
+      if (enabledHubSlots.size === 0) {
+        delete mcpObj.servers["cyberlab-arsenal"]
+        writeFileSync(cfgPath, `${JSON.stringify(doc, null, 2)}\n`, "utf8")
+      }
+      return {
         connected: false,
-        message: `Conexão MCP de "${slot.shortLabel}" desconectada do opencode.json.`,
+        message: `Conexão MCP de "${slot.shortLabel}" desativada no Hub CyberLab Arsenal.`,
       }
     }
 
-    const bridgeScript = path.resolve(
-      path.dirname(fileURLToPath(import.meta.url)),
-      "..",
-      "mcp",
-      "arsenal-mcp-stdio.ts",
-    )
-    const bunBin = process.execPath || "bun"
-
-    let serverEntry: Record<string, unknown>
-    if (slot.slotId === "rea" && (slot.wslPath || slot.posixPath || slot.windowsPath)) {
-      serverEntry =
-        process.platform === "win32" && !slot.windowsPath
-          ? {
-              type: "local",
-              command: ["wsl.exe", "-d", this.config.preferredWslDistro, "--", "rea", "mcp"],
-            }
-          : {
-              type: "local",
-              command: [slot.windowsPath ?? slot.posixPath ?? "rea", "mcp"],
-            }
-    } else if (slot.slotId === "hexstrike-ai" && (slot.wslPath || slot.posixPath)) {
-      serverEntry =
-        process.platform === "win32"
-          ? {
-              type: "local",
-              command: ["wsl.exe", "-d", this.config.preferredWslDistro, "--", "/usr/local/bin/hexstrike-mcp"],
-            }
-          : {
-              type: "local",
-              command: ["/usr/local/bin/hexstrike-mcp"],
-            }
-    } else {
-      serverEntry = {
-        type: "local",
-        command: [
-          bunBin,
-          "run",
-          bridgeScript,
-          "--slot",
-          slot.slotId,
-          "--workspace",
-          this.workspaceRoot,
-          "--wsl-distro",
-          this.config.preferredWslDistro,
-        ],
-      }
-    }
-
-    mcpObj.servers[key] = serverEntry
+    enabledHubSlots.add(slot.slotId)
+    this.writeEnabledHubSlotsToDisk(enabledHubSlots)
+    mcpObj.servers["cyberlab-arsenal"] = this.buildHubServerEntry()
     writeFileSync(cfgPath, `${JSON.stringify(doc, null, 2)}\n`, "utf8")
     return {
       connected: true,
-      message: `🔌 MCP "${slot.mcpLabel ?? slot.shortLabel}" conectado ao Agente OpenCode em opencode.json (${key})!`,
+      message: `🔌 MCP "${slot.mcpLabel ?? slot.shortLabel}" ativado em tempo real no Hub CyberLab Arsenal (${enabledHubSlots.size} ferramenta(s) ativa(s))!`,
     }
   }
 
@@ -1994,12 +2120,15 @@ export class ArsenalSlotManager {
         : []),
       ...(slot.slotId === "ghidra"
         ? [
-            "if ! command -v ghidra >/dev/null 2>&1 && [ ! -x /opt/ghidra/ghidraRun ]; then apt-get update -qq || true; apt-get install -y -qq ghidra || true; fi",
+            "if ! command -v ghidra >/dev/null 2>&1 && [ ! -x /opt/ghidra/ghidraRun ]; then apt-get update -qq || true; apt-get install -y -qq ghidra curl jq unzip || true; fi",
+            'if [ ! -s /opt/cyberlab-ghidra-mcp/GhidraMCP-release.zip ]; then mkdir -p /opt/cyberlab-ghidra-mcp; GMCP_URL=$(curl -fsSL --max-time 20 https://api.github.com/repos/LaurieWired/GhidraMCP/releases/latest 2>/dev/null | jq -r ".assets[0].browser_download_url" 2>/dev/null); if [ -n "$GMCP_URL" ] && [ "$GMCP_URL" != "null" ]; then curl -fsSL --max-time 30 "$GMCP_URL" -o /opt/cyberlab-ghidra-mcp/GhidraMCP-release.zip 2>/dev/null && unzip -oq /opt/cyberlab-ghidra-mcp/GhidraMCP-release.zip -d /opt/cyberlab-ghidra-mcp 2>/dev/null || rm -f /opt/cyberlab-ghidra-mcp/GhidraMCP-release.zip; fi; fi',
+            'EXT_ZIP=$(find /opt/cyberlab-ghidra-mcp -maxdepth 2 -iname "*GhidraMCP*.zip" ! -name "GhidraMCP-release.zip" 2>/dev/null | head -n 1); if [ -n "$EXT_ZIP" ]; then for GEXT in /usr/share/ghidra/Ghidra/Extensions /opt/ghidra/Ghidra/Extensions; do [ -d "$GEXT" ] && [ ! -d "$GEXT/GhidraMCP" ] && unzip -oq "$EXT_ZIP" -d "$GEXT/" 2>/dev/null || true; done; fi',
           ]
         : []),
       ...(slot.slotId === "jadx"
         ? [
             "if ! command -v jadx-gui >/dev/null 2>&1; then apt-get update -qq || true; apt-get install -y -qq jadx || true; fi",
+            'if command -v jadx >/dev/null 2>&1 && ! ls "$HOME"/.local/share/jadx/plugins/*jadx-ai-mcp* >/dev/null 2>&1; then timeout 30 jadx plugins --install "github:zinja-coder:jadx-ai-mcp" >/dev/null 2>&1 || true; fi',
           ]
         : []),
       ...(slot.slotId === "burp-suite"

@@ -201,13 +201,15 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
       "Inicia o daemon oficial `mitmweb` (UI na porta 8081, Proxy HTTP/HTTPS/HTTP2/WS na porta 8082) e abre a interface original completa do mitmproxy direto no painel central, com replay, interceptação por expressão, scripts Python e export cURL.",
     upstreamUrl: "https://mitmproxy.org/",
     licenseNote: "MIT (Externo)",
-    windowsBinaries: ["mitmweb.exe", "mitmweb"],
+    windowsBinaries: ["mitmweb.exe", "mitmdump.exe", "mitmweb", "mitmdump"],
     windowsKnownPaths: [
       "%ProgramFiles%\\mitmproxy\\bin\\mitmweb.exe",
+      "%ProgramFiles%\\mitmproxy\\bin\\mitmdump.exe",
       "%LOCALAPPDATA%\\Programs\\Python\\Python312\\Scripts\\mitmweb.exe",
+      "%LOCALAPPDATA%\\Programs\\Python\\Python311\\Scripts\\mitmweb.exe",
       "{toolsRoot}\\mitmproxy\\mitmweb.exe",
     ],
-    posixBinaries: ["mitmweb"],
+    posixBinaries: ["mitmweb", "mitmdump"],
     defaultEmbedUrl: "http://127.0.0.1:8081/?token=cyberlab",
     managedDaemonPort: 8081,
     managedDaemonArgs: [
@@ -691,20 +693,22 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
     shortLabel: "Ghidra",
     category: "reverse_mobile",
     kind: "desktop_gui",
-    tagline: "Suite oficial da NSA de engenharia reversa e descompilação para C/C++ em qualquer arquitetura",
+    tagline: "Suite oficial da NSA de engenharia reversa + plugin GhidraMCP (:8080) e analyzeHeadless",
     description:
-      "Abre a interface gráfica completa do Ghidra no Windows/Kali ou roda o `analyzeHeadless` para importar e analisar binários `.exe`, `.dll`, `.so`, ELF e firmwares.",
+      "Abre a interface gráfica completa do Ghidra no Windows/Kali (com suporte automático ao plugin Apache-2.0 LaurieWired/GhidraMCP na porta :8080) ou roda o `analyzeHeadless` para importar e analisar binários `.exe`, `.dll`, `.so`, ELF e firmwares.",
     upstreamUrl: "https://ghidra-sre.org/",
     licenseNote: "Apache-2.0 (Externo)",
     windowsBinaries: ["ghidraRun.bat", "analyzeHeadless.bat"],
     windowsKnownPaths: [
       "{toolsRoot}\\ghidra\\ghidraRun.bat",
       "C:\\ghidra\\ghidraRun.bat",
+      "%ProgramFiles%\\ghidra\\ghidraRun.bat",
     ],
     posixBinaries: ["ghidra", "ghidraRun", "analyzeHeadless"],
-    posixKnownPaths: ["/usr/bin/ghidra", "/opt/ghidra/ghidraRun"],
+    posixKnownPaths: ["/usr/bin/ghidra", "/opt/ghidra/ghidraRun", "/usr/share/ghidra/ghidraRun"],
     installPowerShell: "winget install --id EclipseAdoptium.Temurin.21.JDK -e; winget install --id NSA.Ghidra -e",
-    installKaliWsl: "sudo apt update && sudo apt install -y ghidra",
+    installKaliWsl:
+      'sudo apt-get update -qq && sudo apt-get install -y -qq ghidra curl jq unzip && sudo mkdir -p /opt/cyberlab-ghidra-mcp && GMCP_URL=$(curl -fsSL https://api.github.com/repos/LaurieWired/GhidraMCP/releases/latest | jq -r ".assets[0].browser_download_url" 2>/dev/null) && [ -n "$GMCP_URL" ] && sudo curl -fsSL "$GMCP_URL" -o /opt/cyberlab-ghidra-mcp/GhidraMCP-release.zip && sudo unzip -oq /opt/cyberlab-ghidra-mcp/GhidraMCP-release.zip -d /opt/cyberlab-ghidra-mcp && EXT_ZIP=$(find /opt/cyberlab-ghidra-mcp -maxdepth 2 -iname "*GhidraMCP*.zip" ! -name "GhidraMCP-release.zip" | head -n 1) && if [ -n "$EXT_ZIP" ] && [ -d /usr/share/ghidra/Ghidra/Extensions ]; then sudo unzip -oq "$EXT_ZIP" -d /usr/share/ghidra/Ghidra/Extensions/ || true; fi',
     presets: [],
   },
   {
@@ -713,20 +717,24 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
     shortLabel: "JADX Android",
     category: "reverse_mobile",
     kind: "desktop_gui",
-    tagline: "Descompila qualquer APK inteiro em código Java legível direto para a árvore de arquivos do projeto!",
+    tagline: "Descompila qualquer APK em Java legível + plugin JADX-AI-MCP (:8650) em tempo real!",
     description:
-      "Abre o `jadx-gui` interativo ou descompila o `.apk` completo para `.cyberlab/outputs/apk-src/` — permitindo que você, o OpenCode e os 4 CDIs pesquisem chaves, endpoints ocultos e falhas no código Java real!",
+      "Abre o `jadx-gui` interativo (com plugin Apache-2.0 `zinja-coder/jadx-ai-mcp` na porta :8650 instalado automaticamente) ou descompila o `.apk` completo para `.cyberlab/outputs/apk-src/`!",
     upstreamUrl: "https://github.com/skylot/jadx",
     licenseNote: "Apache-2.0 (Externo)",
     windowsBinaries: ["jadx-gui.bat", "jadx-gui.exe", "jadx.bat", "jadx.exe"],
     windowsKnownPaths: [
       "{toolsRoot}\\jadx\\bin\\jadx-gui.bat",
+      "{toolsRoot}\\jadx\\bin\\jadx.bat",
       "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links\\jadx-gui.exe",
+      "%LOCALAPPDATA%\\Microsoft\\WinGet\\Links\\jadx.exe",
     ],
     posixBinaries: ["jadx-gui", "jadx"],
     posixKnownPaths: ["/usr/bin/jadx-gui", "/usr/bin/jadx"],
-    installPowerShell: "winget install --id skylot.jadx -e",
-    installKaliWsl: "sudo apt update && sudo apt install -y jadx",
+    installPowerShell:
+      'winget install --id skylot.jadx -e; if (Get-Command jadx -ErrorAction SilentlyContinue) { jadx plugins --install "github:zinja-coder:jadx-ai-mcp" }',
+    installKaliWsl:
+      'sudo apt-get update -qq && sudo apt-get install -y -qq jadx curl jq && (jadx plugins --install "github:zinja-coder:jadx-ai-mcp" || true)',
     presets: [
       {
         id: "jadx-decompile-to-workspace",
