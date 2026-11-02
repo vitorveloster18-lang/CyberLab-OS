@@ -734,9 +734,41 @@ export class ArsenalSlotManager {
     if (!existsSync(cfgPath)) return out
     try {
       const parsed = JSON.parse(readFileSync(cfgPath, "utf8")) as {
-        mcp?: { servers?: Record<string, { disabled?: boolean }> }
+        mcp?: { servers?: Record<string, { type?: string; disabled?: boolean; command?: string[] }> }
       }
       const servers = parsed?.mcp?.servers ?? {}
+      // Auto-upgrade legacy `type: "remote"` cyberlab-burp-suite entries so OpenCode always sees
+      // the resilient stdio <-> Burp MCP (:9876 SSE) bridge even when Burp opens after OpenCode.
+      const burpExisting = servers["cyberlab-burp-suite"]
+      if (burpExisting && burpExisting.type === "remote") {
+        const bridgeScript = path.resolve(
+          path.dirname(fileURLToPath(import.meta.url)),
+          "..",
+          "mcp",
+          "arsenal-mcp-stdio.ts",
+        )
+        const bunBin = process.execPath || "bun"
+        servers["cyberlab-burp-suite"] = {
+          ...(burpExisting.disabled ? { disabled: true } : {}),
+          type: "local",
+          command: [
+            bunBin,
+            "run",
+            bridgeScript,
+            "--slot",
+            "burp-suite",
+            "--workspace",
+            this.workspaceRoot,
+            "--wsl-distro",
+            this.config.preferredWslDistro,
+          ],
+        }
+        try {
+          writeFileSync(cfgPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8")
+        } catch {
+          // Ignore read-only workspace
+        }
+      }
       for (const [k, v] of Object.entries(servers)) {
         if (v && !v.disabled) out.add(k)
       }
@@ -810,12 +842,7 @@ export class ArsenalSlotManager {
     const bunBin = process.execPath || "bun"
 
     let serverEntry: Record<string, unknown>
-    if (slot.slotId === "burp-suite") {
-      serverEntry = {
-        type: "remote",
-        url: "http://127.0.0.1:9876/sse",
-      }
-    } else if (slot.slotId === "rea" && (slot.wslPath || slot.posixPath || slot.windowsPath)) {
+    if (slot.slotId === "rea" && (slot.wslPath || slot.posixPath || slot.windowsPath)) {
       serverEntry =
         process.platform === "win32" && !slot.windowsPath
           ? {
@@ -1991,6 +2018,8 @@ export class ArsenalSlotManager {
                 ]
               : []),
             "if [ ! -s /opt/cyberlab-burp/burpsuite.jar ] && [ -s /usr/share/burpsuite/burpsuite.jar ]; then ln -sf /usr/share/burpsuite/burpsuite.jar /opt/cyberlab-burp/burpsuite.jar; fi",
+            "if [ ! -s /opt/cyberlab-burp/burp-mcp-all.jar ]; then curl -fsSL --max-time 25 https://github.com/PortSwigger/mcp-server/releases/latest/download/burp-mcp-all.jar -o /opt/cyberlab-burp/burp-mcp-all.jar 2>/dev/null && chmod 644 /opt/cyberlab-burp/burp-mcp-all.jar || rm -f /opt/cyberlab-burp/burp-mcp-all.jar; fi",
+            "if [ -s /opt/cyberlab-burp/burp-mcp-all.jar ] && command -v jq >/dev/null 2>&1; then mkdir -p \"$HOME/.BurpSuite\"; UCFG=\"$HOME/.BurpSuite/UserConfigCommunity.json\"; if [ ! -s \"$UCFG\" ]; then printf '{\"user_options\":{\"extender\":{\"extensions\":[{\"errors\":\"ui\",\"extension_file\":\"/opt/cyberlab-burp/burp-mcp-all.jar\",\"extension_type\":\"java\",\"loaded\":true,\"name\":\"Burp MCP Server\",\"output\":\"ui\"}]}}}\\n' > \"$UCFG\"; elif ! grep -q 'burp-mcp-all.jar' \"$UCFG\" 2>/dev/null; then jq '.user_options.extender.extensions = ((.user_options.extender.extensions // []) + [{\"errors\":\"ui\",\"extension_file\":\"/opt/cyberlab-burp/burp-mcp-all.jar\",\"extension_type\":\"java\",\"loaded\":true,\"name\":\"Burp MCP Server\",\"output\":\"ui\"}])' \"$UCFG\" > \"$UCFG.tmp\" 2>/dev/null && mv -f \"$UCFG.tmp\" \"$UCFG\" || rm -f \"$UCFG.tmp\"; fi; fi",
           ]
         : []),
       ...(needsJava

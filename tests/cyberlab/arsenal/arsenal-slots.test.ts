@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { spawn } from "node:child_process"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import http from "node:http"
 import os from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import {
   CyberLabWorkspace,
   OFFICIAL_ARSENAL_SLOTS,
@@ -354,5 +357,181 @@ describe("CyberLab OS v5.0 — Real External Arsenal Slots (Windows PowerShell +
     const resetOv = await ws.configureVaultRoot(null)
     expect(resetOv.isCustomPath).toBe(false)
     expect(resetOv.vaultRootDir).toBe(path.join(wsDir, "vault"))
+  })
+
+  test("4. Burp Suite MCP auto-upgrades legacy remote config and bridges stdio JSON-RPC to PortSwigger Ktor SSE server", async () => {
+    const wsDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-v6-burp-mcp-"))
+    tempDirs.push(wsDir)
+    process.env.CYBERLAB_GLOBAL_CONFIG_DIR = path.join(wsDir, ".global-cfg")
+
+    // Seed legacy `type: "remote"` entry in opencode.json
+    const openCodeCfgPath = path.join(wsDir, "opencode.json")
+    writeFileSync(
+      openCodeCfgPath,
+      JSON.stringify({
+        mcp: {
+          servers: {
+            "cyberlab-burp-suite": {
+              type: "remote",
+              url: "http://127.0.0.1:9876/sse",
+            },
+          },
+        },
+      }),
+      "utf8",
+    )
+
+    const ws = new CyberLabWorkspace({
+      projectId: "burp-mcp-proj",
+      workspaceRoot: wsDir,
+      inMemoryDb: true,
+    })
+    workspaces.push(ws)
+
+    const ov = await ws.getArsenalOverview(false)
+    const burpSlot = ov.slots.find((s) => s.slotId === "burp-suite")!
+    expect(burpSlot.mcpConnected).toBe(true)
+
+    const migratedDoc = JSON.parse(readFileSync(openCodeCfgPath, "utf8")) as {
+      mcp: { servers: Record<string, { type: string; command: string[] }> }
+    }
+    expect(migratedDoc.mcp.servers["cyberlab-burp-suite"]!.type).toBe("local")
+    expect(migratedDoc.mcp.servers["cyberlab-burp-suite"]!.command.join(" ")).toContain("arsenal-mcp-stdio.ts")
+
+    // Spin up a mock PortSwigger Ktor MCP SSE server (`GET /` -> `event: endpoint` + `POST /message?sessionId=...`)
+    let activeSseRes: http.ServerResponse | null = null
+    const mockBurpServer = http.createServer((req, res) => {
+      if (req.method === "GET" && (req.url === "/" || req.url === "/sse")) {
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        })
+        activeSseRes = res
+        res.write("event: endpoint\ndata: /message?sessionId=mock-burp-1\n\n")
+        return
+      }
+      if (req.method === "POST" && req.url?.startsWith("/message")) {
+        const chunks: Buffer[] = []
+        req.on("data", (c: Buffer) => chunks.push(c))
+        req.on("end", () => {
+          const msg = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+            id?: number
+            method?: string
+            params?: { name?: string }
+          }
+          res.writeHead(202)
+          res.end("Accepted")
+          if (!activeSseRes || msg.id === undefined) return
+          if (msg.method === "initialize") {
+            const reply = JSON.stringify({
+              jsonrpc: "2.0",
+              id: msg.id,
+              result: {
+                protocolVersion: "2024-11-05",
+                capabilities: { tools: {} },
+                serverInfo: { name: "burp-suite", version: "1.3.0" },
+              },
+            })
+            activeSseRes.write(`event: message\ndata: ${reply}\n\n`)
+          } else if (msg.method === "tools/list") {
+            const reply = JSON.stringify({
+              jsonrpc: "2.0",
+              id: msg.id,
+              result: {
+                tools: [{ name: "get_proxy_http_history", description: "Displays items within proxy history" }],
+              },
+            })
+            activeSseRes.write(`event: message\ndata: ${reply}\n\n`)
+          } else if (msg.method === "tools/call") {
+            const reply = JSON.stringify({
+              jsonrpc: "2.0",
+              id: msg.id,
+              result: {
+                content: [
+                  {
+                    type: "text",
+                    text: "GET /api/v1/me HTTP/1.1\nAuthorization: Bearer supersecret_burp_token_999",
+                  },
+                ],
+              },
+            })
+            activeSseRes.write(`event: message\ndata: ${reply}\n\n`)
+          }
+        })
+        return
+      }
+      res.writeHead(404)
+      res.end()
+    })
+
+    await new Promise<void>((resolve) => mockBurpServer.listen(0, "127.0.0.1", () => resolve()))
+    const addr = mockBurpServer.address() as { port: number }
+    const bridgeScript = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../../../cyberlab/mcp/arsenal-mcp-stdio.ts",
+    )
+
+    try {
+      const rpcInput = [
+        JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: { name: "burp_suite_status", arguments: { ensureExtensionDownloaded: false } },
+        }),
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: { name: "burp_suite_get_proxy_history", arguments: { count: 5, offset: 0 } },
+        }),
+      ].join("\n") + "\n"
+
+      const stdoutText = await new Promise<string>((resolve, reject) => {
+        const child = spawn(
+          process.execPath,
+          [
+            "run",
+            bridgeScript,
+            "--slot",
+            "burp-suite",
+            "--workspace",
+            wsDir,
+            "--burp-port",
+            String(addr.port),
+          ],
+          { stdio: ["pipe", "pipe", "pipe"] },
+        )
+        let acc = ""
+        child.stdout.on("data", (chunk: Buffer) => {
+          acc += chunk.toString("utf8")
+          const countLines = acc.trim().split(/\r?\n/).filter(Boolean).length
+          if (countLines >= 3) {
+            child.stdin.end()
+          }
+        })
+        child.on("error", reject)
+        child.on("close", () => resolve(acc))
+        child.stdin.write(rpcInput)
+      })
+
+      const lines = stdoutText.trim().split(/\r?\n/).filter(Boolean)
+      expect(lines.length).toBeGreaterThanOrEqual(3)
+      const listReply = JSON.parse(lines[0]!) as { result: { tools: Array<{ name: string }> } }
+      expect(listReply.result.tools.map((t) => t.name)).toContain("burp_suite_get_proxy_history")
+      expect(listReply.result.tools.map((t) => t.name)).toContain("burp_suite_create_repeater_tab")
+
+      const statusReply = JSON.parse(lines[1]!) as { result: { content: Array<{ text: string }> } }
+      expect(statusReply.result.content[0]!.text).toContain("CONECTADO")
+
+      const histReply = JSON.parse(lines[2]!) as { result: { content: Array<{ text: string }> } }
+      expect(histReply.result.content[0]!.text).toContain("GET /api/v1/me HTTP/1.1")
+      expect(histReply.result.content[0]!.text).toContain("[REDACTED")
+      expect(histReply.result.content[0]!.text).not.toContain("supersecret_burp_token_999")
+    } finally {
+      mockBurpServer.close()
+    }
   })
 })
