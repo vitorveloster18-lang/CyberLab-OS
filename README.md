@@ -1,4 +1,4 @@
-# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.4.1)
+# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.4.2)
 
 Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investigação Orientada por Hipóteses, Bug Bounty Autorizado, Engenharia Reversa, DFIR e Laboratórios de Treinamento**, construída sobre o **OpenCode V2 (`2.1.4`)** e projetada nativamente para **Windows 11 (PowerShell) + WSL2 (`kali-linux` 2026.x)** ou Linux nativo.
 
@@ -38,6 +38,11 @@ bun run cyberlab lab status lab-owasp-api-bola
 bun run cyberlab lab stop   lab-owasp-api-bola
 ```
 
+> ℹ️ **Portas**: `http://127.0.0.1:19081` = **alvo de treino** (API REST, sem interface — é isso que você
+> ataca com Burp/curl/scanners). `http://127.0.0.1:4096` = **interface do CyberLab OS** (3 colunas), aberta
+> por `bun run cyberlab`. Abrir a `/` do lab no navegador mostra uma página de orientação com os controles,
+> os endpoints e o comando de teste; o JSON de diagnóstico fica em `/health`.
+
 > ⚠️ **Sem `--daemon` o servidor morre com o terminal.** O comando `start` sem a flag mantém o processo
 > em primeiro plano e exibe `Servidor ativo neste processo. Pressione Ctrl+C para encerrar.` — ao
 > pressionar `Ctrl+C` (ou fechar a janela) o lab é desligado. `seed` e `model` continuam funcionando
@@ -70,7 +75,7 @@ Também é possível subir junto da interface: `bun run cyberlab --rebuild --lab
 
 9. [Os 4 Parceiros Cognitivos CDI (`8788–8791`) & 5 Laboratórios de Treino](#8-os-4-parceiros-cognitivos-cdi-87888791--5-laboratórios-de-treino)
 10. [Governança de Escopo Bug Bounty, Custódia `SHA-256` & Segurança Anti-Prompt-Injection](#9-governança-de-escopo-bug-bounty-custódia-sha-256--segurança-anti-prompt-injection)
-11. [Histórico Completo de Versões (`v1.0` → `v6.4.1`), Verificação CI & Licenciamento MIT](#11-histórico-completo-de-versões-v10--v641-verificação-ci--licenciamento-mit)
+11. [Histórico Completo de Versões (`v1.0` → `v6.4.2`), Verificação CI & Licenciamento MIT](#11-histórico-completo-de-versões-v10--v642-verificação-ci--licenciamento-mit)
 
 ---
 
@@ -348,7 +353,7 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
 
 ---
 
-## 11. Histórico Completo de Versões (`v1.0` → `v6.4.1`), Verificação CI & Licenciamento MIT
+## 11. Histórico Completo de Versões (`v1.0` → `v6.4.2`), Verificação CI & Licenciamento MIT
 
 - **v1.0 – v4.0**: Base OpenCode V2 (`2.1.4`), governança anti-TOCTOU, cofre `SHA-256`, 4 CDIs (`8788–8791`), 5 Labs de Treino e 9 modelos gratuitos OpenCode Zen.
 - **v5.0 – v5.8**: Arquitetura **Real Arsenal Edition** (3 colunas Antigravity, motor `X11/noVNC` 110 DPI sem deslocamento de mouse no zoom, navegador proxy em 1 clique, Burp oficial, REA MCP, PentAGI TLS `:8443` e ferramentas Kali 2026.1).
@@ -384,6 +389,13 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
   fechamento do terminal, e `lab stop <labId>` encerra o daemon **mesmo de outro terminal**. `lab status`
   detecta o daemon por PID + sonda TCP e imprime a URL confirmada.
 
+- **v6.4.2**: **Porta do lab vs. porta da aplicação** — `http://127.0.0.1:19081` é o **alvo** da investigação
+  (uma API REST sem interface), não o CyberLab OS. Abrir essa URL devolvia JSON cru e dava a impressão de que
+  "não abria como antes". Agora `GET /` exibe uma página HTML legível: avisa que esta porta é apenas o alvo,
+  aponta para a interface em `http://127.0.0.1:4096`, mostra o estado real dos 4 controles de
+  `server-config.json`, lista os endpoints clicáveis com o invariante esperado e traz o comando `curl.exe`
+  pronto. `GET /health` continua JSON (usado por scripts e pela sonda TCP do `lab status`).
+
 ### Verificação Local Completa (Idêntica ao GitHub Actions Linux + Windows)
 
 ```bash
@@ -398,7 +410,7 @@ bun --cwd packages/cli typecheck
 bun --cwd packages/gui-plugins typecheck
 bun --cwd cyberlab typecheck
 
-# 3. Suíte automatizada de testes (74 testes / 1.162+ asserções)
+# 3. Suíte automatizada de testes (75 testes / 1.176+ asserções)
 bun --cwd cyberlab test
 ```
 

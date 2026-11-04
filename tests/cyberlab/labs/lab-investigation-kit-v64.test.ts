@@ -159,6 +159,41 @@ describe("CyberLab OS v6.4 — Kit de Investigação do Laboratório (Fases B/D/
     expect(status.provisioned).toBe(false) // kit não marca "provisionado" (isso é LAB_BRIEFING.md)
   })
 
+  test("GET / devolve página HTML legível e GET /health continua JSON (v6.4.2)", async () => {
+    const labsRoot = mkdtempSync(path.join(os.tmpdir(), "cyberlab-labs-html-"))
+    tempDirs.push(labsRoot)
+    const manager = new TrainingLabManager(labsRoot)
+    managers.push(manager)
+
+    const status = await manager.startLab({ labId: "lab-owasp-api-bola", preferredPort: 0 })
+    const base = status.baseUrl!
+
+    // `/health` permanece JSON (usado por scripts e pela sonda TCP do `lab status`)
+    const healthRes = await fetch(`${base}/health`)
+    expect(healthRes.status).toBe(200)
+    expect(healthRes.headers.get("content-type")).toContain("application/json")
+    const health = (await healthRes.json()) as { status: string; labId: string }
+    expect(health.status).toBe("online")
+    expect(health.labId).toBe("lab-owasp-api-bola")
+
+    // `/` agora abre uma página HTML no navegador (antes devolvia JSON cru)
+    const indexRes = await fetch(`${base}/`)
+    expect(indexRes.status).toBe(200)
+    expect(indexRes.headers.get("content-type")).toContain("text/html")
+    const html = await indexRes.text()
+    expect(html).toContain("<!doctype html>")
+    expect(html).toContain("Laboratório OWASP API Security")
+    // Deixa claro que esta porta é o ALVO e aponta para a interface em 4096
+    expect(html).toContain("127.0.0.1:4096")
+    expect(html).toContain("bun run cyberlab")
+    // Mostra o estado real dos 4 controles
+    expect(html).toContain("enforceAccountOwnership")
+    expect(html).toContain("DESLIGADO (vulnerável)")
+    // Endpoints clicáveis + comando pronto para PowerShell
+    expect(html).toContain("/api/v1/accounts/1002")
+    expect(html).toContain("curl.exe")
+  })
+
   test("labs sem kit retornam null sem quebrar (degradação graciosa)", () => {
     const other = BUILTIN_TRAINING_LABS.find((l) => !getSupportedKitLabIds().includes(l.labId))
     expect(other).toBeDefined()

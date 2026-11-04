@@ -776,7 +776,7 @@ detection:
             }
           : {}
 
-        if (u.pathname === "/" || u.pathname === "/health") {
+        if (u.pathname === "/health") {
           const sampleAlgNone = `${Buffer.from('{"alg":"none","typ":"JWT"}').toString("base64url")}.${Buffer.from('{"sub":"user-1001","role":"admin"}').toString("base64url")}.`
           return send(
             200,
@@ -791,6 +791,80 @@ detection:
             },
             secHeaders,
           )
+        }
+
+        // v6.4.2 — `/` agora abre uma página HTML legível no navegador (o lab é uma API REST:
+        // abrir a URL no browser devolvia JSON cru e parecia "quebrado"). /health segue JSON p/ scripts.
+        if (u.pathname === "/") {
+          const sampleAlgNone = `${Buffer.from('{"alg":"none","typ":"JWT"}').toString("base64url")}.${Buffer.from('{"sub":"user-1001","role":"admin"}').toString("base64url")}.`
+          const flagRow = (label: string, on: boolean) =>
+            `<tr><td><code>${label}</code></td><td class="${on ? "on" : "off"}">${on ? "LIGADO (seguro)" : "DESLIGADO (vulnerável)"}</td></tr>`
+          const publicHost = String(req.headers.host || `127.0.0.1`)
+          const cmd = `curl.exe -s -i -H "Authorization: Bearer token-user-a-1001" http://${publicHost}/api/v1/accounts/1002`
+          const html = [
+            "<!doctype html>",
+            '<html lang="pt-BR"><head><meta charset="utf-8">',
+            '<meta name="viewport" content="width=device-width, initial-scale=1">',
+            "<title>CyberLab OS — Laboratório OWASP API Security</title>",
+            "<style>",
+            "  :root { color-scheme: dark; }",
+            "  body { margin:0; background:#0b0f14; color:#e6edf3; font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }",
+            "  .wrap { max-width: 980px; margin:0 auto; padding:28px 22px 60px; }",
+            "  h1 { font-size:20px; margin:0 0 4px; color:#7ee787; }",
+            "  h2 { font-size:15px; margin:26px 0 8px; color:#79c0ff; border-bottom:1px solid #21262d; padding-bottom:6px; }",
+            "  .sub { color:#8b949e; margin:0 0 18px; }",
+            "  .pill { display:inline-block; background:#1f6feb22; border:1px solid #1f6feb66; color:#79c0ff;",
+            "          padding:2px 8px; border-radius:999px; font-size:12px; margin-right:6px; }",
+            "  table { border-collapse:collapse; width:100%; margin-top:8px; }",
+            "  th,td { border:1px solid #21262d; padding:6px 9px; text-align:left; vertical-align:top; }",
+            "  th { background:#161b22; color:#8b949e; font-weight:600; }",
+            "  code { background:#161b22; padding:1px 5px; border-radius:4px; color:#ffa657; }",
+            "  .on { color:#7ee787; } .off { color:#ff7b72; }",
+            "  a { color:#79c0ff; }",
+            "  .warn { background:#3d1d00; border:1px solid #9e6a03; color:#f2cc60; padding:10px 12px; border-radius:8px; margin-top:18px; }",
+            "  pre { background:#161b22; border:1px solid #21262d; padding:10px 12px; border-radius:8px; overflow-x:auto; }",
+            "  .muted { color:#8b949e; }",
+            "</style></head><body>",
+            '<div class="wrap">',
+            "<h1>CyberLab OS — Laboratório OWASP API Security</h1>",
+            `<p class='sub'><span class='pill'>${labId}</span><span class='pill'>alvo de treino</span>`,
+            "<span class='pill'>API REST — sem interface própria</span></p>",
+            '<div class="warn"><strong>Esta porta é o ALVO da investigação, não a aplicação.</strong><br>',
+            "A interface do CyberLab OS (3 colunas: Slots / Ferramenta / Agente) fica em ",
+            '<a href="http://127.0.0.1:4096">http://127.0.0.1:4096</a> e é aberta com <code>bun run cyberlab</code>.<br>',
+            "Este laboratório existe apenas para ser testado (Burp, curl, scanners) dentro do escopo autorizado de loopback.</div>",
+            "<h2>1. Controles de segurança (server-config.json)</h2>",
+            "<table><tr><th>Controle</th><th>Estado</th></tr>",
+            flagRow("enforceAccountOwnership", cfg.enforceAccountOwnership),
+            flagRow("rejectAlgNoneJwt", cfg.rejectAlgNoneJwt),
+            flagRow("sanitizeSqlQuery", cfg.sanitizeSqlQuery),
+            flagRow("enableSecurityHeaders", cfg.enableSecurityHeaders),
+            "</table>",
+            '<p class="muted">Edite <code>server-config.json</code> no workspace do lab e recarregue — o servidor relê o arquivo a cada requisição.</p>',
+            "<h2>2. Endpoints</h2>",
+            "<table><tr><th>Método</th><th>Rota</th><th>Invariante esperado</th></tr>",
+            '<tr><td>GET</td><td><a href="/health">/health</a></td><td>Diagnóstico JSON (usado por scripts e sondas)</td></tr>',
+            '<tr><td>GET</td><td><a href="/openapi.json">/openapi.json</a></td><td>Especificação não revela rotas administrativas</td></tr>',
+            '<tr><td>GET</td><td><a href="/api/v1/accounts/1001">/api/v1/accounts/1001</a></td><td>Somente o titular lê a própria conta</td></tr>',
+            '<tr><td>GET</td><td><a href="/api/v1/accounts/1002">/api/v1/accounts/1002</a></td><td>Qualquer leitura cruzada deve retornar <code>403</code></td></tr>',
+            '<tr><td>GET</td><td><a href="/api/v1/admin/debug">/api/v1/admin/debug</a></td><td>Exige assinatura JWT válida + <code>role=admin</code></td></tr>',
+            '<tr><td>GET</td><td><a href="/api/v1/search?q=test">/api/v1/search?q=</a></td><td>Erro genérico, sem ecoar a consulta SQL</td></tr>',
+            "</table>",
+            "<h2>3. Identidades de teste</h2>",
+            "<table><tr><th>Identidade</th><th>Credencial</th></tr>",
+            '<tr><td>User A (conta 1001)</td><td><code>Authorization: Bearer token-user-a-1001</code></td></tr>',
+            '<tr><td>User B (conta 1002)</td><td><code>Authorization: Bearer token-user-b-1002</code></td></tr>',
+            `<tr><td>Admin forjado (alg:none)</td><td><code>Authorization: Bearer ${sampleAlgNone}</code></td></tr>`,
+            "</table>",
+            "<h2>4. Experimento rápido (Windows PowerShell)</h2>",
+            `<pre>${cmd}</pre>`,
+            '<p class="muted">Esperado se vulnerável: <code>200</code> com <code>bob@corp.lab</code>; esperado após ligar ',
+            "<code>enforceAccountOwnership</code>: <code>403</code>. O protocolo completo está em <code>EXPERIMENTS.md</code>, ",
+            "as hipóteses em <code>HYPOTHESES.md</code> e o modelo em <code>LAB_SYSTEM_MODEL.md</code>, no workspace do lab.</p>",
+            '<p class="muted">Dica: no PowerShell use sempre <code>curl.exe</code> — <code>curl</code> sem extensão é alias de <code>Invoke-WebRequest</code>.</p>',
+            "</div></body></html>",
+          ].join("\n")
+          return send(200, html, { ...secHeaders, "Content-Type": "text/html; charset=utf-8" })
         }
 
         if (u.pathname === "/openapi.json") {
