@@ -1074,11 +1074,22 @@ detection:
     const handler = this.createHttpHandlerForLab(def.labId, wsRoot, tracker)
     let stateObj: RunningLabServerState | null = null
 
+    /**
+     * Host de escuta. O padrão continua sendo `127.0.0.1`: o lab é um ALVO de
+     * treino e não deve ser exposto em interface de rede (a modelagem do Kit de
+     * Investigação declara escopo autorizado somente em loopback).
+     *
+     * `CYBERLAB_LAB_HOST=0.0.0.0` é a válvula de escape para ambientes onde o
+     * navegador do operador NÃO roda na mesma máquina (preview remoto, container
+     * de sandbox): aí o loopback do servidor é inalcançável de fora.
+     */
+    const listenHost = process.env.CYBERLAB_LAB_HOST || "127.0.0.1"
+
     const listenOn = (port: number) =>
       new Promise<{ server: http.Server; port: number }>((resolve, reject) => {
         const srv = http.createServer(handler)
         srv.once("error", (err) => reject(err))
-        srv.listen(port, "127.0.0.1", () => {
+        srv.listen(port, listenHost, () => {
           const addr = srv.address() as AddressInfo
           resolve({ server: srv, port: addr.port })
         })

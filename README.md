@@ -232,6 +232,11 @@ wsl -d kali-linux -- bash -s < install-faltantes.sh
 > No Windows, se o `>` do PowerShell gravar UTF-16, converta antes:
 > `Get-Content .\install-faltantes.sh | Set-Content -Encoding utf8 install-faltantes-utf8.sh`
 
+> **Host de escuta do lab**: por padrão o alvo escuta **somente em `127.0.0.1`** — ele é um
+> *alvo de treino* e o escopo autorizado declarado no Kit de Investigação é loopback. Quando o
+> navegador do operador **não** está na mesma máquina (preview remoto, container, sandbox), use
+> `CYBERLAB_LAB_HOST=0.0.0.0 bun run cyberlab lab start lab-owasp-api-bola --port 19081`.
+
 ### 8.5 `cyberlab up` — 1 comando, **1 processo**, alvo embutido (v6.6)
 
 ```powershell
