@@ -20,7 +20,15 @@ const sha = (p: string) => createHash("sha256").update(readFileSync(p)).digest("
 
 afterEach(async () => {
   for (const m of managers.splice(0)) await m.stopAll().catch(() => {})
-  for (const d of tempDirs.splice(0)) rmSync(d, { recursive: true, force: true, maxRetries: 4, retryDelay: 50 })
+  // No Windows o SO costuma manter o arquivo preso por alguns ms depois de parar o
+  // servidor; falhar a limpeza NÃO pode derrubar o teste (é sujeira em %TEMP%).
+  for (const d of tempDirs.splice(0)) {
+    try {
+      rmSync(d, { recursive: true, force: true, maxRetries: 4, retryDelay: 50 })
+    } catch {
+      // ignore
+    }
+  }
 })
 
 describe("CyberLab OS v6.5 — Gravador de Evidência (E1–E7 + SHA-256)", () => {
@@ -81,7 +89,9 @@ describe("CyberLab OS v6.5 — Gravador de Evidência (E1–E7 + SHA-256)", () =
     expect(sha256Hex(text)).toMatch(/^[0-9a-f]{64}$/)
   })
 
-  test("execução real: arquiva 19 requisições, sela o lote e NÃO deixa o lab remediado", async () => {
+  test(
+    "execução real: arquiva 19 requisições, sela o lote e NÃO deixa o lab remediado",
+    async () => {
     const labsRoot = mkdtempSync(path.join(os.tmpdir(), "cyberlab-labs-ev-"))
     tempDirs.push(labsRoot)
     const outDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-evidence-"))
@@ -144,7 +154,9 @@ describe("CyberLab OS v6.5 — Gravador de Evidência (E1–E7 + SHA-256)", () =
     }
     expect(result.manifest.cases.find((c) => c.id === "E7-01-bola")!.status).toBe(200)
     expect(result.manifest.cases.find((c) => c.id === "E7-02-alg-none")!.status).toBe(200)
-  })
+    },
+    60_000, // Windows CI é lento: sobe servidor + 19 requisições
+  )
 
   test("headers de segurança monitorados são os 4 esperados", () => {
     expect(SECURITY_HEADERS).toEqual([

@@ -17,7 +17,15 @@ const managers: TrainingLabManager[] = []
 
 afterEach(async () => {
   for (const m of managers.splice(0)) await m.stopAll().catch(() => {})
-  for (const d of tempDirs.splice(0)) rmSync(d, { recursive: true, force: true, maxRetries: 4, retryDelay: 50 })
+  // No Windows o SO costuma manter o arquivo preso por alguns ms depois de parar o
+  // servidor; falhar a limpeza NÃO pode derrubar o teste (é sujeira em %TEMP%).
+  for (const d of tempDirs.splice(0)) {
+    try {
+      rmSync(d, { recursive: true, force: true, maxRetries: 4, retryDelay: 50 })
+    } catch {
+      // ignore
+    }
+  }
 })
 
 describe("CyberLab OS v6.4 — Kit de Investigação do Laboratório (Fases B/D/F prontas)", () => {
@@ -115,7 +123,9 @@ describe("CyberLab OS v6.4 — Kit de Investigação do Laboratório (Fases B/D/
     expect(res.vaultMirrorPath).toContain("Investigacoes/")
   })
 
-  test("startLab gera o kit automaticamente com a porta REAL e resetLab o regenera", async () => {
+  test(
+    "startLab gera o kit automaticamente com a porta REAL e resetLab o regenera",
+    async () => {
     const labsRoot = mkdtempSync(path.join(os.tmpdir(), "cyberlab-labs-"))
     tempDirs.push(labsRoot)
     const manager = new TrainingLabManager(labsRoot)
@@ -139,7 +149,9 @@ describe("CyberLab OS v6.4 — Kit de Investigação do Laboratório (Fases B/D/
     // O modelo gerado pelo manager usa exatamente a porta em uso
     const seed = manager.buildInvestigationMemorySeed("lab-owasp-api-bola")
     expect(seed?.authorizedScope).toContain(`:${status.port}`)
-  })
+    },
+    60_000, // Windows CI lento: sobe servidor do lab
+  )
 
   test("seed e model funcionam SEM o servidor no ar (usam a porta do kit/do catálogo)", () => {
     const labsRoot = mkdtempSync(path.join(os.tmpdir(), "cyberlab-labs-offline-"))
@@ -159,7 +171,9 @@ describe("CyberLab OS v6.4 — Kit de Investigação do Laboratório (Fases B/D/
     expect(status.provisioned).toBe(false) // kit não marca "provisionado" (isso é LAB_BRIEFING.md)
   })
 
-  test("GET / devolve página HTML legível e GET /health continua JSON (v6.4.2)", async () => {
+  test(
+    "GET / devolve página HTML legível e GET /health continua JSON (v6.4.2)",
+    async () => {
     const labsRoot = mkdtempSync(path.join(os.tmpdir(), "cyberlab-labs-html-"))
     tempDirs.push(labsRoot)
     const manager = new TrainingLabManager(labsRoot)
@@ -192,7 +206,9 @@ describe("CyberLab OS v6.4 — Kit de Investigação do Laboratório (Fases B/D/
     // Endpoints clicáveis + comando pronto para PowerShell
     expect(html).toContain("/api/v1/accounts/1002")
     expect(html).toContain("curl.exe")
-  })
+    },
+    60_000, // Windows CI lento: sobe servidor do lab
+  )
 
   test("labs sem kit retornam null sem quebrar (degradação graciosa)", () => {
     const other = BUILTIN_TRAINING_LABS.find((l) => !getSupportedKitLabIds().includes(l.labId))
