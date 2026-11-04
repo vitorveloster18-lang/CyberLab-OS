@@ -20,6 +20,12 @@ import { redactSensitiveContent } from "../evidence/provenance.js"
 import { capOutputBytes } from "../execution/cancellation.js"
 import { normalizeRawOutputDraft } from "../execution/result-normalizer.js"
 import { extractTargetsFromInput, isPathInsideRoot, type ScopeController } from "../policy/scope.js"
+import {
+  buildProcessLaunch,
+  probeWslBinaries,
+  probeWslEnvironment,
+  type ProcessLaunch,
+} from "./wsl-runtime.js"
 
 export type ExternalOriginKind = "manual_external" | "external_plugin" | "mcp_bridge" | "inbox_drop"
 
@@ -27,24 +33,44 @@ export interface ExternalToolCatalogEntry {
   toolId: string
   displayName: string
   binaryCandidates: readonly string[]
+  /**
+   * Nomes candidatos dentro do Linux (WSL2 Kali / nativo). Quando ausente, herda
+   * `binaryCandidates`. Necessário porque o Windows usa wrappers (`.bat`/`.exe`)
+   * enquanto o Kali expõe o binário POSIX puro (ex.: `analyzeHeadless`, `jadx`).
+   */
+  posixBinaries?: readonly string[]
   licenseSpdx: string
   integrationMode: "plugin_only" | "approved_internal_process" | "mcp"
   governedCapabilityId?: string
   installHint: string
+  /** Comando de instalação equivalente dentro do WSL2 Kali Linux. */
+  installKaliWsl?: string
   description: string
 }
+
+export type ExternalBinarySourceLocation =
+  | "workspace_local_bin"
+  | "system_path"
+  | "custom_config"
+  | "wsl_distro"
+  | "missing"
 
 export interface ExternalToolRuntimeStatus {
   toolId: string
   displayName: string
   available: boolean
   resolvedPath: string | null
-  sourceLocation: "workspace_local_bin" | "system_path" | "custom_config" | "missing"
+  sourceLocation: ExternalBinarySourceLocation
   licenseSpdx: string
   integrationMode: "plugin_only" | "approved_internal_process" | "mcp"
   governedCapabilityId: string | null
   installHint: string
+  installHintWsl: string
   description: string
+  /** Distro WSL2 que fornece o binário (quando `sourceLocation === "wsl_distro"`). */
+  wslDistro: string | null
+  /** Caminho POSIX do binário dentro da distro WSL2. */
+  wslPath: string | null
 }
 
 export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] = [
@@ -56,6 +82,8 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
     integrationMode: "plugin_only",
     governedCapabilityId: "external.nmap-service-probe",
     installHint: "sudo apt install nmap (or system package manager)",
+    posixBinaries: ["nmap"],
+    installKaliWsl: "sudo apt update && sudo apt install -y nmap",
     description: "External host/service discovery binary governed via structured non-shell arguments and ScopeController.",
   },
   {
@@ -66,6 +94,8 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
     integrationMode: "approved_internal_process",
     governedCapabilityId: "external.nuclei-template-scan",
     installHint: "./script/bootstrap-local-tools.sh",
+    posixBinaries: ["nuclei"],
+    installKaliWsl: "sudo apt update && sudo apt install -y nuclei && nuclei -update-templates",
     description: "Standalone template vulnerability scanner installed in .cyberlab/bin/nuclei or PATH.",
   },
   {
@@ -76,6 +106,8 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
     integrationMode: "approved_internal_process",
     governedCapabilityId: "external.ffuf-endpoint-probe",
     installHint: "./script/bootstrap-local-tools.sh",
+    posixBinaries: ["ffuf"],
+    installKaliWsl: "sudo apt update && sudo apt install -y ffuf seclists",
     description: "Rate-limited web content discovery binary installed in .cyberlab/bin/ffuf or PATH.",
   },
   {
@@ -86,6 +118,8 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
     integrationMode: "plugin_only",
     governedCapabilityId: "external.tshark-pcap-summary",
     installHint: "sudo apt install tshark",
+    posixBinaries: ["tshark"],
+    installKaliWsl: "sudo apt update && sudo apt install -y tshark",
     description: "External deep protocol dissector invoked strictly on workspace .pcap files without GPL linking.",
   },
   {
@@ -95,6 +129,8 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
     licenseSpdx: "AGPL-3.0-only",
     integrationMode: "plugin_only",
     installHint: "./script/bootstrap-local-tools.sh --with-agpl",
+    posixBinaries: ["opentrap"],
+    installKaliWsl: "See slot installer (OpenTRAP AppImage in WSL2)",
     description: "External Linux GUI proxy/repeater; export traffic to .cyberlab/inbox/ or ingest via CyberLab Control Plane.",
   },
   {
@@ -104,6 +140,8 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
     licenseSpdx: "LicenseRef-MVT",
     integrationMode: "plugin_only",
     installHint: "pipx install mvt",
+    posixBinaries: ["mvt-android", "mvt-ios"],
+    installKaliWsl: "pipx install mvt",
     description: "External mobile forensic CLI; drop JSON results into .cyberlab/inbox/ or run via cyberlab external wrap.",
   },
   {
@@ -114,6 +152,8 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
     integrationMode: "approved_internal_process",
     governedCapabilityId: "external.ghidra-decompile",
     installHint: "Install Ghidra (Apache-2.0) and expose analyzeHeadless / analyzeHeadless.bat on PATH",
+    posixBinaries: ["analyzeHeadless", "ghidra-analyzeHeadless"],
+    installKaliWsl: "sudo apt update && sudo apt install -y ghidra",
     description: "External headless decompiler & analyzer synchronized into CyberLab EvidenceStore.",
   },
   {
@@ -124,6 +164,8 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
     integrationMode: "approved_internal_process",
     governedCapabilityId: "external.jadx-decompile",
     installHint: "winget install skylot.jadx (Windows) or apt/brew install jadx",
+    posixBinaries: ["jadx"],
+    installKaliWsl: "sudo apt update && sudo apt install -y jadx",
     description: "Apache-2.0 Android .apk / .dex to Java source decompiler outputting into workspace artifacts.",
   },
   {
@@ -134,6 +176,8 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
     integrationMode: "approved_internal_process",
     governedCapabilityId: "external.yarax-scan",
     installHint: "Install VirusTotal YARA-X ('yr', BSD-3-Clause) in .cyberlab/bin or PATH",
+    posixBinaries: ["yr", "yara"],
+    installKaliWsl: "sudo apt update && sudo apt install -y yara (or install YARA-X 'yr' from VirusTotal)",
     description: "High-speed Rust YARA-X indicator & signature scanner governed on workspace files.",
   },
   {
@@ -144,6 +188,8 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
     integrationMode: "approved_internal_process",
     governedCapabilityId: "external.dalfox-param-scan",
     installHint: "go install github.com/hahwul/dalfox/v2@latest (or place in .cyberlab/bin)",
+    posixBinaries: ["dalfox"],
+    installKaliWsl: "sudo apt update && sudo apt install -y dalfox (or go install github.com/hahwul/dalfox/v2@latest)",
     description: "MIT parameter reflection analyzer governed by ScopeController and ApprovalTicket.",
   },
   {
@@ -154,6 +200,8 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
     integrationMode: "approved_internal_process",
     governedCapabilityId: "external.trivy-scan",
     installHint: "winget install AquaSecurity.Trivy (Windows) or brew/apt install trivy",
+    posixBinaries: ["trivy"],
+    installKaliWsl: "sudo apt update && sudo apt install -y trivy",
     description: "Apache-2.0 filesystem vulnerability, container & IaC misconfiguration scanner governed inside workspace.",
   },
   {
@@ -164,6 +212,8 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
     integrationMode: "approved_internal_process",
     governedCapabilityId: "external.keyhunter-cli",
     installHint: "cargo install github-keyhunter (or place keyhunter / keyhunter.exe in .cyberlab/bin)",
+    posixBinaries: ["keyhunter", "github-keyhunter"],
+    installKaliWsl: "cargo install github-keyhunter (inside WSL2 Kali)",
     description: "MIT Rust API key hunter CLI (45+ providers, scan/verify/patterns) governed with automatic secret redaction and SHA-256 custody.",
   },
 ]
@@ -191,15 +241,37 @@ function isExecutableFile(candidatePath: string): boolean {
   }
 }
 
+export interface ResolvedExternalBinary {
+  resolvedPath: string | null
+  sourceLocation: ExternalBinarySourceLocation
+  /** Preenchido apenas quando o binário foi localizado dentro de uma distro WSL2. */
+  wslDistro: string | null
+  wslPath: string | null
+}
+
+/**
+ * Resolve um binário externo em 4 camadas, nesta ordem:
+ *   1. `config/external-tools.json` (`binaryPaths`) — override explícito do operador
+ *   2. `<workspace>/.cyberlab/bin` — bootstrap local
+ *   3. `PATH` do host (Windows ou Linux/macOS nativo)
+ *   4. **WSL2** (somente Windows) — probe batido em `kali-linux` (ou 1ª distro),
+ *      eliminando a divergência "slot INSTALLED vs. capability not installed".
+ */
 export function resolveExternalBinary(
   workspaceRoot: string,
   candidates: readonly string[],
   customPaths?: Record<string, string>,
-): { resolvedPath: string | null; sourceLocation: ExternalToolRuntimeStatus["sourceLocation"] } {
+  posixCandidates?: readonly string[],
+): ResolvedExternalBinary {
   for (const name of candidates) {
     const configured = customPaths?.[name]
     if (configured && isExecutableFile(configured)) {
-      return { resolvedPath: path.resolve(configured), sourceLocation: "custom_config" }
+      return {
+        resolvedPath: path.resolve(configured),
+        sourceLocation: "custom_config",
+        wslDistro: null,
+        wslPath: null,
+      }
     }
   }
 
@@ -208,7 +280,12 @@ export function resolveExternalBinary(
     for (const variant of expandPlatformNames(path.basename(name))) {
       const localCandidate = path.join(localBinDir, variant)
       if (isExecutableFile(localCandidate)) {
-        return { resolvedPath: localCandidate, sourceLocation: "workspace_local_bin" }
+        return {
+          resolvedPath: localCandidate,
+          sourceLocation: "workspace_local_bin",
+          wslDistro: null,
+          wslPath: null,
+        }
       }
     }
   }
@@ -221,13 +298,114 @@ export function resolveExternalBinary(
       for (const variant of variants) {
         const sysCandidate = path.join(dir, variant)
         if (isExecutableFile(sysCandidate)) {
-          return { resolvedPath: sysCandidate, sourceLocation: "system_path" }
+          return {
+            resolvedPath: sysCandidate,
+            sourceLocation: "system_path",
+            wslDistro: null,
+            wslPath: null,
+          }
         }
       }
     }
   }
 
-  return { resolvedPath: null, sourceLocation: "missing" }
+  // 4. Camada WSL2 — probe batido (um único `wsl.exe` para todos os candidatos).
+  const wslNames = Array.from(new Set([...(posixCandidates ?? candidates), ...candidates]))
+    .map((n) => n.replace(/\.(exe|cmd|bat)$/i, ""))
+    .filter((n) => /^[a-zA-Z0-9._~-]+$/.test(n))
+  if (wslNames.length > 0) {
+    const env = probeWslEnvironment()
+    if (env.available) {
+      const hits = probeWslBinaries(wslNames)
+      for (const name of wslNames) {
+        const hit = hits.get(name)
+        if (hit) {
+          return {
+            resolvedPath: hit.linuxPath,
+            sourceLocation: "wsl_distro",
+            wslDistro: hit.distro,
+            wslPath: hit.linuxPath,
+          }
+        }
+      }
+    }
+  }
+
+  return { resolvedPath: null, sourceLocation: "missing", wslDistro: null, wslPath: null }
+}
+
+/** Aliases Windows -> POSIX para binários cujo wrapper difere no Linux. */
+const POSIX_BINARY_ALIASES: Record<string, readonly string[]> = {
+  "analyzeHeadless": ["analyzeHeadless", "ghidra-analyzeHeadless"],
+  "analyzeHeadless.bat": ["analyzeHeadless", "ghidra-analyzeHeadless"],
+  "ghidra-analyzeHeadless": ["analyzeHeadless", "ghidra-analyzeHeadless"],
+  "jadx.bat": ["jadx"],
+  "yara64": ["yara", "yr"],
+  "yara": ["yara", "yr"],
+  "github-keyhunter": ["keyhunter", "github-keyhunter"],
+  "opentrap.AppImage": ["opentrap"],
+}
+
+/**
+ * Converte a lista de candidatos usada por uma capability (nomes Windows) nos nomes
+ * POSIX equivalentes para o probe WSL2, garantindo paridade com o slot manager.
+ */
+export function resolvePosixCandidates(windowsCandidates: readonly string[]): string[] {
+  const out = new Set<string>()
+  for (const entry of BUILTIN_EXTERNAL_TOOL_CATALOG) {
+    if (entry.binaryCandidates.some((c) => windowsCandidates.includes(c))) {
+      for (const p of entry.posixBinaries ?? entry.binaryCandidates) out.add(p)
+    }
+  }
+  for (const c of windowsCandidates) {
+    const base = c.replace(/\.(exe|cmd|bat|AppImage)$/i, "")
+    if (base) out.add(base)
+    for (const alias of POSIX_BINARY_ALIASES[c] ?? []) out.add(alias)
+  }
+  return Array.from(out).filter((n) => /^[a-zA-Z0-9._~-]+$/.test(n))
+}
+
+/**
+ * Executa um binário já resolvido, encapsulando automaticamente em `wsl.exe` e
+ * traduzindo caminhos Windows -> `/mnt/...` quando ele vive dentro do WSL2.
+ */
+export async function runExternalBinary(params: {
+  resolved: ResolvedExternalBinary
+  args: readonly string[]
+  cwd: string
+  signal: AbortSignal
+  maxOutputBytes?: number
+  onStdoutChunk?: (chunk: string) => void
+  onStderrChunk?: (chunk: string) => void
+}): Promise<{ exitCode: number; stdout: string; stderr: string; truncated: boolean }> {
+  return runSafeChildProcess({
+    ...buildProcessLaunch({
+      binaryPath: params.resolved.resolvedPath ?? "",
+      args: params.args,
+      cwd: params.cwd,
+      wsl:
+        params.resolved.sourceLocation === "wsl_distro" && params.resolved.wslDistro && params.resolved.wslPath
+          ? { distro: params.resolved.wslDistro, linuxBinary: params.resolved.wslPath }
+          : null,
+    }),
+    signal: params.signal,
+    maxOutputBytes: params.maxOutputBytes,
+    onStdoutChunk: params.onStdoutChunk,
+    onStderrChunk: params.onStderrChunk,
+  })
+}
+
+/** Descreve como um binário resolvido será efetivamente lançado (útil p/ diagnóstico e testes). */
+export function describeLaunch(resolved: ResolvedExternalBinary, args: readonly string[], cwd: string): ProcessLaunch {
+  return buildProcessLaunch({
+    binaryPath: resolved.resolvedPath ?? "",
+    args,
+    cwd,
+    wsl:
+      resolved.sourceLocation === "wsl_distro" && resolved.wslDistro && resolved.wslPath
+        ? { distro: resolved.wslDistro, linuxBinary: resolved.wslPath }
+        : null,
+  })
 }
 
 function loadCustomBinaryOverrides(workspaceRoot: string): Record<string, string> {
@@ -251,8 +429,25 @@ function loadCustomBinaryOverrides(workspaceRoot: string): Record<string, string
 
 export function inspectExternalToolStatuses(workspaceRoot: string): ExternalToolRuntimeStatus[] {
   const overrides = loadCustomBinaryOverrides(workspaceRoot)
+  // Um único probe WSL2 cobre todos os candidatos POSIX de todo o catálogo.
+  const allPosix = Array.from(
+    new Set(
+      BUILTIN_EXTERNAL_TOOL_CATALOG.flatMap((e) => [
+        ...(e.posixBinaries ?? e.binaryCandidates),
+        ...e.binaryCandidates,
+      ]).map((n) => n.replace(/\.(exe|cmd|bat)$/i, "")),
+    ),
+  ).filter((n) => /^[a-zA-Z0-9._~-]+$/.test(n))
+  if (probeWslEnvironment().available) {
+    probeWslBinaries(allPosix)
+  }
   return BUILTIN_EXTERNAL_TOOL_CATALOG.map((entry) => {
-    const res = resolveExternalBinary(workspaceRoot, entry.binaryCandidates, overrides)
+    const res = resolveExternalBinary(
+      workspaceRoot,
+      entry.binaryCandidates,
+      overrides,
+      entry.posixBinaries ?? entry.binaryCandidates,
+    )
     return {
       toolId: entry.toolId,
       displayName: entry.displayName,
@@ -263,13 +458,17 @@ export function inspectExternalToolStatuses(workspaceRoot: string): ExternalTool
       integrationMode: entry.integrationMode,
       governedCapabilityId: entry.governedCapabilityId ?? null,
       installHint: entry.installHint,
+      installHintWsl: entry.installKaliWsl ?? `wsl -d kali-linux -- sudo apt update && sudo apt install -y ${entry.toolId}`,
       description: entry.description,
+      wslDistro: res.wslDistro,
+      wslPath: res.wslPath,
     }
   })
 }
 
 export async function runSafeChildProcess(params: {
-  binaryPath: string
+  /** Executável (Windows/Linux) ou `wsl.exe` quando o alvo vive dentro do WSL2. */
+  command: string
   args: readonly string[]
   cwd: string
   signal: AbortSignal
@@ -285,7 +484,7 @@ export async function runSafeChildProcess(params: {
       return
     }
 
-    const child = spawn(params.binaryPath, [...params.args], {
+    const child = spawn(params.command, [...params.args], {
       cwd: params.cwd,
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
@@ -413,7 +612,7 @@ export class ExternalNmapExecutor implements CyberLabExecutor {
     const root = this.getWorkspaceRoot()
     const resolved = resolveExternalBinary(root, ["nmap"], loadCustomBinaryOverrides(root))
     if (!resolved.resolvedPath) {
-      return { available: false, reason: "External binary 'nmap' not found in .cyberlab/bin or PATH" }
+      return { available: false, reason: "External binary 'nmap' not found in config/external-tools.json, .cyberlab/bin, PATH or WSL2 (install inside Kali: see installHintWsl)" }
     }
     return { available: true, version: resolved.resolvedPath }
   }
@@ -439,6 +638,7 @@ export class ExternalNmapExecutor implements CyberLabExecutor {
       ctx.workspaceRoot,
       ["nmap"],
       loadCustomBinaryOverrides(ctx.workspaceRoot),
+      resolvePosixCandidates(["nmap"]),
     )
     if (!resolved.resolvedPath) {
       return { status: "failed", evidenceIds: [], summary: "nmap binary not installed", exitCode: 127 }
@@ -448,8 +648,8 @@ export class ExternalNmapExecutor implements CyberLabExecutor {
     if (params.serviceVersion) args.push("-sV", "--version-light")
     args.push("-p", params.ports ?? "80,443,8080,8443", "--", params.host)
 
-    const out = await runSafeChildProcess({
-      binaryPath: resolved.resolvedPath,
+    const out = await runExternalBinary({
+      resolved,
       args,
       cwd: ctx.workspaceRoot,
       signal: ctx.signal,
@@ -549,6 +749,7 @@ export class ExternalNucleiExecutor implements CyberLabExecutor {
       ctx.workspaceRoot,
       ["nuclei"],
       loadCustomBinaryOverrides(ctx.workspaceRoot),
+      resolvePosixCandidates(["nuclei"]),
     )
     if (!resolved.resolvedPath) {
       return { status: "failed", evidenceIds: [], summary: "nuclei binary not installed", exitCode: 127 }
@@ -557,8 +758,8 @@ export class ExternalNucleiExecutor implements CyberLabExecutor {
     const args = ["-u", params.url, "-rl", String(params.rateLimit ?? 10), "-nc", "-silent", "-jsonl"]
     if (params.tags) args.push("-tags", params.tags)
 
-    const out = await runSafeChildProcess({
-      binaryPath: resolved.resolvedPath,
+    const out = await runExternalBinary({
+      resolved,
       args,
       cwd: ctx.workspaceRoot,
       signal: ctx.signal,
@@ -658,6 +859,7 @@ export class ExternalFfufExecutor implements CyberLabExecutor {
       ctx.workspaceRoot,
       ["ffuf"],
       loadCustomBinaryOverrides(ctx.workspaceRoot),
+      resolvePosixCandidates(["ffuf"]),
     )
     if (!resolved.resolvedPath) {
       return { status: "failed", evidenceIds: [], summary: "ffuf binary not installed", exitCode: 127 }
@@ -668,8 +870,8 @@ export class ExternalFfufExecutor implements CyberLabExecutor {
     const fullWordlist = path.resolve(ctx.workspaceRoot, params.wordlistPath)
     const args = ["-u", fuzzUrl, "-w", fullWordlist, "-rate", String(params.rateLimit ?? 10), "-s"]
 
-    const out = await runSafeChildProcess({
-      binaryPath: resolved.resolvedPath,
+    const out = await runExternalBinary({
+      resolved,
       args,
       cwd: ctx.workspaceRoot,
       signal: ctx.signal,
@@ -733,7 +935,7 @@ export class ExternalTsharkExecutor implements CyberLabExecutor {
     const root = this.getWorkspaceRoot()
     const resolved = resolveExternalBinary(root, ["tshark"], loadCustomBinaryOverrides(root))
     if (!resolved.resolvedPath) {
-      return { available: false, reason: "External binary 'tshark' not found in .cyberlab/bin or PATH" }
+      return { available: false, reason: "External binary 'tshark' not found in config/external-tools.json, .cyberlab/bin, PATH or WSL2 (install inside Kali: see installHintWsl)" }
     }
     return { available: true, version: resolved.resolvedPath }
   }
@@ -760,14 +962,15 @@ export class ExternalTsharkExecutor implements CyberLabExecutor {
       ctx.workspaceRoot,
       ["tshark"],
       loadCustomBinaryOverrides(ctx.workspaceRoot),
+      resolvePosixCandidates(["tshark"]),
     )
     if (!resolved.resolvedPath) {
       return { status: "failed", evidenceIds: [], summary: "tshark binary not installed", exitCode: 127 }
     }
 
     const args = ["-n", "-c", String(params.maxPackets ?? 250), "-r", fullPcap]
-    const out = await runSafeChildProcess({
-      binaryPath: resolved.resolvedPath,
+    const out = await runExternalBinary({
+      resolved,
       args,
       cwd: ctx.workspaceRoot,
       signal: ctx.signal,
@@ -837,7 +1040,7 @@ export class ExternalDalfoxExecutor implements CyberLabExecutor {
     const root = this.getWorkspaceRoot()
     const resolved = resolveExternalBinary(root, ["dalfox"], loadCustomBinaryOverrides(root))
     if (!resolved.resolvedPath) {
-      return { available: false, reason: "External binary 'dalfox' not found in .cyberlab/bin or PATH" }
+      return { available: false, reason: "External binary 'dalfox' not found in config/external-tools.json, .cyberlab/bin, PATH or WSL2 (install inside Kali: see installHintWsl)" }
     }
     return { available: true, version: resolved.resolvedPath }
   }
@@ -857,6 +1060,7 @@ export class ExternalDalfoxExecutor implements CyberLabExecutor {
       ctx.workspaceRoot,
       ["dalfox"],
       loadCustomBinaryOverrides(ctx.workspaceRoot),
+      resolvePosixCandidates(["dalfox"]),
     )
     if (!resolved.resolvedPath) {
       return { status: "failed", evidenceIds: [], summary: "dalfox binary not installed", exitCode: 127 }
@@ -867,8 +1071,8 @@ export class ExternalDalfoxExecutor implements CyberLabExecutor {
       args.push("-p", params.paramName.trim())
     }
 
-    const out = await runSafeChildProcess({
-      binaryPath: resolved.resolvedPath,
+    const out = await runExternalBinary({
+      resolved,
       args,
       cwd: ctx.workspaceRoot,
       signal: ctx.signal,
@@ -940,7 +1144,7 @@ export class ExternalGhidraExecutor implements CyberLabExecutor {
       loadCustomBinaryOverrides(root),
     )
     if (!resolved.resolvedPath) {
-      return { available: false, reason: "Ghidra 'analyzeHeadless' not found in .cyberlab/bin or PATH" }
+      return { available: false, reason: "Ghidra 'analyzeHeadless' not found in config/external-tools.json, .cyberlab/bin, PATH or WSL2 (install inside Kali: see installHintWsl)" }
     }
     return { available: true, version: resolved.resolvedPath }
   }
@@ -966,6 +1170,7 @@ export class ExternalGhidraExecutor implements CyberLabExecutor {
       ctx.workspaceRoot,
       ["analyzeHeadless", "analyzeHeadless.bat", "ghidra-analyzeHeadless"],
       loadCustomBinaryOverrides(ctx.workspaceRoot),
+      resolvePosixCandidates(["analyzeHeadless", "analyzeHeadless.bat", "ghidra-analyzeHeadless"]),
     )
     if (!resolved.resolvedPath) {
       return { status: "failed", evidenceIds: [], summary: "analyzeHeadless binary not installed", exitCode: 127 }
@@ -979,8 +1184,8 @@ export class ExternalGhidraExecutor implements CyberLabExecutor {
       args.push("-processor", params.processor.trim())
     }
 
-    const out = await runSafeChildProcess({
-      binaryPath: resolved.resolvedPath,
+    const out = await runExternalBinary({
+      resolved,
       args,
       cwd: ctx.workspaceRoot,
       signal: ctx.signal,
@@ -1044,7 +1249,7 @@ export class ExternalJadxExecutor implements CyberLabExecutor {
     const root = this.getWorkspaceRoot()
     const resolved = resolveExternalBinary(root, ["jadx", "jadx.bat"], loadCustomBinaryOverrides(root))
     if (!resolved.resolvedPath) {
-      return { available: false, reason: "JADX ('jadx') not found in .cyberlab/bin or PATH" }
+      return { available: false, reason: "JADX ('jadx') not found in config/external-tools.json, .cyberlab/bin, PATH or WSL2 (install inside Kali: see installHintWsl)" }
     }
     return { available: true, version: resolved.resolvedPath }
   }
@@ -1070,6 +1275,7 @@ export class ExternalJadxExecutor implements CyberLabExecutor {
       ctx.workspaceRoot,
       ["jadx", "jadx.bat"],
       loadCustomBinaryOverrides(ctx.workspaceRoot),
+      resolvePosixCandidates(["jadx", "jadx.bat"]),
     )
     if (!resolved.resolvedPath) {
       return { status: "failed", evidenceIds: [], summary: "jadx binary not installed", exitCode: 127 }
@@ -1083,8 +1289,8 @@ export class ExternalJadxExecutor implements CyberLabExecutor {
     const fullArtifact = path.resolve(ctx.workspaceRoot, params.artifactPath)
     const args = ["-d", outDirFull, ...(params.deobfuscate ? ["--deobf"] : []), fullArtifact]
 
-    const out = await runSafeChildProcess({
-      binaryPath: resolved.resolvedPath,
+    const out = await runExternalBinary({
+      resolved,
       args,
       cwd: ctx.workspaceRoot,
       signal: ctx.signal,
@@ -1156,7 +1362,7 @@ export class ExternalTrivyExecutor implements CyberLabExecutor {
     const root = this.getWorkspaceRoot()
     const resolved = resolveExternalBinary(root, ["trivy"], loadCustomBinaryOverrides(root))
     if (!resolved.resolvedPath) {
-      return { available: false, reason: "Trivy ('trivy') not found in .cyberlab/bin or PATH" }
+      return { available: false, reason: "Trivy ('trivy') not found in config/external-tools.json, .cyberlab/bin, PATH or WSL2 (install inside Kali: see installHintWsl)" }
     }
     return { available: true, version: resolved.resolvedPath }
   }
@@ -1185,6 +1391,7 @@ export class ExternalTrivyExecutor implements CyberLabExecutor {
       ctx.workspaceRoot,
       ["trivy"],
       loadCustomBinaryOverrides(ctx.workspaceRoot),
+      resolvePosixCandidates(["trivy"]),
     )
     if (!resolved.resolvedPath) {
       return { status: "failed", evidenceIds: [], summary: "trivy binary not installed", exitCode: 127 }
@@ -1193,8 +1400,8 @@ export class ExternalTrivyExecutor implements CyberLabExecutor {
     const fullTarget = path.resolve(ctx.workspaceRoot, params.targetPath)
     const scanners = params.scanners?.trim() || "vuln,misconfig"
     const args = ["fs", "--scanners", scanners, "--format", "json", "--quiet", fullTarget]
-    const out = await runSafeChildProcess({
-      binaryPath: resolved.resolvedPath,
+    const out = await runExternalBinary({
+      resolved,
       args,
       cwd: ctx.workspaceRoot,
       signal: ctx.signal,
@@ -1258,7 +1465,7 @@ export class ExternalYaraXExecutor implements CyberLabExecutor {
     const root = this.getWorkspaceRoot()
     const resolved = resolveExternalBinary(root, ["yr", "yara64", "yara"], loadCustomBinaryOverrides(root))
     if (!resolved.resolvedPath) {
-      return { available: false, reason: "YARA-X ('yr') or 'yara' not found in .cyberlab/bin or PATH" }
+      return { available: false, reason: "YARA-X ('yr') or 'yara' not found in config/external-tools.json, .cyberlab/bin, PATH or WSL2 (install inside Kali: see installHintWsl)" }
     }
     return { available: true, version: resolved.resolvedPath }
   }
@@ -1292,6 +1499,7 @@ export class ExternalYaraXExecutor implements CyberLabExecutor {
       ctx.workspaceRoot,
       ["yr", "yara64", "yara"],
       loadCustomBinaryOverrides(ctx.workspaceRoot),
+      resolvePosixCandidates(["yr", "yara64", "yara"]),
     )
     if (!resolved.resolvedPath) {
       return { status: "failed", evidenceIds: [], summary: "yr / yara binary not installed", exitCode: 127 }
@@ -1302,8 +1510,8 @@ export class ExternalYaraXExecutor implements CyberLabExecutor {
     const isYr = /^yr(\.exe)?$/i.test(path.basename(resolved.resolvedPath))
     const args = isYr ? ["scan", fullRules, fullTarget] : ["-r", fullRules, fullTarget]
 
-    const out = await runSafeChildProcess({
-      binaryPath: resolved.resolvedPath,
+    const out = await runExternalBinary({
+      resolved,
       args,
       cwd: ctx.workspaceRoot,
       signal: ctx.signal,
@@ -1379,7 +1587,7 @@ export class ExternalKeyHunterExecutor implements CyberLabExecutor {
     if (!resolved.resolvedPath) {
       return {
         available: false,
-        reason: "KeyHunter CLI ('keyhunter') not found in .cyberlab/bin or PATH (install via 'cargo install github-keyhunter')",
+        reason: "KeyHunter CLI ('keyhunter') not found in config/external-tools.json, .cyberlab/bin, PATH or WSL2 (install inside Kali: see installHintWsl) (install via 'cargo install github-keyhunter')",
       }
     }
     return { available: true, version: resolved.resolvedPath }
@@ -1415,6 +1623,7 @@ export class ExternalKeyHunterExecutor implements CyberLabExecutor {
       ctx.workspaceRoot,
       ["keyhunter", "github-keyhunter"],
       loadCustomBinaryOverrides(ctx.workspaceRoot),
+      resolvePosixCandidates(["keyhunter", "github-keyhunter"]),
     )
     if (!resolved.resolvedPath) {
       return {
@@ -1449,8 +1658,8 @@ export class ExternalKeyHunterExecutor implements CyberLabExecutor {
       if (params.verbose) args.push("-v")
     }
 
-    const out = await runSafeChildProcess({
-      binaryPath: resolved.resolvedPath,
+    const out = await runExternalBinary({
+      resolved,
       args,
       cwd: ctx.workspaceRoot,
       signal: ctx.signal,
@@ -1763,14 +1972,24 @@ export class ExternalControlPlane {
     }
 
     const overrides = loadCustomBinaryOverrides(this.options.workspaceRoot)
-    const resolved = isExecutableFile(params.binary)
-      ? { resolvedPath: path.resolve(params.binary) }
-      : resolveExternalBinary(this.options.workspaceRoot, [params.binary], overrides)
+    const resolved: ResolvedExternalBinary = isExecutableFile(params.binary)
+      ? {
+          resolvedPath: path.resolve(params.binary),
+          sourceLocation: "custom_config",
+          wslDistro: null,
+          wslPath: null,
+        }
+      : resolveExternalBinary(
+          this.options.workspaceRoot,
+          [params.binary],
+          overrides,
+          resolvePosixCandidates([params.binary]),
+        )
 
     if (!resolved.resolvedPath) {
       return {
         blocked: true,
-        reason: `External binary "${params.binary}" was not found in .cyberlab/bin or PATH`,
+        reason: `External binary "${params.binary}" was not found in config/external-tools.json, .cyberlab/bin, PATH or WSL2 (install inside Kali: see installHintWsl)`,
       }
     }
 
@@ -1779,11 +1998,11 @@ export class ExternalControlPlane {
     params.signal?.addEventListener("abort", forwardAbort, { once: true })
 
     try {
-      const proc = await runSafeChildProcess({
-        binaryPath: resolved.resolvedPath,
-        args: params.args,
-        cwd: this.options.workspaceRoot,
-        signal: abortCtrl.signal,
+    const proc = await runExternalBinary({
+      resolved,
+      args: params.args,
+      cwd: this.options.workspaceRoot,
+      signal: abortCtrl.signal,
         ...(params.onStdoutChunk !== undefined ? { onStdoutChunk: params.onStdoutChunk } : {}),
         ...(params.onStderrChunk !== undefined ? { onStderrChunk: params.onStderrChunk } : {}),
       })

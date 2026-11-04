@@ -37,7 +37,10 @@ export default Runtime.handler(
         `  Inbox Drop Folder: ${ws.externalControl.inboxDir} (${pendingInbox} pending file(s))`,
         "",
         ...tools.map((t) => {
-          const badge = t.available ? `READY (${t.resolvedPath})` : `MISSING — hint: ${t.installHint}`
+          const origin = t.sourceLocation === "wsl_distro" ? `WSL2:${t.wslDistro ?? "?"}` : t.sourceLocation
+          const badge = t.available
+            ? `READY via ${origin} (${t.resolvedPath})`
+            : `MISSING — hint: ${t.installHint}${t.installHintWsl ? ` | WSL2: ${t.installHintWsl}` : ""}`
           const cap = t.governedCapabilityId ? ` | capability=${t.governedCapabilityId}` : ""
           return `  - ${t.toolId} [${t.licenseSpdx}, ${t.integrationMode}${cap}]: ${badge}`
         }),

@@ -1,10 +1,10 @@
-# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.2)
+# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.3)
 
 Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investigação Orientada por Hipóteses, Bug Bounty Autorizado, Engenharia Reversa, DFIR e Laboratórios de Treinamento**, construída sobre o **OpenCode V2 (`2.1.4`)** e projetada nativamente para **Windows 11 (PowerShell) + WSL2 (`kali-linux` 2026.x)** ou Linux nativo.
 
 > **Filosofia Central (v6.2)**: O CyberLab OS combina em **uma única janela (`http://127.0.0.1:4096`)**:
 > 1. **Investigative Security Orchestrator (`Orchestrator`)**: agente principal em `pt-BR` orientado por hipóteses científicas (Ciclo **Fases A–I**), validação rigorosa de evidências e **6 subagentes especializados sob demanda** com guardrails rígidos de profundidade (`1`), concorrência (`3`) e orçamento por sessão (`12`).
-> 2. **Biblioteca Curada `CyberLab-Knowledge/` no Cofre Obsidian + Memória Investigativa Isolada**: 20 documentos técnicos revisados com metadados verificáveis (fontes primárias, versão, data de revisão, limitações e grafo `[[WikiLinks]]`) servidos via MCP com separação epistemológica estrita em **3 camadas** (Conhecimento Curado vs. Contexto da Sessão vs. Conhecimento Externo).
+> 2. **Biblioteca Curada `CyberLab-Knowledge/` no Cofre Obsidian + Memória Investigativa Isolada**: **34** documentos técnicos revisados com metadados verificáveis (fontes primárias, versão, data de revisão, limitações e grafo `[[WikiLinks]]`) servidos via MCP com separação epistemológica estrita em **3 camadas** (Conhecimento Curado vs. Contexto da Sessão vs. Conhecimento Externo).
 > 3. **Hub MCP Unificado (`cyberlab-arsenal`) + 48 Slots Oficiais de Ferramentas Reais**: 1 único processo `stdio` ultraleve conectando **45 ferramentas com `🟢 MCP`** (incluindo pontes ao vivo para **Burp Suite `:9876` SSE**, **GhidraMCP `:8080`** e **JADX-AI-MCP `:8650`**), **Cofre Obsidian Flutuante (`Alt+N`)**, **Topo Retrátil (`28px`)**, **4 Parceiros Cognitivos CDI (`8788–8791`)** e **5 Laboratórios Internos de Treino**.
 
 ---
@@ -20,7 +20,7 @@ Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investiga
 7. [Catálogo Completo dos 48 Slots Oficiais + Slots Personalizados](#7-catálogo-completo-dos-48-slots-oficiais--slots-personalizados)
 8. [Os 4 Parceiros Cognitivos CDI (`8788–8791`) & 5 Laboratórios de Treino](#8-os-4-parceiros-cognitivos-cdi-87888791--5-laboratórios-de-treino)
 9. [Governança de Escopo Bug Bounty, Custódia `SHA-256` & Segurança Anti-Prompt-Injection](#9-governança-de-escopo-bug-bounty-custódia-sha-256--segurança-anti-prompt-injection)
-10. [Histórico Completo de Versões (`v1.0` → `v6.2`), Verificação CI & Licenciamento MIT](#10-histórico-completo-de-versões-v10--v62-verificação-ci--licenciamento-mit)
+10. [Histórico Completo de Versões (`v1.0` → `v6.3`), Verificação CI & Licenciamento MIT](#10-histórico-completo-de-versões-v10--v63-verificação-ci--licenciamento-mit)
 
 ---
 
@@ -36,7 +36,7 @@ bun run cyberlab --rebuild
 ```
 
 - Na inicialização, o lançador `script/start-cyberlab.ts` automaticamente:
-  1. Semeia de forma idempotente os **20 documentos curados** de `<workspace>/vault/CyberLab-Knowledge/` sem sobrescrever notas existentes;
+  1. Semeia de forma idempotente os **34 documentos curados** de `<workspace>/vault/CyberLab-Knowledge/` sem sobrescrever notas existentes;
   2. Consolida qualquer entrada legada de `opencode.json` em **1 único servidor MCP unificado** (`"cyberlab-arsenal"`, `--slot __hub__`);
   3. Define `"default_agent": "cyberlab-orchestrator"` caso você ainda não tenha personalizado seu agente padrão;
   4. Recompila o frontend (`--rebuild`) e sobe o servidor unificado em **`http://127.0.0.1:4096`**.
@@ -111,9 +111,9 @@ O `Orchestrator` cria subagentes **somente quando há ganho investigativo concre
 
 ## 4. Biblioteca Curada `CyberLab-Knowledge/` & Cofre Obsidian (`Alt+N`)
 
-### 4.1 Estrutura Curada Inicial (`<workspace>/vault/CyberLab-Knowledge/`)
+### 4.1 Estrutura Curada (`<workspace>/vault/CyberLab-Knowledge/` — 34 documentos)
 
-Todos os **20 documentos curados** possuem frontmatter YAML auditável (`id`, `title`, `tier: curated`, `version`, `last_reviewed`, `status: validated`, `sources`, `limitations` e `related`) e links `[[WikiLinks]]` navegáveis tanto pelo agente quanto pelo operador humano no Cofre Obsidian:
+Todos os **34 documentos curados** possuem frontmatter YAML auditável (`id`, `title`, `tier: curated`, `version`, `last_reviewed`, `status: validated`, `sources`, `limitations` e `related`) e links `[[WikiLinks]]` navegáveis tanto pelo agente quanto pelo operador humano no Cofre Obsidian:
 
 ```text
 vault/CyberLab-Knowledge/
@@ -124,6 +124,9 @@ vault/CyberLab-Knowledge/
 │   ├── authorization.md            # Matriz Sujeito × Ação × Objeto × Contexto, RBAC/ABAC/ReBAC e multi-tenant
 │   ├── sessions.md                 # Ciclo de vida de cookies, entropia, rotação, revogação e CSRF/SameSite
 │   └── networking.md               # DNS, TCP/TLS, SNI/ALPN, proxies reversos, X-Forwarded-For e SSRF
+│   ├── jwt-oauth-oidc.md           # alg:none, RS256→HS256, kid/jku/x5u, claim confusion, OAuth2/OIDC, PKCE
+│   ├── csrf-cors-samesite.md       # Token anti-CSRF, Origin/Referer, ACAO+credenciais, SameSite Lax/None
+│   └── tls-crypto.md               # TLS 1.2/1.3, downgrade, pinning, mTLS e falhas criptográficas aplicadas
 ├── methodologies/
 │   ├── hypothesis-driven-testing.md # Método científico aplicado: hipótese falsificável e 1 variável por teste
 │   ├── evidence-validation.md       # Taxonomia em 5 níveis, checklist anti-falso-positivo e reprodutibilidade
@@ -133,6 +136,17 @@ vault/CyberLab-Knowledge/
 │   ├── injection/context-aware-injection.md
 │   ├── parser-differential/http-url-json-differentials.md
 │   └── business-logic/state-race-invariants.md
+│   ├── ssrf.md                     # Diferenciais de parser, DNS rebinding, IMDS 169.254.169.254
+│   ├── deserialization-xxe-upload.md # CWE-502/611/434: gadgets, XXE cego/OOB e validação de upload
+│   ├── graphql-websocket.md        # Autorização por resolver, aliases/batching, CSWSH e canais
+│   ├── cache-poisoning-deception.md  # Chave de cache, headers não-chaveados, fat GET, deception
+│   ├── race-conditions-toctou.md   # Protocolo de experimento concorrente (N=20, single-packet)
+│   └── mass-assignment-rate-limit.md # CWE-915, BOPLA, consumo irrestrito e limites por fluxo
+├── domains/                        # (novo na v6.3) Domínios que faltavam para formular hipóteses
+│   ├── mobile-android-ios.md       # JADX, Frida, MVT, WebView, armazenamento e deep links
+│   ├── binary-reverse-engineering.md # Ghidra/Rizin/CAPA/GEF: pipeline estático→dinâmico
+│   ├── cloud-iam-containers.md     # IMDS, escalada IAM, privileged container, Trivy
+│   └── logging-forensics-detection.md # Hayabusa/YARA-X/MVT, cadeia de custódia e log injection
 ├── research/
 │   ├── cve-analysis/cve-applicability-methodology.md
 │   ├── patch-analysis/patch-diff-methodology.md
@@ -141,6 +155,7 @@ vault/CyberLab-Knowledge/
 │   ├── burp.md
 │   ├── nuclei.md
 │   ├── semgrep.md
+│   ├── ai-assisted-pentest-workflows.md  # PentAGI/Shannon/Strix/CAI/HexStrike: IA = geradora de hipóteses
 │   └── mcp-tool-catalog.md
 ├── _drafts/                        # Rascunhos criados pelo agente (tier: draft — nunca misturados ao curado)
 └── _proposals/                     # Propostas de revisão aguardando curadoria humana (pending_human_review)
@@ -192,7 +207,31 @@ Quando os slots abaixo estão com **`🟢 MCP`** ativo, o Hub expõe ferramentas
    - Botão **`🔌 Instalar JADX-AI-MCP (:8650)`** instala o plugin oficial via `jadx plugins --install "github:zinja-coder:jadx-ai-mcp"`.
    - Tools expostas: `jadx_mcp_status`, `jadx_mcp_get_class_source` e `jadx_mcp_call` (`AndroidManifest.xml`, busca de métodos, recursos e xrefs).
 
-### 5.3 9 Modelos de IA Gratuitos Nativos do OpenCode Zen
+### 5.3 Paridade de Runtime WSL2 para Capabilities `external.*` (`v6.3`)
+
+A Fase A de calibração revelou que **7 capabilities `external.*`** (`nuclei`, `tshark`, `ghidra`, `jadx`, `yarax`,
+`dalfox`, `keyhunter`) reportavam `not installed` enquanto os slots MCP correspondentes diziam `INSTALLED`. A causa
+era uma divergência de detecção: o `ArsenalSlotManager` fazia probe dentro do WSL2 Kali, mas o control plane externo
+resolvia binários apenas em `.cyberlab/bin` e no `PATH` do Windows.
+
+Agora a resolução acontece em **4 camadas**, na mesma ordem para slots e capabilities:
+
+| # | Camada | Exemplo |
+|---|---|---|
+| 1 | `config/external-tools.json` → `binaryPaths` | override manual do operador |
+| 2 | `<workspace>/.cyberlab/bin` | bootstrap local (`./script/bootstrap-local-tools.sh`) |
+| 3 | `PATH` do host (Windows / Linux nativo / macOS) | `winget install skylot.jadx` |
+| 4 | **WSL2** (`kali-linux` por padrão) | `sudo apt install -y nuclei` |
+
+- **Probe batido único**: um só `wsl.exe -d kali-linux -u root -- bash -s` (script via **stdin**, com retry
+  automático quando a VM do Hyper-V está fria) resolve **todos** os candidatos de uma vez — sem um processo por binário.
+- **Tradução automática de caminhos**: `C:\ws\out.json` → `/mnt/c/ws/out.json`; flags, URLs e números passam intactos.
+- **Encapsulamento transparente**: `wsl.exe -d kali-linux -u root -- /usr/bin/nuclei <args>`, mantendo `shell=false`,
+  Trava de Escopo Bug Bounty, `AbortSignal` e custódia `SHA-256` da evidência.
+- **Diagnóstico honesto**: `bun run cyberlab external list` agora mostra a origem real
+  (`READY via wsl_distro:kali-linux (/usr/bin/nuclei)`) e a dica de instalação no Kali quando o binário falta.
+
+### 5.4 9 Modelos de IA Gratuitos Nativos do OpenCode Zen
 
 Prontos para uso imediato sem chave paga (`apiKey: "public"`, configurados automaticamente com `--use-system-ca`):
 `Big Pickle`, `DeepSeek V4.1 Flash Free`, `GLM-5.3 Flash Free`, `Nemotron 3.5 Super VL Free`, `Nemotron 3.5 Lightning Free`, `Nemotron 3 Ultra Free`, `MiMo V2.6 Flash Free`, `Flint 40B Free` e `Beam Free` — além de suporte total a qualquer provedor Anthropic, OpenAI, Gemini, OpenRouter, Ollama ou LM Studio local.
@@ -259,7 +298,7 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
 
 ---
 
-## 10. Histórico Completo de Versões (`v1.0` → `v6.2`), Verificação CI & Licenciamento MIT
+## 10. Histórico Completo de Versões (`v1.0` → `v6.3`), Verificação CI & Licenciamento MIT
 
 - **v1.0 – v4.0**: Base OpenCode V2 (`2.1.4`), governança anti-TOCTOU, cofre `SHA-256`, 4 CDIs (`8788–8791`), 5 Labs de Treino e 9 modelos gratuitos OpenCode Zen.
 - **v5.0 – v5.8**: Arquitetura **Real Arsenal Edition** (3 colunas Antigravity, motor `X11/noVNC` 110 DPI sem deslocamento de mouse no zoom, navegador proxy em 1 clique, Burp oficial, REA MCP, PentAGI TLS `:8443` e ferramentas Kali 2026.1).
@@ -267,6 +306,7 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
 - **v6.0 – v6.0.2**: Cofre nativo flutuante/acoplável compatível com Obsidian (`Alt+N`) com fundo sólido opaco, slots `netcat-ncat` e `dirsearch` (**48 slots oficiais**) e ponte nativa `stdio <-> SSE` para o **Burp Suite MCP (`:9876`)**.
 - **v6.1**: **Hub MCP Unificado (`cyberlab-arsenal` `--slot __hub__`)** consolidando todos os slots em 1 único processo (~3,5 GB de RAM economizados no Windows), resolução completa de caminhos Windows (`Program Files`/WinGet/Scoop) + WSL2 e instaladores/pontes de 1 clique para **`GhidraMCP (:8080)`** e **`JADX-AI-MCP (:8650)`**.
 - **v6.2**: **Investigative Security Orchestrator** em `pt-BR` (Ciclo Fases A–I + validação em 5 níveis), **6 Subagentes Especializados sob demanda** com limites rígidos de profundidade (`1`), concorrência (`3`) e quantidade por sessão (`12`), biblioteca curada **`CyberLab-Knowledge/`** integrada ao Cofre Obsidian com **8 tools MCP de Conhecimento e Memória Investigativa** (preservando resultados negativos e imutabilidade dos documentos curados) e atualização integral da documentação.
+- **v6.3**: **Paridade de Runtime WSL2 + Expansão da Biblioteca Curada (34 docs)** — correção da divergência crítica reportada na Fase A: as 7 capabilities `external.*` (`nuclei`, `tshark`, `ghidra`, `jadx`, `yarax`, `dalfox`, `keyhunter`) que diziam `not installed` enquanto os slots MCP diziam `INSTALLED`. O control plane agora resolve binários em **4 camadas** (`external-tools.json` → `.cyberlab/bin` → `PATH` Windows → **WSL2**), com probe batido único (`wsl.exe -d kali-linux -u root -- bash -s`, retry para VM fria), tradução automática de caminhos Windows → `/mnt/...` e encapsulamento transparente em `wsl.exe`. Biblioteca curada expandida de 20 → **34 documentos** cobrindo JWT/OAuth, CSRF/CORS/SameSite, TLS & cripto, SSRF, desserialização/XXE/upload, GraphQL/WebSocket, cache poisoning/deception, race conditions (protocolo concorrente N=20), mass assignment/BOPLA/rate limiting, mobile, engenharia reversa, cloud/IAM/contêineres, logging/forense e fluxos com IA orientados por hipótese.
 
 ### Verificação Local Completa (Idêntica ao GitHub Actions Linux + Windows)
 
@@ -282,7 +322,7 @@ bun --cwd packages/cli typecheck
 bun --cwd packages/gui-plugins typecheck
 bun --cwd cyberlab typecheck
 
-# 3. Suíte automatizada de testes (47 testes / 727+ asserções)
+# 3. Suíte automatizada de testes (59 testes / 1.010+ asserções)
 bun --cwd cyberlab test
 ```
 

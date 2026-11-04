@@ -113,6 +113,745 @@ export interface InvestigationSessionMemory {
 
 export const CURATED_KNOWLEDGE_FILES: Array<{ relativePath: string; content: string }> = [
   {
+    relativePath: "CyberLab-Knowledge/fundamentals/jwt-oauth-oidc.md",
+    content: `---
+id: fundamentals/jwt-oauth-oidc
+title: JWT, OAuth 2.1 e OIDC — Modelo de Ameaças e Diferenciais de Validação
+tier: curated
+category: fundamentals
+version: "1.0.0"
+last_reviewed: "2026-11-03"
+status: validated
+sources:
+  - "IETF RFC 7519 (JWT), RFC 7517 (JWK), RFC 8725 (JWT BCP)"
+  - "IETF RFC 6749 / 6750 (OAuth 2.0) & draft-ietf-oauth-security-topics"
+  - "OWASP WSTG v4.2 — Testing for OAuth / JWT weaknesses"
+limitations:
+  - "Bibliotecas modernas bloqueiam 'alg: none' por padrão; explore a configuração da aplicação, não o algoritmo isoladamente."
+  - "Aceitar um token inválido não prova impacto: prove a transição de privilégio ou o acesso a dados de outro tenant."
+related:
+  - "fundamentals/authentication"
+  - "fundamentals/authorization"
+  - "vulnerabilities/idor-bola-bfla"
+  - "tools/burp"
+---
+
+# JWT, OAuth 2.1 e OIDC — Modelo de Ameaças
+
+#jwt #oauth #oidc #tokens #fundamentals
+
+## 1. Invariantes que deveriam valer
+1. O **algoritmo** é fixado pelo servidor, nunca lido do header do token.
+2. A **assinatura** é verificada antes de qualquer leitura de claim.
+3. \`iss\`, \`aud\`, \`exp\`, \`nbf\` e \`sub\` são validados contra a configuração do serviço.
+4. A **fonte da chave** (\`kid\`/\`jku\`/\`x5u\`) vem de um allowlist local, não do token.
+
+## 2. Pressupostos frágeis (Fase C/D de [[hypothesis-driven-testing]])
+- **\`alg: none\` / strip de assinatura**: token aceito sem assinatura.
+- **\`alg\` confuso RS256 -> HS256**: a chave pública RSA é reutilizada como segredo HMAC.
+- **\`kid\` manipulado**: path traversal, \`kid\` apontando para arquivo controlado, injeção SQL/NoSQL na busca da chave, ou \`kid\` = URL interna (SSRF).
+- **\`jku\` / \`x5u\` aberto**: servidor baixa JWKS de host do atacante.
+- **Claim confusion**: \`sub\` vs \`user_id\` vs \`username\`; validar apenas \`sub\` enquanto a autorização usa outro campo.
+- **OAuth**: \`redirect_uri\` com correspondência frouxa (prefixo, substring, \`\\@\`, open redirect em parâmetro de path), ausência de \`state\` (CSRF de login), ausência de PKCE em cliente público, \`response_mode\`/\`response_type\` mixado (code injection), token de acesso trocado por **audience** diferente.
+
+## 3. Protocolo de experimento (variável única)
+| Experimento | Variável modificada | Observável |
+|---|---|---|
+| E1 | \`alg: none\`, assinatura vazia | 200 vs 401 |
+| E2 | \`alg\` HS256 assinado com a chave pública | 200 vs 401 |
+| E3 | \`kid\` = caminho de arquivo inexistente | Mensagem de erro (vaza FS?) |
+| E4 | \`sub\` de outro usuário, assinatura válida do próprio | Dados do outro tenant? |
+| E5 | \`redirect_uri\` = \`https://alvo/callback/../../evil\` | Código entregue fora do domínio? |
+
+Use \`burp_suite_send_http1_request\` ([[burp]]) alterando **somente** a variável da linha.
+
+## 4. Critério de evidência
+Aceitar token inválido em endpoint que não expõe dado nem privilégio é **informativo**, não vulnerabilidade. Classifique em [[evidence-validation]] e registre o impacto observado com par baseline vs. PoC.
+`,
+  },
+  {
+    relativePath: "CyberLab-Knowledge/fundamentals/csrf-cors-samesite.md",
+    content: `---
+id: fundamentals/csrf-cors-samesite
+title: CSRF, CORS e SameSite — Invariantes de Ações Autenticadas por Cookie
+tier: curated
+category: fundamentals
+version: "1.0.0"
+last_reviewed: "2026-11-03"
+status: validated
+sources:
+  - "OWASP WSTG v4.2 — Testing for CSRF / CORS"
+  - "IETF RFC 6265bis (Cookies: HTTP State Management Mechanism)"
+  - "MDN — Cross-Origin Resource Sharing (CORS)"
+limitations:
+  - "CORS é um mecanismo de LEITURA da resposta; o bloqueio de CORS não impede que a requisição seja enviada (o impacto real costuma ser CSRF ou vazamento via side effects)."
+  - "\`SameSite=Lax\` já neutraliza a maioria dos CSRF baseados em GET/submissão cross-site; foque em endpoints que aceitam content-type incomum."
+related:
+  - "fundamentals/http"
+  - "fundamentals/sessions"
+  - "fundamentals/authentication"
+  - "vulnerabilities/state-race-invariants"
+---
+
+# CSRF, CORS e SameSite — Invariantes de Ações Autenticadas
+
+#csrf #cors #samesite #cookies #fundamentals
+
+## 1. Invariante central
+Uma **ação com efeito colateral** (troca de e-mail, criação de chave de API, transferência, exclusão) deve exigir uma credencial que um site de terceiros **não consiga reproduzir automaticamente**: token anti-CSRF vinculado à sessão, cabeçalho customizado, ou reautenticação.
+
+## 2. Onde o invariante quebra
+- Cookie de sessão com \`SameSite=None\` (ou ausente em navegadores que defaultam para Lax apenas em alguns contextos) + sem token anti-CSRF.
+- Validação de \`Origin\`/\`Referer\` que aceita **prefixo** (\`https://alvo.com.evil.com\`), ausência do header, ou regex ancorada errado.
+- Endpoint que aceita \`Content-Type: text/plain\` ou \`application/x-www-form-urlencoded\` construído por formulário HTML simples (não dispara preflight).
+- GET usado para mutação de estado (imagem/fetch sem preflight).
+- **CORS**: \`Access-Control-Allow-Origin\` refletindo o \`Origin\` do atacante **junto com** \`Access-Control-Allow-Credentials: true\` — permite leitura cross-origin de resposta autenticada.
+- \`Access-Control-Allow-Origin: null\` (sandbox iframe) com credenciais.
+
+## 3. Matriz de experimento
+| # | Variável | Resultado esperado se seguro |
+|---|---|---|
+| E1 | Requisição cross-site sem token | 403 / 401 |
+| E2 | \`Origin: https://evil.tld\` | Rejeitado |
+| E3 | \`Origin: https://alvo.com.evil.tld\` | Rejeitado |
+| E4 | \`Content-Type: text/plain\` | Rejeitado (ou ignorado) |
+| E5 | \`Origin\` refletido + credenciais | Nunca ambos verdadeiros |
+
+## 4. Anti-falso-positivo
+- Resposta 200 em endpoint **idempotente** (leitura) não é CSRF.
+- Se o estado real não mudou (verifique com segunda leitura autenticada), não há impacto — registre como resultado negativo em \`investigation_memory_update\`.
+`,
+  },
+  {
+    relativePath: "CyberLab-Knowledge/fundamentals/tls-crypto.md",
+    content: `---
+id: fundamentals/tls-crypto
+title: TLS, PKI e Falhas Criptográficas Aplicadas
+tier: curated
+category: fundamentals
+version: "1.0.0"
+last_reviewed: "2026-11-03"
+status: validated
+sources:
+  - "IETF RFC 8446 (TLS 1.3) & RFC 9325 (TLS BCP)"
+  - "OWASP Testing Guide — Testing for Weak Transport Layer Security"
+limitations:
+  - "Relatórios automatizados de cipher suite geram muito ruído: reporte apenas o que é explorável no contexto (downgrade, renegociação, mTLS ausente)."
+related:
+  - "fundamentals/http"
+  - "fundamentals/networking"
+  - "domains/cloud-iam-containers"
+  - "tools/burp"
+---
+
+# TLS, PKI e Falhas Criptográficas Aplicadas
+
+#tls #crypto #pki #mtls #fundamentals
+
+## 1. Camadas a modelar (Fase B)
+\`Cliente -> terminador TLS (CDN/LB) -> hop interno (mTLS?) -> serviço\`. O handshake que você observa na borda **não é** necessariamente o handshake fim-a-fim.
+
+## 2. Hipóteses testáveis
+- **Downgrade / protocolos antigos**: TLS 1.0/1.1 habilitados; fallback inseguro.
+- **Validação de certificado em cliente não-browser (mobile/desktop)**: app aceita certificado inválido/autoassinado → MITM possível.
+- **Certificate pinning** ausente ou aplicado apenas ao domínio principal (bypass via subdomínio/CDN).
+- **mTLS ausente** em serviço interno exposto por erro de roteamento.
+- **Hostname/cert mismatch** em segundo hop (app valida a borda, não o destino real).
+- **Materiais criptográficos no cliente**: chaves hardcoded, IV/nonce reutilizado, ECB, criptografia de senha reversível, JWT com segredo fraco.
+
+## 3. Experimentos controlados (escopo autorizado)
+| Ferramenta | Experimento |
+|---|---|
+| \`nmap --script ssl-enum-ciphers\` (\`external.nmap-service-probe\`) | Enumera protocolos/suites aceitos |
+| \`mitmweb\` (slot) | Tenta interceptar tráfego do app sob teste |
+| \`burp_suite_send_http1_request\` | Verifica se o backend aceita HTTP simples vs. redireciona |
+| \`openssl s_client\` (WSL2) | Inspeciona cadeia, SNI e validade |
+
+## 4. Critério de severidade
+Ausência de HSTS ou cipher fraco **sem** caminho de exploração observado é hardening, não vulnerabilidade. Reserve severidade alta para: interceptação demonstrada, downgrade aceito com dados sensíveis em trânsito, ou segredo criptográfico recuperado do cliente.
+`,
+  },
+  {
+    relativePath: "CyberLab-Knowledge/vulnerabilities/ssrf.md",
+    content: `---
+id: vulnerabilities/ssrf
+title: SSRF — Server-Side Request Forgery (Diferenciais de Parser, Allowlists e Pivô Interno)
+tier: curated
+category: vulnerabilities
+version: "1.0.0"
+last_reviewed: "2026-11-03"
+status: validated
+sources:
+  - "OWASP WSTG v4.2 — Testing for SSRF"
+  - "PortSwigger Web Security Academy — SSRF"
+  - "CWE-918: Server-Side Request Forgery"
+limitations:
+  - "SSRF cego sem OAST próprio só pode ser provado por diferença de tempo/status; use o slot 'interactsh' antes de afirmar impacto."
+  - "Bloqueios por IP blocking podem ser contornados por DNS rebinding — isso é uma variante, não um bug separado."
+related:
+  - "fundamentals/networking"
+  - "vulnerabilities/http-url-json-differentials"
+  - "fundamentals/http"
+  - "tools/burp"
+---
+
+# SSRF — Server-Side Request Forgery
+
+#ssrf #cloud #metadata #parser-differential #vulnerabilities
+
+## 1. Invariante
+O servidor deve buscar **apenas** hosts/URLs previamente autorizados, resolvidos e validados **após** cada redirecionamento, sem permitir que o usuário escolha esquema, host, porta ou caminho livremente.
+
+## 2. Superfícies típicas
+Importação de URL (webhook, avatar, PDF/HTML renderer), integração de SSO/OIDC (JWKS/\`jku\`), conversores de documento, pré-visualização de link, e-mail/PDF export, \`url=\` em APIs de clonagem de repositório.
+
+## 3. Diferenciais que produzem bypass (Fase C)
+- **Parser de URL divergente**: \`http://alvo.com#@169.254.169.254/\`, \`http://169.254.169.254\\@alvo.com\`, \`http://[::ffff:169.254.169.254]\`, \`http://0xa9.0xfe.0xa9.0xfe\` (hex), \`http://2852039166\` (decimal), \`http://spoofed.burpcollaborator.net\`.
+- **Validação antes do redirect**: allowlist aplicada só na primeira requisição; \`302\` para metadata.
+- **DNS rebinding**: nome que resolve público (passa na checagem) e interno no segundo lookup (muda a conexão).
+- **Esquemas não-HTTP**: \`file://\`, \`gopher://\` (SMTP/Redis), \`dict://\`, \`jar://\`, \`netdoc://\`.
+- **Portas/scheme internos**: \`http://127.0.0.1:8500\` (Consul), \`:2375\` (Docker), \`:9200\` (Elasticsearch), \`:11211\` (Memcached).
+
+## 4. Alvos de alto valor
+\`169.254.169.254\` (AWS/Azure/GCP metadata), \`metadata.google.internal\`, endpoints de IAM e credenciais temporárias, serviços de admin sem auth em \`localhost\`.
+
+## 5. Protocolo experimental
+1. Estabeleça **baseline**: URL externa permitida -> status/tempo/corpo.
+2. Varie **um** elemento por vez (host, esquema, porta, redirect, encoding).
+3. Confirme OAST com \`interactsh\` antes de classificar SSRF cego.
+4. Classifique em [[evidence-validation]]: SSRF que lê metadata com credencial é crítico; SSRF que só confirma tempo é informativo até provar leitura.
+`,
+  },
+  {
+    relativePath: "CyberLab-Knowledge/vulnerabilities/deserialization-xxe-upload.md",
+    content: `---
+id: vulnerabilities/deserialization-xxe-upload
+title: Desserialização Insegura, XXE e Validação de Upload de Arquivos
+tier: curated
+category: vulnerabilities
+version: "1.0.0"
+last_reviewed: "2026-11-03"
+status: validated
+sources:
+  - "OWASP WSTG v4.2 — Testing for XML Injection / File Upload"
+  - "CWE-502 (Deserialization), CWE-611 (XXE), CWE-434 (Unrestricted Upload)"
+  - "OWASP Top 10 2021 — A08 Software and Data Integrity Failures"
+limitations:
+  - "Gadgets de desserialização dependem das bibliotecas presentes no classpath/ambiente — confirme a dependência antes de reportar RCE teórico."
+  - "XXE cego exige OAST (slot 'interactsh') ou canal de erro; sem isso é apenas 'parser aceita entidade externa'."
+related:
+  - "vulnerabilities/context-aware-injection"
+  - "fundamentals/http"
+  - "vulnerabilities/ssrf"
+  - "tools/burp"
+---
+
+# Desserialização Insegura, XXE e Upload
+
+#deserialization #xxe #upload #integrity #vulnerabilities
+
+## 1. Desserialização insegura (CWE-502)
+**Invariante**: dados serializados vindos do cliente são *dados*, nunca código. O servidor deve usar formato puramente descritivo (JSON) com tipos explicitamente esperados.
+**Pressupostos frágeis**: assinatura/criptografia do payload verificada *depois* da desserialização; allowlist de classes baseada em denylist; desserialização de cookies/sessões/\`__VIEWSTATE\`/caches/Jobs.
+**Experimento**: envie payload assinado inválido e observa se o erro ocorre antes ou depois da desserialização (diferença de tempo / stack trace).
+
+## 2. XXE (CWE-611)
+**Invariante**:解析器 XML deve ter DTD/entidades externas desabilitados.
+**Variações**: clássico (retorno no corpo), **cego** (entidade externa para \`http://<oast>\`), **out-of-band via DTD externa**, **billion laughs** (DoS), **XInclude**, ataques via upload de SVG/DOCX/XLSX (qualquer XML aceito).
+**Experimento**: \`<?xml version="1.0"?><!DOCTYPE r [<!ENTITY x SYSTEM "file:///etc/passwd">]><r>&x;</r>\` e depois a variante com URL OAST.
+
+## 3. Upload de arquivo (CWE-434)
+**Invariante**: conteúdo é reescrito/validado por tipo real (magic bytes), nome é gerado pelo servidor, execução desabilitada no diretório de destino e o arquivo é servido de origem separada.
+**Diferenciais a testar**: extensão dupla (\`a.php.png\`), \`;\`/\`%00\`/newline no nome, \`Content-Type\` confiável vs. sniffing, path traversal no nome, upload de SVG com \`<script>\`, ZIP slip (path traversal ao extrair), polyglot (imagem + código), e arquivos de config (\`.htaccess\`, \`.user.ini\`, \`web.config\`) quando o servidor os honra.
+
+## 4. Critério de evidência
+- Leitura de arquivo interno comprovada (conteúdo no corpo ou no OAST) => severidade alta.
+- Upload que grava mas **não é interpretado nem executado** pelo servidor => hardening, salvo se o diretório for servidor de conteúdo ativo.
+`,
+  },
+  {
+    relativePath: "CyberLab-Knowledge/vulnerabilities/graphql-websocket.md",
+    content: `---
+id: vulnerabilities/graphql-websocket
+title: GraphQL e WebSocket — Autorização em Resolvers Aninhados e Canais Persistentes
+tier: curated
+category: vulnerabilities
+version: "1.0.0"
+last_reviewed: "2026-11-03"
+status: validated
+sources:
+  - "OWASP WSTG v4.2 — Testing GraphQL / WebSockets"
+  - "GraphQL Foundation — Security best practices (depth & complexity limiting)"
+limitations:
+  - "Introspection desabilitada não significa segurança; obtenha o schema por erros, sugestões de campo e arquivos de cliente (persisted queries)."
+related:
+  - "vulnerabilities/idor-bola-bfla"
+  - "fundamentals/authorization"
+  - "vulnerabilities/state-race-invariants"
+  - "tools/burp"
+---
+
+# GraphQL e WebSocket — Autorização em Profundidade
+
+#graphql #websocket #authorization #realtime #vulnerabilities
+
+## 1. GraphQL
+**Invariante**: a checagem de autorização acontece no **resolver**, por campo/objeto, e não apenas no gateway para a operação inteira.
+**Superfícies**:
+- **Introspection aberta** (\`__schema\`) → mapa completo de tipos, campos e mutações.
+- **Autorização por operação**: \`query { adminPanel { users { email } } }\` rejeitada, mas \`query { me { organization { members { email } } } }\` autorizada sem checagem de papel.
+- **Aliases + batching**: \`a: login(u:"x",p:"1") b: login(u:"x",p:"2") ...\` burla rate limit por requisição (não por tentativa).
+- **Profundidade/complexidade**: query recursiva \`{ a { a { a { ... } } } }\` → DoS.
+- **Injeção em argumento**: campos repassados a SQL/NoSQL/CLI (ver [[context-aware-injection]]).
+- **CSRF**: mutações via \`GET\` ou \`application/x-www-form-urlencoded\` sem token.
+
+## 2. WebSocket / SSE
+**Invariante**: a autorização do handshake **não** substitui a autorização por mensagem e por canal.
+- **Origin** não validado → cross-site WebSocket hijacking (cookie enviado automaticamente).
+- **Autorização por mensagem ausente**: subscrever canal \`user.<outro_id>\` após handshake válido.
+- **Estado pós-handshake**: permissão revogada mas sessão WS permanece viva.
+- **Mensagens em massa**: ausência de limite por conexão.
+
+## 3. Protocolo de experimento
+1. Capture uma assinatura/mutação legítima.
+2. Modifique **somente o identificador** do recurso (ID de usuário/organização/canal).
+3. Compare payload recebido vs. esperado; confirme com segunda conta.
+4. Classifique com [[evidence-validation]] e registre o par baseline/PoC.
+
+## 4. Ferramenta
+\`burp_suite_send_http1_request\` cobre GraphQL sobre HTTP. Para WS use o slot \`caido\`/\`mitmweb\` ou o script do laboratório; todo resultado deve virar evidência SHA-256 antes de virar finding.
+`,
+  },
+  {
+    relativePath: "CyberLab-Knowledge/vulnerabilities/cache-poisoning-deception.md",
+    content: `---
+id: vulnerabilities/cache-poisoning-deception
+title: Web Cache Poisoning e Cache Deception — Invariante de Chave de Cache
+tier: curated
+category: vulnerabilities
+version: "1.0.0"
+last_reviewed: "2026-11-03"
+status: validated
+sources:
+  - "PortSwigger Research — Practical Web Cache Poisoning / Web Cache Deception"
+  - "OWASP WSTG v4.2 — Testing for Cache Poisoning"
+limitations:
+  - "Requer entender a topologia real de cache (CDN, proxy reverso, cache de aplicação); sem confirmar a camada, o achado é teórico."
+related:
+  - "fundamentals/http"
+  - "vulnerabilities/http-url-json-differentials"
+  - "tools/burp"
+---
+
+# Web Cache Poisoning e Cache Deception
+
+#cache #poisoning #deception #cdn #vulnerabilities
+
+## 1. Invariante da chave de cache
+Uma resposta só pode ser servida do cache se a **chave de cache** contiver **todas** as entradas que influenciam o corpo da resposta: caminho, \`Host\`/\`:authority\`, headers que alteram conteúdo (\`X-Forwarded-Host\`, \`X-Forwarded-Scheme\`, \`Accept-Language\`, cookies relevantes) e query string usada pelo backend.
+
+## 2. Cache Poisoning (resposta envenenada para TODOS)
+Caminho: encontre **entrada não-chaveada** que aparece refletida na resposta → dispare a requisição até a entrada de cache ser gravada → vítimas recebem a resposta envenenada.
+- Headers não-chaveados refletidos: \`X-Forwarded-Host\`, \`X-Host\`, \`X-Forwarded-Scheme\`, \`X-Original-URL\`, \`X-Rewrite-URL\`.
+- Query string não-chaveada mas usada pelo backend.
+- **Cache key normalization**: \`//\`, \`%2f\`, \`;\`, parâmetro duplicado, ordem de parâmetros.
+- **Fat GET / parameter cloaking**: corpo enviado em GET que o backend lê mas a chave de cache ignora.
+- **Poisoning de JS/CSS/import** (mais grave): envenenar recurso estático redirecionado para origem controlada.
+
+## 3. Cache Deception (resposta da VÍTIMA para o atacante)
+Caminho: faça a vítima acessar uma URL que o **cache** acredita ser estática (ex.: \`/account/settings/nonexistent.css\` ou \`/api/me/x.js\`) enquanto o **roteador da aplicação** resolve para conteúdo dinâmico autenticado → o atacante recupera a resposta cacheada.
+- Depende de divergência de roteamento entre camada de cache e framework.
+- Mitigação correta: header \`Cache-Control: no-store\` nas respostas autenticadas + regra de cache apenas em extensões realmente estáticas.
+
+## 4. Protocolo de validação
+1. Identifique header de diagnóstico (\`Age\`, \`X-Cache\`, \`CF-Cache-Status\`).
+2. Baseline: requisição limpa → observe \`X-Cache: MISS/HIT\`.
+3. Injete a entrada candidata → repita até \`HIT\` com o payload refletido.
+4. Confirme com **segundo navegador/sessão sem cookies** (prova de impacto a terceiros).
+5. \`Vary\` correto e \`Cache-Control: private/no-store\` ausentes são a causa raiz em [[root-cause-analysis]].
+`,
+  },
+  {
+    relativePath: "CyberLab-Knowledge/vulnerabilities/race-conditions-toctou.md",
+    content: `---
+id: vulnerabilities/race-conditions-toctou
+title: Race Conditions e TOCTOU — Protocolo de Experimento Concorrente
+tier: curated
+category: vulnerabilities
+version: "1.0.0"
+last_reviewed: "2026-11-03"
+status: validated
+sources:
+  - "PortSwigger Research — Smashing the state machine: exploiting web race conditions"
+  - "CWE-362 (Race Condition), CWE-367 (TOCTOU)"
+limitations:
+  - "Race conditions são probabilísticas: um único teste negativo NÃO refuta a hipótese. Exija N repetições e taxa de sucesso antes de concluir."
+  - "Latência de rede do WSL2/lab mascara janelas muito estreitas; use single-packet attack quando disponível."
+related:
+  - "vulnerabilities/state-race-invariants"
+  - "methodologies/hypothesis-driven-testing"
+  - "methodologies/evidence-validation"
+  - "tools/burp"
+---
+
+# Race Conditions e TOCTOU — Protocolo de Experimento Concorrente
+
+#race-condition #toctou #concurrency #vulnerabilities
+
+## 1. Invariante
+Operações que **lêem um estado e então agem sobre ele** (verificar saldo → debitar; verificar cupom → aplicar; verificar pertence ao usuário → transferir) devem ser **atômicas** no mesmo domínio de consistência (transação, lock, ou constraint de banco).
+
+## 2. Janela (TOCTOU)
+\`CHECK ------ janela ------ ACT\`. Tudo que aumenta o tempo entre o *check* e o *act* amplia a janela: upload de arquivo grande, validação externa, fila, e-mail, geração de token.
+
+## 3. Protocolo experimental obrigatório
+1. **Baseline sequencial**: execute a operação 1x e registre o resultado esperado.
+2. **Defina N**: mínimo 20 execuções concorrentes por tentativa.
+3. **Sincronize a chegada**: use a técnica *single-packet attack* (HTTP/2: último byte de todas as requisições no mesmo pacote TCP) ou \`burp_suite_call_tool\` com grupo paralelo; sem sincronização a janela raramente é atingida.
+4. **Meça**: registre a taxa de sucesso (ex.: 3 de 20 com saldo negativo).
+5. **Repita** para descartar flakiness de rede.
+6. **Critério de parada**: 0 sucessos em 3 baterias de N=20 → declare **resultado negativo** e registre em \`investigation_memory_update\` (não é refutação absoluta, é evidência de baixa explorabilidade).
+
+## 4. Alvos típicos
+- Cupons/descontos aplicáveis múltiplas vezes; limite de uso excedido.
+- Transferência/estorno com saldo; leilão/lances.
+- Convite/ativação de conta reutilizável; e-mail duplicado.
+- Criação de recurso com ID derivado de contagem (\`count+1\`).
+- Upload + processamento assíncrono (arquivo substituído entre validação e uso).
+- Refresh token rotacionado concorrentemente (reuso aceito).
+
+## 5. Causa raiz
+Falta de constraint no banco (UNIQUE/limite), leitura fora da transação, ou validação em camada diferente da escrita. Reporte a remediação estrutural em [[root-cause-analysis]], não "adicionar sleep".
+`,
+  },
+  {
+    relativePath: "CyberLab-Knowledge/vulnerabilities/mass-assignment-rate-limit.md",
+    content: `---
+id: vulnerabilities/mass-assignment-rate-limit
+title: Mass Assignment, BOPLA e Ausência de Rate Limiting
+tier: curated
+category: vulnerabilities
+version: "1.0.0"
+last_reviewed: "2026-11-03"
+status: validated
+sources:
+  - "OWASP API Security Top 10 2023 — API3:BOPLA, API6:Unrestricted Access to Sensitive Business Flows, API4:Unrestricted Resource Consumption"
+  - "CWE-915 (Mass Assignment), CWE-770 (Allocation Without Limits)"
+limitations:
+  - "Rate limiting ausente em endpoints baratos é ruído; o impacto existe quando o fluxo é sensível (login, OTP, convite, checkout) ou consumidor de recurso caro."
+related:
+  - "vulnerabilities/idor-bola-bfla"
+  - "fundamentals/authorization"
+  - "vulnerabilities/state-race-invariants"
+  - "tools/burp"
+---
+
+# Mass Assignment, BOPLA e Rate Limiting
+
+#mass-assignment #bopla #rate-limit #api #vulnerabilities
+
+## 1. Mass Assignment (CWE-915)
+**Invariante**: o servidor aceita **apenas** a allowlist de campos que o usuário pode definir. Campos de controle (\`role\`, \`is_admin\`, \`balance\`, \`verified\`, \`tenant_id\`, \`price\`) são definidos pelo servidor.
+**Experimento**: adicione **um** campo sensível por vez ao corpo legítimo e releia o objeto (GET) para confirmar persistência. Aceitar o campo sem persistir é inócuo.
+
+## 2. BOPLA (Broken Object Property Level Authorization)
+Variante sutil de [[idor-bola-bfla]]: o objeto é o correto, mas **propriedades** internas são expostas ou graváveis.
+- Resposta de \`GET /users/me\` contendo \`passwordHash\`, \`mfaSecret\`, \`internalNotes\`, \`stripeCustomerId\`.
+- Escrita permitida em propriedades derivadas (ex.: \`discountPercent\`, \`planTier\`).
+- Campos diferentes por rota: \`GET /orders/:id\` (público) vs \`GET /admin/orders/:id\` — o mesmo serializador reaproveitado.
+
+## 3. Rate Limiting / Consumo irrestrito (API4)
+**Invariante**: limites por **identidade e por fluxo sensível**, não apenas por IP.
+- Login / "esqueci a senha" / OTP sem limite → força bruta e fadiga de SMS/e-mail.
+- Endpoints caros (geração de PDF, export, busca full-text, IA) sem cota → DoS econômico.
+- Paginação sem teto (\`limit=999999999\`) → exaustão.
+- Bypass comum: header \`X-Forwarded-For\` confiado, variação de caixa no path, ID duplicado em massa (GraphQL alias, ver [[graphql-websocket]]).
+
+## 4. Protocolo de medicação
+1. Baseline: 5 requisições legítimas → registre status/tempo.
+2. Bateria: N=50 requisições rápidas → observe 429 vs 200.
+3. Bateria com \`X-Forwarded-For\` rotativo → o limite muda? (prova que o limite é por IP e contornável).
+4. Registre a contagem exata até o bloqueio como evidência quantitativa.
+`,
+  },
+  {
+    relativePath: "CyberLab-Knowledge/domains/mobile-android-ios.md",
+    content: `---
+id: domains/mobile-android-ios
+title: Investigação de Segurança Mobile (Android/iOS) — JADX, Frida, MVT
+tier: curated
+category: domains
+version: "1.0.0"
+last_reviewed: "2026-11-03"
+status: validated
+sources:
+  - "OWASP Mobile Application Security (MASVS / MASTG)"
+  - "OWASP Mobile Top 10 2024"
+limitations:
+  - "Requer APK/IPA legítimo para análise e dispositivo autorizado; nunca analise aplicativo de terceiro fora de um programa com autorização escrita."
+  - "Bypass de root/frida detection é meio, não fim — o finding é o dado ou a autorização exposta depois do bypass."
+related:
+  - "tools/mcp-tool-catalog"
+  - "vulnerabilities/idor-bola-bfla"
+  - "fundamentals/tls-crypto"
+  - "domains/binary-reverse-engineering"
+---
+
+# Investigação de Segurança Mobile (Android/iOS)
+
+#mobile #android #ios #jadx #frida #mvt #domains
+
+## 1. Pipeline investigativo (Fases B→F)
+1. **Modelagem estática**: \`external.jadx-decompile\` (JADX) → Java/Kotlin近似; \`AndroidManifest.xml\` (permissões, \`exported\`, \`debuggable\`, \`allowBackup\`, esquemas de deep link, \`networkSecurityConfig\`).
+2. **Superfície de dados**: \`SharedPreferences\`, SQLite, Realm, arquivos em \`getExternalStorage\`, backups (\`allowBackup=true\`), logs, clipboard.
+3. **Superfície de rede**: HTTP claro (\`cleartextTrafficPermitted\`), pinning ([[tls-crypto]]), certificados embutidos, endpoints hardcoded, WebView com \`setJavaScriptEnabled\` + \`addJavascriptInterface\`.
+4. **Dinâmico**: Frida (\`frida-apktool\` slot) para hooks de crypto, SSL pinning, verificação de assinatura e leitura de memória de segredos.
+
+## 2. Hipóteses frequentes
+- **H1**: o app hardcoded um segredo de API/chave de criptografia recuperável por strings/decompilação.
+- **H2**: \`android:exported="true"\` em Content Provider/Activity/Service sem permissão → acesso a dados por outro app instalado.
+- **H3**: deep link sem validação de origem → navegação forçada/roubo de token OAuth.
+- **H4**: pinning ausente → interceptação demonstrada com \`mitmweb\`.
+- **H5**: WebView expõe bridge JS nativo a qualquer página carregada.
+- **H6**: armazenamento inseguro de token de sessão/refresh legível por backup ou por outro app.
+
+## 3. iOS (quando aplicável)
+Keychain (\`kSecAttrAccessible\`), \`NSURLSession\` ATS exceptions, plist com segredos, screenshot caching, jailbreak detection apenas cosmética.
+
+## 4. Forense defensiva
+O slot \`mvt-android\` (Mobile Verification Toolkit) cruza indicadores de comprometimento — útil para investigação de dispositivo, não para ataque.
+
+## 5. Evidência
+Todo achado deve virar evidência SHA-256 (trecho do manifest/decompilação/output do hook), nunca apenas uma captura de tela. Use \`create_draft_note\` para o rascunho e só então \`cyberlab_finding_propose\`.
+`,
+  },
+  {
+    relativePath: "CyberLab-Knowledge/domains/binary-reverse-engineering.md",
+    content: `---
+id: domains/binary-reverse-engineering
+title: Engenharia Reversa Investigativa — Ghidra, Rizin, CAPA, GEF
+tier: curated
+category: domains
+version: "1.0.0"
+last_reviewed: "2026-11-03"
+status: validated
+sources:
+  - "NSA Ghidra Documentation (Apache-2.0)"
+  - "MITRE ATT&CK & CAPA (mandiant/capa) capability taxonomy"
+  - "Rizin/Cutter book (LGPL-3.0)"
+limitations:
+  - "RE é caro em tempo: aplique somente quando a hipótese exige entender uma decisão interna do binário (licença, protocolo, criptografia ofuscada)."
+  - "Decompilação é aproximada — confirme comportamento dinamicamente antes de afirmar."
+related:
+  - "tools/mcp-tool-catalog"
+  - "methodologies/patch-diff-methodology"
+  - "methodologies/root-cause-analysis"
+  - "domains/mobile-android-ios"
+---
+
+# Engenharia Reversa Investigativa
+
+#re #ghidra #rizin #capa #gef #malware #domains
+
+## 1. Quando escalar para RE
+Use o MCP \`GhidraMCP\` (\`:8080\`) ou \`JADX-AI-MCP\` (\`:8650\`) quando:
+- A aplicação é **closed-source** e a decisão de segurança acontece dentro dela (validação de licença, rotina de criptografia, protocolo proprietário).
+- Você precisa **comparar binários** antes/depois de um patch ([[patch-diff-methodology]]).
+- Há suspeita de backdoor/tampering em artefato de terceiros.
+
+## 2. Pipeline (Fase B→D)
+1. **Triage estático** (\`capa\`): capacidades ATT&CK detectadas — direciona onde olhar.
+2. **Strings + imports + seções**: \`strings\`, símbolos, entropia (packer?), imports suspeitos (\`VirtualAlloc\`, \`ptrace\`, \`dlopen\`).
+3. **Decompilação** (\`external.ghidra-decompile\` Ghidra headless): localize o *sink* (função perigosa) e caminhe para trás até a *source* controlável.
+4. **Dinâmico** (GDB/GEF, Rizin debug, Frida): confirme a hipótese observando estado real (registradores, memória, syscalls).
+
+## 3. Hipóteses típicas
+- **H1 (cripto fraca/errada)**: chave/IV fixo, \`rand()\` sem semeadura, ECB, comparação de segredo com \`strcmp\` (timing).
+- **H2 (parsing inseguro)**: \`strcpy\`/\`sprintf\`/\`memcpy\` com tamanho controlado; loop de cópia sem limite; off-by-one.
+- **H3 (autenticação local)**: verificação de licença/serial em branch comparável (patch diff de 1 byte).
+- **H4 (hardcoded secret)**: credencial embutida recuperável por strings/decompilação.
+- **H5 (anti-analysis)**: detecção de debugger que altera comportamento (isso muda suas conclusões — descarte antes de medir).
+
+## 4. Rigor
+- Nomeie funções/variáveis conforme descobre (\`FUN_00401230\` → \`check_license\`) e registre o mapeamento.
+- Separe **fato** (bytes, instruções) de **inferência** (semântica atribuída) no rascunho.
+- Confirme dinamicamente: uma hipótese estática não validada é \`inconclusive\` em [[evidence-validation]].
+
+## 5. Ferramentas MCP no CyberLab OS
+\`ghidra\` (\`:8080\` HTTP, ~30 tools de análise), \`jadx\` (\`:8650\`), \`rizin-cutter\`, \`capa\`, \`gef\`, \`frida-apktool\`, e REA (56 tools) via \`arsenal_run_tool\`/\`arsenal_mcp_status\`.
+`,
+  },
+  {
+    relativePath: "CyberLab-Knowledge/domains/cloud-iam-containers.md",
+    content: `---
+id: domains/cloud-iam-containers
+title: Superfície Cloud, IAM e Contêineres — Modelo de Confiança e Escalada
+tier: curated
+category: domains
+version: "1.0.0"
+last_reviewed: "2026-11-03"
+status: validated
+sources:
+  - "OWASP Cloud-Native Application Security Top 10"
+  - "MITRE ATT&CK Cloud Matrix (IaaS/Containers)"
+  - "CIS Benchmarks (Kubernetes / Docker)"
+limitations:
+  - "Somente dentro de escopo autorizado por escrito; ações em ambiente cloud de terceiro sem autorização são crime."
+  - "Achados de configuração (hardening) devem ser separados de exploração demonstrada."
+related:
+  - "domains/logging-forensics-detection"
+  - "fundamentals/authorization"
+  - "vulnerabilities/ssrf"
+  - "tools/mcp-tool-catalog"
+---
+
+# Superfície Cloud, IAM e Contêineres
+
+#cloud #iam #kubernetes #containers #trivy #domains
+
+## 1. Modelo de confiança a mapear (Fase B)
+\`Identidade (usuário/serviço) -> Política (IAM) -> Recurso -> Rede -> Dados\`. Cada seta é uma fronteira onde uma checagem pode faltar.
+
+## 2. Hipóteses de alto valor
+- **H1 — Metadata/IMDS acessível**: \`169.254.169.254\` vaza credencial temporária (veja [[ssrf]]).
+- **H2 — Escopo de credencial amplo**: chave de leitura consegue escrever; \`Action: *\` com \`Resource: *\`; permissão \`iam:PassRole\` + \`lambda:CreateFunction\` = escalada clássica.
+- **H3 — Confusão de agente**: serviço que aceita *role* escolhida pelo chamador.
+- **H4 — Bucket/container público ou com ACL permissiva**: leitura/gravação anônima, listagem habilitada.
+- **H5 — Contêiner privilegiado / escape**: \`privileged: true\`, \`hostPID\`, montagem de \`/var/run/docker.sock\`, \`cap_sys_admin\`.
+- **H6 — Segredo em imagem/env**: \`docker history\`, variáveis de ambiente, \`.git\` embutido, chave em layer.
+- **H7 — Dependência vulnerável em imagem**: \`external.trivy-scan\` sobre a imagem/filesystem.
+
+## 3. Experimentos controlados
+| Experimento | Observável esperado se vulnerável |
+|---|---|
+| \`curl http://169.254.169.254/latest/meta-data/iam/...\` | JSON com credencial |
+| Assumir role externa à do chamador | \`AssumeRole\` aceito |
+| Escrever objeto em bucket com credencial de leitura | \`200 OK\` |
+| \`docker run --rm -v /:/host alpine chroot /host\` em container privilegiado | Acesso ao FS do host |
+
+## 4. Trivy no CyberLab OS
+\`external.trivy-scan\` (\`trivy fs|image|config|repo\`) varre filesystem/imagem e IaC (Dockerfile, K8s YAML, Terraform) dentro do workspace, gerando evidência SHA-256. Execute sobre **cópia local autorizada**, nunca direto na infraestrutura de produção sem janela aprovada.
+
+## 5. Evidência
+Credencial obtida é dado sensível: registre apenas o prefixo/ARN no relatório e use \`redactSensitiveContent\` (o control plane já aplica redação automática em KeyHunter e equivalentes).
+`,
+  },
+  {
+    relativePath: "CyberLab-Knowledge/domains/logging-forensics-detection.md",
+    content: `---
+id: domains/logging-forensics-detection
+title: Logging, Detecção e Forense — Hayabusa, YARA-X, MVT e Cadeia de Custódia
+tier: curated
+category: domains
+version: "1.0.0"
+last_reviewed: "2026-11-03"
+status: validated
+sources:
+  - "MITRE ATT&CK — Detection & Analytics"
+  - "Yamato Security Hayabusa documentation"
+  - "VirusTotal YARA-X documentation (BSD-3-Clause)"
+  - "OWASP Logging Cheat Sheet"
+limitations:
+  - "Sem linha de base do ambiente, um alerta de YARA/Hayabusa não prova comprometimento — correlacione com telemetria e timing."
+  - "Nunca modifique a evidência original; trabalhe em cópia com hash registrado."
+related:
+  - "domains/cloud-iam-containers"
+  - "methodologies/evidence-validation"
+  - "tools/mcp-tool-catalog"
+  - "domains/binary-reverse-engineering"
+---
+
+# Logging, Detecção e Forense
+
+#forensics #detection #hayabusa #yara #mvt #logging #domains
+
+## 1. Invariante de auditabilidade (lado azul)
+Todo evento de **autenticação, autorização, alteração de privilégio, exportação de dado e mudança de configuração** deve gerar um registro imutável, com identidade, origem, alvo e resultado — e esse registro deve estar **fora do alcance de quem o gerou**.
+
+## 2. Falhas de logging que viram finding (lado vermelho/auditoria)
+- Ação crítica sem log (troca de e-mail, desativação de MFA, criação de chave de API).
+- Log sem identidade ou com IP confiado cegamente de \`X-Forwarded-For\`.
+- Dados sensíveis (senha, token, PAN) escritos em log → vazamento secundário.
+- Log gravado em local gravável pelo usuário afetado → adulteração/ocultação de rastro.
+- **Log injection**: entrada do usuário com \`
+\`/CRLF inserida em log textual (falsificação de linha, envenenamento de SIEM).
+- Ausência de rate limiting em endpoint de login **sem** alerta correspondente.
+
+## 3. Ferramentas no CyberLab OS
+| Ferramenta | Uso |
+|---|---|
+| \`external.yarax-scan\` (\`yr scan\`/\`yara -r\`) | Varre arquivos/diretórios do workspace com regras YARA (triagem de artefato suspeito) |
+| \`hayabusa-yarax\` slot (Hayabusa) | Análise de eventos Windows (\`EVTX\`), timeline ATT&CK, detecções |
+| \`mvt-android\` / \`mvt-ios\` | Indicadores de comprometimento em dispositivo móvel |
+| \`wireshark\`/\`tshark\` (\`external.tshark-pcap-summary\`) | PCAP: protocolos, conversas, extração de objetos |
+| \`capa\` ([[binary-reverse-engineering]]) | Capacidades de binário suspeito |
+
+## 4. Cadeia de custódia
+1. Calcule SHA-256 **antes** de qualquer análise (\`cyberlab_evidence_list\` / ingestão via \`.cyberlab/inbox/\`).
+2. Trabalhe em cópia; registre ferramenta + versão + data.
+3. Guarde saída bruta como evidência (\`normalizeRawOutputDraft\`), não só a conclusão.
+4. Separe **indicador** de **conclusão**: "regra X casou no arquivo Y" é fato; "houve comprometimento" é inferência.
+
+## 5. Detecção como critério de qualidade do relatório
+Em [[reproducible-writeup-standard]], inclua sempre: quais logs o alvo deveria ter gerado, o que ficou registrado, e qual detecção cobriria o abuso.
+`,
+  },
+  {
+    relativePath: "CyberLab-Knowledge/tools/ai-assisted-pentest-workflows.md",
+    content: `---
+id: tools/ai-assisted-pentest-workflows
+title: Fluxos com Ferramentas de IA (PentAGI, Shannon, Strix, PentestGPT-CAI, HexStrike, Copilot) — Uso Orientado por Hipótese
+tier: curated
+category: tools
+version: "1.0.0"
+last_reviewed: "2026-11-03"
+status: validated
+sources:
+  - "CyberLab OS v6.x — Arsenal Slot Catalog (slots autônomos de IA)"
+  - "OWASP Top 10 for LLM Applications & GenAI Security"
+limitations:
+  - "Agente autônomo NÃO substitui validação humana: toda saída é hipótese até ser reproduzida com evidência SHA-256."
+  - "Nunca aponte ferramenta autônoma contra alvo fora de escopo; configure scope.json antes de iniciar."
+related:
+  - "methodologies/hypothesis-driven-testing"
+  - "methodologies/evidence-validation"
+  - "tools/mcp-tool-catalog"
+  - "vulnerabilities/idor-bola-bfla"
+---
+
+# Fluxos com Ferramentas de IA — Uso Orientado por Hipótese
+
+#ai #pentagi #shannon #strix #cai #hexstrike #copilot #tools
+
+## 1. Regra de ouro
+Ferramenta de IA é **geradora de hipóteses e de automação de experimento**, nunca fonte de verdade. Toda afirmação que sair dela precisa passar por [[evidence-validation]] antes de virar finding.
+
+## 2. Catálogo e uso recomendado
+| Slot | Papel no método (Fases A–I) |
+|---|---|
+| \`pentagi\` | Orquestração autônoma multi-agente com proxy TLS embutido — use para **recon amplo** (Fase B/C) sob escopo estrito |
+| \`shannon\` | Automação de fluxo de teste Web — bom para **repetição disciplinada** de um experimento já desenhado |
+| \`strix\` | Varredura/validação assistida por IA — use como **segunda opinião**, compare com seu próprio teste |
+| \`pentestgpt-cai\` / \`pentest-copilot\` | Raciocínio assistido: gere **hipóteses alternativas** e listas de variáveis a testar |
+| \`hexstrike-ai\` | Automação ofensiva — somente em laboratório isolado ou programa autorizado |
+
+## 3. Protocolo obrigatório
+1. **Antes**: defina escopo (\`investigation_memory_update\`) e confirme \`.cyberlab/scope.json\`.
+2. **Durante**: peça à ferramenta **uma hipótese por vez**, com a variável a modificar e o critério de parada.
+3. **Depois**: **reproduza manualmente** com \`burp_suite_send_http1_request\` ou \`arsenal_run_tool\` e capture evidência própria.
+4. **Nunca** reporte texto gerado por IA sem reprodução: LLM alucina CVE, path e parâmetro com frequência.
+
+## 4. Falhas características a checar
+- **CVE alucinado**: verifique em [[cve-applicability-methodology]] os 4 critérios antes de citar.
+- **Falso positivo de scanner**: confirme exploração real, não presença de banner.
+- **Escopo excedido**: agente autônomo pode sair do escopo — revise targets em \`cyberlab_evidence_list\`.
+- **Vazamento de dado sensível**: saída de agente pode conter credencial; use redação (\`redactSensitiveContent\`) antes de arquivar.
+
+## 5. Registro
+Guarde o prompt, a versão da ferramenta e o output bruto como evidência de **processo** — isso torna o relatório reproduzível ([[reproducible-writeup-standard]]).
+`,
+  },
+  {
     relativePath: "CyberLab-Knowledge/00-Index.md",
     content: `---
 id: knowledge/index
@@ -144,12 +883,21 @@ Esta biblioteca organiza o conhecimento técnico do **Investigative Security Orc
 2. **Contexto da Investigação Atual (\`.cyberlab/investigations/\` + \`Investigacoes/\`, \`tier: session_context\`)**: missão, escopo autorizado, modelo do sistema, hipóteses ativas, experimentos e resultados negativos da sessão corrente.
 3. **Conhecimento Externo**: advisories oficiais, commits, patches e documentação primária consultados durante a sessão, sempre acompanhados de fonte, versão e data.
 
-## Mapa da Biblioteca
-- **Fundamentos**: [[http]], [[authentication]], [[authorization]], [[sessions]], [[networking]]
-- **Metodologias**: [[hypothesis-driven-testing]], [[evidence-validation]], [[root-cause-analysis]]
-- **Vulnerabilidades**: [[idor-bola-bfla]], [[context-aware-injection]], [[http-url-json-differentials]], [[state-race-invariants]]
-- **Pesquisa Primária**: [[cve-applicability-methodology]], [[patch-diff-methodology]], [[reproducible-writeup-standard]]
-- **Ferramentas & Catálogo MCP**: [[mcp-tool-catalog]], [[burp]], [[nuclei]], [[semgrep]]
+## Mapa da Biblioteca (34 documentos curados)
+- **Fundamentos (8)**: [[http]], [[authentication]], [[authorization]], [[sessions]], [[networking]], [[jwt-oauth-oidc]], [[csrf-cors-samesite]], [[tls-crypto]]
+- **Metodologias (3)**: [[hypothesis-driven-testing]], [[evidence-validation]], [[root-cause-analysis]]
+- **Vulnerabilidades (9)**: [[idor-bola-bfla]], [[context-aware-injection]], [[http-url-json-differentials]], [[state-race-invariants]], [[ssrf]], [[deserialization-xxe-upload]], [[graphql-websocket]], [[cache-poisoning-deception]], [[race-conditions-toctou]], além de [[mass-assignment-rate-limit]]
+- **Pesquisa Primária (3)**: [[cve-applicability-methodology]], [[patch-diff-methodology]], [[reproducible-writeup-standard]]
+- **Domínios (4)**: [[mobile-android-ios]], [[binary-reverse-engineering]], [[cloud-iam-containers]], [[logging-forensics-detection]]
+- **Ferramentas & Catálogo MCP (5)**: [[mcp-tool-catalog]], [[burp]], [[nuclei]], [[semgrep]], [[ai-assisted-pentest-workflows]]
+
+## Atualização v6.3 (lacunas apontadas na Fase A)
+Os 14 documentos abaixo foram adicionados para fechar domínios que limitavam a formulação de hipóteses testáveis:
+JWT/OAuth (\`alg:none\`, \`kid\`, \`jku\`, claim confusion), CSRF/CORS/SameSite, TLS & cripto aplicada, SSRF dedicado,
+desserialização/XXE/upload, GraphQL & WebSocket, cache poisoning/deception, race conditions com protocolo de
+experimento concorrente, mass assignment/BOPLA/rate limiting, mobile (JADX/Frida/MVT), engenharia reversa
+(Ghidra/Rizin/CAPA/GEF), cloud/IAM/contêineres (Trivy), logging/forense (Hayabusa/YARA-X/MVT) e fluxos com
+ferramentas de IA orientados por hipótese.
 `,
   },
   {

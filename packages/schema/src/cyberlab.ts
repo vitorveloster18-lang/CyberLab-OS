@@ -242,12 +242,21 @@ export namespace CyberLab {
     displayName: Schema.String,
     available: Schema.Boolean,
     resolvedPath: Schema.NullOr(Schema.String),
-    sourceLocation: Schema.Literals(["workspace_local_bin", "system_path", "custom_config", "missing"]),
+    sourceLocation: Schema.Literals([
+      "workspace_local_bin",
+      "system_path",
+      "custom_config",
+      "wsl_distro",
+      "missing",
+    ]),
     licenseSpdx: Schema.String,
     integrationMode: Schema.Literals(["plugin_only", "approved_internal_process", "mcp"]),
     governedCapabilityId: Schema.NullOr(Schema.String),
     installHint: Schema.String,
     description: Schema.String,
+    installHintWsl: optional(Schema.String),
+    wslDistro: optional(Schema.NullOr(Schema.String)),
+    wslPath: optional(Schema.NullOr(Schema.String)),
   })
 
   export const ExternalToolsOverview = Schema.Struct({

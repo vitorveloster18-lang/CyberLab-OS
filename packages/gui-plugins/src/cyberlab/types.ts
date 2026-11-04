@@ -94,12 +94,15 @@ export interface ExternalToolStatusDto {
   displayName: string
   available: boolean
   resolvedPath: string | null
-  sourceLocation: "workspace_local_bin" | "system_path" | "custom_config" | "missing"
+  sourceLocation: "workspace_local_bin" | "system_path" | "custom_config" | "wsl_distro" | "missing"
   licenseSpdx: string
   integrationMode: "plugin_only" | "approved_internal_process" | "mcp"
   governedCapabilityId: string | null
   installHint: string
   description: string
+  installHintWsl?: string
+  wslDistro?: string | null
+  wslPath?: string | null
 }
 
 export interface ExternalToolsOverviewDto {

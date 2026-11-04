@@ -21,7 +21,7 @@ describe("CyberLab OS v6.2 — Investigative Security Orchestrator, Subagent Gua
       const vault = new CyberLabObsidianVault({ projectId: "proj-v62", workspaceRoot: tmpWorkspace })
       const listing = vault.getOverview()
 
-      expect(CURATED_KNOWLEDGE_FILES.length).toBe(20)
+      expect(CURATED_KNOWLEDGE_FILES.length).toBe(34)
 
       const requiredDocIds = [
         "00-Index",
