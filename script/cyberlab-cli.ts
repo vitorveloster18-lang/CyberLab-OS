@@ -32,7 +32,19 @@ const shouldLaunchUnifiedApp =
     APP_SUBCOMMANDS.has(firstArg) ||
     (!CLI_SUBCOMMANDS.has(firstArg) && firstArg.startsWith("-")))
 
-if (LAB_SUBCOMMANDS.has(firstArg)) {
+const UP_SUBCOMMANDS = new Set(["up", "subir"])
+
+if (UP_SUBCOMMANDS.has(firstArg)) {
+  const res = spawnSync(process.execPath, ["run", "script/cyberlab-up.ts", ...args.slice(1)], {
+    cwd: repoRoot,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      CYBERLAB_WORKSPACE_ROOT: process.env.CYBERLAB_WORKSPACE_ROOT || process.cwd(),
+    },
+  })
+  process.exit(res.status ?? 1)
+} else if (LAB_SUBCOMMANDS.has(firstArg)) {
   const labArgs = args.slice(1)
   const res = spawnSync(process.execPath, ["run", "script/cyberlab-lab.ts", ...labArgs], {
     cwd: repoRoot,

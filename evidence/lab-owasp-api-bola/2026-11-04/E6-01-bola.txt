@@ -1,0 +1,27 @@
+# E6 — E6-01-bola: H1 — BOLA (remediado)
+capturado_em : 2026-11-04T12:59:04.864Z
+duracao_ms   : 1
+expectativa  : Após ligar os 4 controles: 403 esperado.
+
+$ curl -s -o NUL -w "%{http_code}" -H "Authorization: Bearer token-user-a-1001" http://127.0.0.1:35021/api/v1/accounts/1002
+
+>>> REQUISICAO
+GET /api/v1/accounts/1002 HTTP/1.1
+Host: 127.0.0.1:35021
+Authorization: Bearer token-user-a-1001
+
+<<< RESPOSTA
+HTTP/1.1 403 Forbidden
+connection: keep-alive
+content-security-policy: default-src 'none'; frame-ancestors 'none'
+content-type: application/json; charset=utf-8
+date: Wed, 04 Nov 2026 12:59:04 GMT
+keep-alive: timeout=5
+strict-transport-security: max-age=63072000; includeSubDomains; preload
+transfer-encoding: chunked
+x-content-type-options: nosniff
+x-frame-options: DENY
+
+{
+  "error": "Forbidden: BOLA ownership check blocked cross-account access"
+}

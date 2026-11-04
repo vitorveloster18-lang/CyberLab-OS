@@ -49,7 +49,7 @@ describe("CyberLab OS v6.3 — Cobertura de domínios da biblioteca curada", () 
       }
 
       // A biblioteca inteira continua íntegra (34 docs: 20 do v6.2 + 14 do v6.3)
-      expect(CURATED_KNOWLEDGE_FILES.length).toBe(35)
+      expect(CURATED_KNOWLEDGE_FILES.length).toBe(36)
     } finally {
       rmSync(tmpWorkspace, { recursive: true, force: true })
     }

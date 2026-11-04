@@ -208,6 +208,124 @@ Identidades de teste: **User A** (\`Bearer token-user-a-1001\`, conta 1001, \`al
 `,
   },
   {
+    relativePath: "CyberLab-Knowledge/targets/portswigger-web-security-academy.md",
+    content: `---
+id: targets/portswigger-web-security-academy
+title: Web Security Academy (PortSwigger) — alvo externo AUTORIZADO e como enquadrá-lo
+tier: curated
+category: targets
+version: "1.0.0"
+last_reviewed: "2026-11-04"
+status: validated
+sources:
+  - "PortSwigger Web Security Academy — the academy authorizes attacks only on the lab instances it creates for you"
+  - "PortSwigger — Introducing the Web Security Academy (anúncio oficial: gratuito e mantido)"
+  - "CyberLab OS v6.5 — cyberlab/labs/target-profiles.ts (perfil de engajamento gerado)"
+limitations:
+  - "A autorização cobre SOMENTE a instância de laboratório que a Academy cria para a sua conta/host. Nada fora dela está no escopo."
+  - "A Academy aplica firewall de saída nas instâncias: tráfego do laboratório para servidores externos arbitrários é bloqueado, então OAST próprio (interactsh/Collaborator alternativo) NÃO funciona nos laboratórios que dependem de interação fora de banda."
+  - "Alguns laboratórios exigem Burp Collaborator (Burp Suite Professional). Sem licença, marque-os como FORA DE ESCOPO em vez de tentar um substituto."
+related:
+  - "methodologies/hypothesis-driven-testing"
+  - "methodologies/evidence-validation"
+  - "vulnerabilities/idor-bola-bfla"
+  - "fundamentals/jwt-oauth-oidc"
+  - "tools/lab-owasp-api-bola"
+---
+
+# Web Security Academy (PortSwigger) — alvo externo autorizado
+
+## 1. Por que este alvo e não outro
+
+A Web Security Academy é mantida pelos mesmos pesquisadores que publicam as
+técnicas que você vai usar nela, e **declara explicitamente** que autoriza ataques
+apenas contra as instâncias de laboratório que ela cria para você. Isso resolve o
+problema que trava qualquer investigação séria: **ter autorização por escrito**.
+
+É gratuita (lições, laboratórios e soluções oficiais), roda no navegador contra
+instâncias hospedadas, e cobre as mesmas classes do seu laboratório local — o que
+permite **transferir o método calibrado no \`lab-owasp-api-bola\` para um alvo com
+comportamento real de aplicação**.
+
+## 2. Escopo autorizado (o que está dentro)
+
+| Item | Valor |
+| --- | --- |
+| Domínios permitidos | \`https://<LAB-ID>.web-security-academy.net\` (inclui os laboratórios temáticos em \`*.h1-web-security-academy.net\`) |
+| Servidor de exploit | \`https://exploit-<ID>.web-security-academy.net\` (quando o laboratório oferecer) |
+| Instância | **Somente a que a Academy criou para você.** Cada laboratório gera um hostname novo |
+| Dificuldades | \`Apprentice\` → \`Practitioner\` → \`Expert\` |
+| Conta | Gratuita; serve para acompanhar progresso. Laboratórios resolvem sem ela em muitos casos |
+
+## 3. Regras de engajamento (o que NÃO fazer)
+
+1. **Não reutilize a técnica em site vivo.** A autorização da Academy não se
+   estende a nada fora do hostname do seu laboratório. Testar \`' OR 1=1--\` numa
+   loja real "só para ver" é teste não autorizado.
+2. **Não varra o domínio inteiro.** \`web-security-academy.net\` é a plataforma,
+   não o seu alvo. O alvo é o subdomínio do SEU laboratório.
+3. **Não ataque a infraestrutura da plataforma** (DNS, TLS, CDN, painel de login
+   da PortSwigger, API de progresso).
+4. **Sem negação de serviço e sem força bruta volumosa.** Laboratórios de race
+   condition usam técnica de pacote único, não rajada.
+5. **Laboratórios com dependência fora de banda**: sem Burp Collaborator (Pro),
+   marque como \`FORA DE ESCOPO\`. O firewall de saída do laboratório bloqueia
+   servidores externos arbitrários, então \`interactsh\` não resolve aqui.
+6. **Não publique a solução como se fosse descoberta sua.** As soluções oficiais
+   existem; citá-las depois de resolver é honesto, apresentá-las como achado, não.
+
+## 4. Como apontar o Burp (Windows + WSL2)
+
+\`\`\`powershell
+# 1) Suba a interface do CyberLab OS e abra o Burp pelo slot do arsenal
+bun run cyberlab
+
+# 2) No Burp: Proxy > Proxy settings > adicione um listener em 127.0.0.1:8080
+# 3) Configure o navegador para usar esse proxy e acesse SOMENTE o hostname do seu laboratório
+\`\`\`
+
+> No Windows, o Burp escuta no host e o WSL2 enxerga esse IP — use
+> \`cyberlab/external/wsl-runtime.ts\` (resolução em 4 camadas) para não hardcodar
+> endereço de gateway, que muda a cada reinício do WSL2.
+
+## 5. Transferindo o método calibrado no laboratório local
+
+O laboratório local fixou 4 hipóteses e 7 experimentos. O mesmo esqueleto serve
+para cada laboratório da Academy — só muda a variável:
+
+| Hipótese (local) | Equivalente na Academy | Tópico |
+| --- | --- | --- |
+| H1 — BOLA/IDOR | Leitura/alteração de recurso de outro usuário | Access control vulnerabilities |
+| H2 — JWT \`alg:none\` | Assinatura não verificada / \`alg\` confuso | JWT attacks |
+| H3 — erro SQL com estrutura da consulta | \`SQLITE_ERROR\`/mensagem do SGBD no corpo | SQL injection |
+| H4 — headers de segurança ausentes | CSP/HSTS/X-Frame-Options faltando | (tópico transversal, lab local é melhor) |
+
+Regra prática: **uma variável por experimento**, pare baseline + PoC, e registre
+resultado negativo como resultado — não como fracasso.
+
+## 6. Evidência
+
+Cada laboratório resolvido deve virar evidência arquivada, do mesmo jeito do
+laboratório local:
+
+\`\`\`powershell
+bun run cyberlab lab evidence lab-owasp-api-bola --out evidence/<rodada>
+\`\`\`
+
+Para a Academy, guarde: URL exata do laboratório, requisição/resposta do PoC,
+data/hora, e o critério de veredito. O hostname do laboratório expira — **a URL
+sem o corpo da resposta não é evidência**.
+
+## 7. Limite honesto deste alvo
+
+A Academy ensina a classe da vulnerabilidade em um alvo construído para ser
+vulnerável. Ela **não** treina: descoberta em aplicação grande, ruído de WAF,
+programas de recompensa com escopo difuso, nem escrita de relatório que alguém
+vai pagar. Quando esse for o objetivo, o próximo passo é um programa de bug
+bounty com escopo escrito — e aí o perfil de engajamento muda.
+`,
+  },
+  {
     relativePath: "CyberLab-Knowledge/fundamentals/jwt-oauth-oidc.md",
     content: `---
 id: fundamentals/jwt-oauth-oidc

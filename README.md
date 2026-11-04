@@ -1,4 +1,4 @@
-# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.4.3)
+# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.5)
 
 Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investigação Orientada por Hipóteses, Bug Bounty Autorizado, Engenharia Reversa, DFIR e Laboratórios de Treinamento**, construída sobre o **OpenCode V2 (`2.1.4`)** e projetada nativamente para **Windows 11 (PowerShell) + WSL2 (`kali-linux` 2026.x)** ou Linux nativo.
 
@@ -18,10 +18,10 @@ Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investiga
 5. [Hub MCP Unificado (`cyberlab-arsenal`), Pontes GUI em Tempo Real & Modelos Gratuitos](#5-hub-mcp-unificado-cyberlab-arsenal-pontes-gui-em-tempo-real--modelos-gratuitos)
 6. [Layout Antigravity de 3 Colunas, Topo Retrátil (`28px`) & `noVNC` Nitidez Real](#6-layout-antigravity-de-3-colunas-topo-retrátil-28px--novnc-nitidez-real)
 7. [Catálogo Completo dos 48 Slots Oficiais + Slots Personalizados](#7-catálogo-completo-dos-48-slots-oficiais--slots-personalizados)
-8. [Laboratórios de Treino Prontos para Investigação (v6.4)](#8-laboratórios-de-treino-prontos-para-investigação-v64)
+8. [Laboratórios de Treino Prontos para Investigação (v6.4–v6.5)](#8-laboratórios-de-treino-prontos-para-investigação-v64v65)
 ---
 
-## 8. Laboratórios de Treino Prontos para Investigação (v6.4)
+## 8. Laboratórios de Treino Prontos para Investigação (v6.4–v6.5)
 
 A Fase A de calibração apontou que **nenhuma capacidade havia sido validada com evidência real** porque o
 servidor do lab estava inativo e a memória investigativa estava vazia. Agora o laboratório sobe **com as
@@ -79,9 +79,75 @@ Também é possível subir junto da interface: `bun run cyberlab --rebuild --lab
 
 9. [Os 4 Parceiros Cognitivos CDI (`8788–8791`) & 5 Laboratórios de Treino](#8-os-4-parceiros-cognitivos-cdi-87888791--5-laboratórios-de-treino)
 10. [Governança de Escopo Bug Bounty, Custódia `SHA-256` & Segurança Anti-Prompt-Injection](#9-governança-de-escopo-bug-bounty-custódia-sha-256--segurança-anti-prompt-injection)
-11. [Histórico Completo de Versões (`v1.0` → `v6.4.3`), Verificação CI & Licenciamento MIT](#11-histórico-completo-de-versões-v10--v643-verificação-ci--licenciamento-mit)
+11. [Histórico Completo de Versões (`v1.0` → `v6.5`), Verificação CI & Licenciamento MIT](#11-histórico-completo-de-versões-v10--v65-verificação-ci--licenciamento-mit)
 
 ---
+
+### 8.3 Evidência arquivada com SHA-256 (`lab evidence`)
+
+```powershell
+bun run cyberlab lab evidence lab-owasp-api-bola
+bun run cyberlab lab evidence lab-owasp-api-bola --out evidence\rodada-01
+```
+
+Reexecuta **E1–E7** contra um servidor real e grava, para cada requisição, um `.txt` com o
+comando, a requisição e a resposta completa — mais `manifest.json`, `REPORT.md` e `SEAL.txt`.
+
+| Arquivo | Papel |
+| --- | --- |
+| `E1-01-...txt` … `E7-04-...txt` | 19 pares comando/resposta + a expectativa declarada antes de rodar |
+| `manifest.json` | metadados de todas as requisições + SHA-256 de cada `.txt` |
+| `SEAL.txt` | SHA-256 do `manifest.json` (selo do lote) |
+| `REPORT.md` | veredito por hipótese com o critério usado |
+
+Conferência (o selo bate com o arquivo gravado — sem paradoxo ovo/galinha):
+
+```powershell
+(Get-FileHash .\manifest.json -Algorithm SHA256).Hash.ToLower()   # deve igualar SEAL.txt
+```
+
+> O lab **volta ao estado vulnerável** ao final (E7 comprova a restauração), então o treino continua.
+
+### 8.4 Alvo externo autorizado (`lab targets` / `lab scope`)
+
+```powershell
+bun run cyberlab lab targets                      # lista alvos com AUTORIZAÇÃO declarada
+bun run cyberlab lab scope portswigger-wsa        # grava SCOPE.md + RULES-OF-ENGAGEMENT.md
+```
+
+Perfil disponível: **`portswigger-wsa`** (PortSwigger Web Security Academy) — gratuita, mantida
+pelos autores do Burp Suite, e **autoriza ataques somente contra as instâncias de laboratório que
+ela cria para você**. Hosts permitidos: `*.web-security-academy.net` e
+`*.h1-web-security-academy.net`.
+
+A ponte com o método já calibrado no laboratório local:
+
+| Hipótese local | Tópico equivalente na Academy |
+| --- | --- |
+| H1 — BOLA/IDOR | Access control vulnerabilities |
+| H2 — JWT `alg:none` | JWT attacks |
+| H3 — erro SQL com estrutura da consulta | SQL injection |
+| H4 — headers de segurança ausentes | transversal (melhor observado no lab local) |
+
+Regras que o `RULES-OF-ENGAGEMENT.md` deixa explícitas: **não** varrer o domínio da plataforma
+(só o hostname do SEU laboratório está no escopo), **não** reutilizar a técnica em site vivo, sem
+DoS/força bruta volumosa. E uma limitação honesta: laboratórios que dependem de interação fora de
+banda exigem Burp Collaborator (Burp Pro) e o firewall de saída do laboratório bloqueia servidores
+externos arbitrários — sem licença, marque `FORA DE ESCOPO` em vez de tentar um substituto.
+
+### 8.5 `cyberlab up` — atualizar e subir tudo com 1 comando
+
+```powershell
+bun run cyberlab up
+```
+
+1. `git pull --ff-only` (pule com `--no-pull`; não roda se houver alterações locais)
+2. `bun install` se `node_modules` estiver ausente (`--install` força, `--no-install` nunca roda)
+3. sobe o **laboratório em segundo plano** (`--daemon` — sobrevive ao fechar o terminal)
+4. sobe a **interface** em primeiro plano em `http://127.0.0.1:4096`
+
+Opções: `--lab <labId>`, `--port <n>` (interface), `--lab-port <n>` (alvo), `--no-open`.
+`Ctrl+C` derruba **só a interface**; o laboratório continua no ar até `lab stop`.
 
 ## 1. Inicialização Rápida (Windows PowerShell + WSL2 Kali)
 
@@ -90,12 +156,18 @@ Também é possível subir junto da interface: `bun run cyberlab --rebuild --lab
 No **Windows PowerShell**, dentro da pasta do repositório:
 
 ```powershell
+bun run cyberlab up          # atualiza (git pull) + sobe interface E laboratório
+```
+
+Equivalente em passos explícitos, se preferir ver cada etapa:
+
+```powershell
 git pull
 bun run cyberlab --rebuild
 ```
 
 - Na inicialização, o lançador `script/start-cyberlab.ts` automaticamente:
-  1. Semeia de forma idempotente os **34 documentos curados** de `<workspace>/vault/CyberLab-Knowledge/` sem sobrescrever notas existentes;
+  1. Semeia de forma idempotente os **36 documentos curados** de `<workspace>/vault/CyberLab-Knowledge/` sem sobrescrever notas existentes;
   2. Consolida qualquer entrada legada de `opencode.json` em **1 único servidor MCP unificado** (`"cyberlab-arsenal"`, `--slot __hub__`);
   3. Define `"default_agent": "cyberlab-orchestrator"` caso você ainda não tenha personalizado seu agente padrão;
   4. Recompila o frontend (`--rebuild`) e sobe o servidor unificado em **`http://127.0.0.1:4096`**.
@@ -170,9 +242,9 @@ O `Orchestrator` cria subagentes **somente quando há ganho investigativo concre
 
 ## 4. Biblioteca Curada `CyberLab-Knowledge/` & Cofre Obsidian (`Alt+N`)
 
-### 4.1 Estrutura Curada (`<workspace>/vault/CyberLab-Knowledge/` — 34 documentos)
+### 4.1 Estrutura Curada (`<workspace>/vault/CyberLab-Knowledge/` — 36 documentos)
 
-Todos os **34 documentos curados** possuem frontmatter YAML auditável (`id`, `title`, `tier: curated`, `version`, `last_reviewed`, `status: validated`, `sources`, `limitations` e `related`) e links `[[WikiLinks]]` navegáveis tanto pelo agente quanto pelo operador humano no Cofre Obsidian:
+Todos os **36 documentos curados** possuem frontmatter YAML auditável (`id`, `title`, `tier: curated`, `version`, `last_reviewed`, `status: validated`, `sources`, `limitations` e `related`) e links `[[WikiLinks]]` navegáveis tanto pelo agente quanto pelo operador humano no Cofre Obsidian:
 
 ```text
 vault/CyberLab-Knowledge/
@@ -216,6 +288,8 @@ vault/CyberLab-Knowledge/
 │   ├── semgrep.md
 │   ├── ai-assisted-pentest-workflows.md  # PentAGI/Shannon/Strix/CAI/HexStrike: IA = geradora de hipóteses
 │   └── mcp-tool-catalog.md
+├── targets/                        # (novo na v6.5) Alvos externos com autorização declarada
+│   └── portswigger-web-security-academy.md  # Escopo, proibições, limites e ponte H1→H4
 ├── _drafts/                        # Rascunhos criados pelo agente (tier: draft — nunca misturados ao curado)
 └── _proposals/                     # Propostas de revisão aguardando curadoria humana (pending_human_review)
 ```
@@ -357,7 +431,7 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
 
 ---
 
-## 11. Histórico Completo de Versões (`v1.0` → `v6.4.3`), Verificação CI & Licenciamento MIT
+## 11. Histórico Completo de Versões (`v1.0` → `v6.5`), Verificação CI & Licenciamento MIT
 
 - **v1.0 – v4.0**: Base OpenCode V2 (`2.1.4`), governança anti-TOCTOU, cofre `SHA-256`, 4 CDIs (`8788–8791`), 5 Labs de Treino e 9 modelos gratuitos OpenCode Zen.
 - **v5.0 – v5.8**: Arquitetura **Real Arsenal Edition** (3 colunas Antigravity, motor `X11/noVNC` 110 DPI sem deslocamento de mouse no zoom, navegador proxy em 1 clique, Burp oficial, REA MCP, PentAGI TLS `:8443` e ferramentas Kali 2026.1).
@@ -408,6 +482,20 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
   novo sozinho. Novo comando `lab restart <labId>` (e flag `--restart`/`--force`) para recomeçar do
   zero. Corrigido também um **ENOENT** quando a raiz `.cyberlab/labs` ainda não existia (primeiro uso).
 
+- **v6.5**: **Evidência arquivada, alvo externo autorizado e `cyberlab up`.**
+  - `lab evidence <labId>`: reexecuta **E1–E7** e grava 19 pares comando/resposta com a
+    expectativa declarada *antes* de rodar, mais `manifest.json`, `REPORT.md` e `SEAL.txt`
+    (selo = SHA-256 do manifesto, conferível com `sha256sum`/`Get-FileHash`). O lab volta ao
+    estado vulnerável ao fim, comprovado pela fase `E7`.
+  - `lab targets` / `lab scope <perfil>`: perfis de alvo externo **com base de autorização
+    declarada** (nenhum perfil entra na lista sem ela). Perfil `portswigger-wsa` cobre
+    `*.web-security-academy.net` e `*.h1-web-security-academy.net`, com hosts permitidos,
+    proibições, limites de taxa, regras de evidência e a ponte H1–H4 → tópicos da Academy.
+  - `bun run cyberlab up`: um comando para atualizar (`git pull --ff-only`), instalar se
+    preciso, subir o laboratório em segundo plano e abrir a interface. `Ctrl+C` derruba só
+    a interface — o laboratório continua no ar.
+  - Biblioteca curada: **36 documentos** (novo `targets/portswigger-web-security-academy.md`).
+
 ### Verificação Local Completa (Idêntica ao GitHub Actions Linux + Windows)
 
 ```bash
@@ -422,7 +510,7 @@ bun --cwd packages/cli typecheck
 bun --cwd packages/gui-plugins typecheck
 bun --cwd cyberlab typecheck
 
-# 3. Suíte automatizada de testes (75 testes / 1.176+ asserções)
+# 3. Suíte automatizada de testes (85 testes / 1.344+ asserções)
 bun --cwd cyberlab test
 ```
 

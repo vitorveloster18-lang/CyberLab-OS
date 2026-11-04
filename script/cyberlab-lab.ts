@@ -13,6 +13,9 @@
  *   bun run cyberlab lab kit   lab-owasp-api-bola        # gera Fases B/D/F
  *   bun run cyberlab lab seed  lab-owasp-api-bola        # grava na memória investigativa
  *   bun run cyberlab lab model lab-owasp-api-bola [--json]
+ *   bun run cyberlab lab evidence lab-owasp-api-bola      # E1–E7 + SHA-256
+ *   bun run cyberlab lab targets
+ *   bun run cyberlab lab scope portswigger-wsa
  */
 
 import { spawn } from "node:child_process"
@@ -22,6 +25,8 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { BUILTIN_TRAINING_LABS, TrainingLabManager } from "../cyberlab/labs/training-labs.js"
 import { CyberLabKnowledgeEngine } from "../cyberlab/knowledge/curated-library.js"
+import { runBolaEvidenceSuite } from "../cyberlab/labs/evidence-recorder.js"
+import { listTargetProfiles, writeTargetScope } from "../cyberlab/labs/target-profiles.js"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const args = process.argv.slice(2)
@@ -50,11 +55,21 @@ function usage(): void {
       "  kit    <labId>           Gera apenas os arquivos das Fases B/D/F (sem subir servidor)",
       "  seed   <labId>           Grava missão/escopo/modelo/hipóteses na memória investigativa",
       "  model  <labId> [--json]  Imprime o modelo do sistema (Fase B)",
+      "  evidence <labId>         Reexecuta E1–E7 e arquiva comando+resposta com SHA-256",
+      "  targets                  Lista alvos externos com AUTORIZAÇÃO declarada",
+      "  scope <perfil>           Grava SCOPE.md + RULES-OF-ENGAGEMENT.md do alvo",
       "",
       "Opções de start:",
       "  --daemon, -d             Segundo plano: o lab CONTINUA rodando após fechar o terminal",
       "  --port <n>               Porta preferida (padrão: hint do catálogo)",
       "  --reset                  Regrava os arquivos do lab antes de subir",
+      "",
+      "Opções de evidence:",
+      "  --out <dir>              Pasta de saída (padrão: evidence/<labId>/<timestamp>)",
+      "  --port <n>               Usa um lab JÁ ativo nessa porta em vez de subir um novo",
+      "",
+      "Opções de scope:",
+      "  --out <dir>              Pasta de saída (padrão: <labsRoot>/targets/<perfil>)",
       "  --restart, --force       Se já houver um daemon no ar, derruba e sobe um novo",
       "",
       "",
@@ -468,6 +483,122 @@ switch (command) {
       }
       console.log("")
     }
+    process.exit(0)
+  }
+
+  case "targets": {
+    const profiles = listTargetProfiles()
+    console.log(`${BOLD}Alvos externos com autorização declarada${RESET}\n`)
+    if (profiles.length === 0) {
+      console.log(`${YELLOW}Nenhum perfil cadastrado.${RESET}`)
+      console.log(`${DIM}Perfil sem base de autorização explícita não entra nesta lista por decisão de projeto.${RESET}`)
+      process.exit(0)
+    }
+    for (const p of profiles) {
+      console.log(`  ${GREEN}${p.id}${RESET} — ${BOLD}${p.name}${RESET}`)
+      console.log(`    ${DIM}Operador:${RESET} ${p.owner}`)
+      console.log(`    ${DIM}Hosts   :${RESET} ${p.allowedHosts.join(", ")}`)
+      console.log("")
+      console.log(`    ${p.authorizationBasis}`)
+      console.log("")
+      for (const h of p.hypothesisBridge) {
+        console.log(`    ${CYAN}${h.localHypothesisId}${RESET} ${DIM}${h.localHypothesis} →${RESET} ${h.targetTopic}`)
+      }
+      console.log("")
+      console.log(`    ${BOLD}Gerar escopo:${RESET} bun run cyberlab lab scope ${p.id}`)
+      console.log("")
+    }
+    process.exit(0)
+  }
+
+  case "scope": {
+    const profileId = labIdArg
+    if (!profileId) {
+      console.error(`${RED}Informe o perfil (ex.: portswigger-wsa).${RESET}`)
+      console.error(`${DIM}Perfis disponíveis: ${listTargetProfiles().map((p) => p.id).join(", ")}${RESET}`)
+      process.exit(1)
+    }
+    const outDir = path.resolve(readFlag("--out") ?? path.join(resolveLabsRoot(), "targets", profileId))
+    const result = writeTargetScope(profileId, outDir)
+    if (!result) {
+      console.error(`${RED}Perfil "${profileId}" não existe.${RESET}`)
+      console.error(`${DIM}Perfis disponíveis: ${listTargetProfiles().map((p) => p.id).join(", ")}${RESET}`)
+      process.exit(1)
+    }
+    console.log(`${GREEN}✔ Escopo do alvo gravado:${RESET}`)
+    console.log(`    ${result.scopePath}`)
+    console.log(`    ${result.rulesPath}`)
+    console.log("")
+    console.log(`${YELLOW}Antes de testar, confirme a autorização nos links de SCOPE.md.${RESET}`)
+    console.log(`${DIM}Autorização presumida não existe — vale a que estiver escrita hoje.${RESET}`)
+    process.exit(0)
+  }
+
+  case "evidence": {
+    if (!labIdArg) {
+      console.error(`${RED}Informe o labId.${RESET}`)
+      process.exit(1)
+    }
+    if (labIdArg !== "lab-owasp-api-bola") {
+      console.error(`${RED}O gravador de evidência cobre apenas "lab-owasp-api-bola" (recebido: ${labIdArg}).${RESET}`)
+      process.exit(1)
+    }
+
+    const portFlag = readFlag("--port")
+    const outFlag = readFlag("--out")
+    let baseUrl = ""
+    let workspaceRoot = manager.getLabWorkspacePath(labIdArg)
+    let startedHere = false
+
+    if (portFlag) {
+      baseUrl = `http://127.0.0.1:${Number.parseInt(portFlag, 10)}`
+      // Reaproveita o workspace do daemon (o kit precisa estar provisionado)
+      if (!existsSync(path.join(workspaceRoot, "server-config.json"))) {
+        console.error(`${RED}Nenhum lab provisionado em ${workspaceRoot}. Suba o lab antes (${BOLD}--daemon${RESET}) ou omita --port.${RESET}`)
+        process.exit(1)
+      }
+    } else {
+      // Sobe um servidor próprio em porta efêmera: nunca conflita com o daemon do operador.
+      const status = await manager.startLab({ labId: labIdArg, preferredPort: 0, resetFiles: false })
+      if (!status.baseUrl) {
+        console.error(`${RED}Não foi possível subir o lab para coletar evidência.${RESET}`)
+        process.exit(1)
+      }
+      baseUrl = status.baseUrl
+      workspaceRoot = status.workspaceRoot ?? workspaceRoot
+      startedHere = true
+    }
+
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-")
+    const outDir = path.resolve(outFlag ?? path.join(repoRoot, "evidence", labIdArg, stamp))
+
+    console.log(`${BOLD}Coletando evidência E1–E7${RESET} em ${baseUrl}`)
+    console.log(`${DIM}Saída: ${outDir}${RESET}\n`)
+
+    const result = await runBolaEvidenceSuite({ baseUrl, outDir, workspaceRoot })
+
+    const order = ["H1", "H2", "H3", "H4", "H1@remediado", "H2@remediado", "H3@remediado", "H4@remediado"]
+    const icon: Record<string, string> = {
+      vulneravel: `${RED}VULNERÁVEL${RESET}`,
+      seguro: `${GREEN}SEGURO${RESET}`,
+      remediado: `${GREEN}REMEDIADO${RESET}`,
+      inconclusivo: `${YELLOW}INCONCLUSIVO${RESET}`,
+    }
+    for (const h of order) {
+      const v = result.manifest.verdicts[h]
+      if (v) console.log(`  ${BOLD}${h.padEnd(13)}${RESET} ${icon[v.verdict] ?? v.verdict}  ${DIM}${v.rationale}${RESET}`)
+    }
+    console.log("")
+    console.log(`${GREEN}✔ ${result.manifest.cases.length} requisições arquivadas${RESET} em ${result.suiteDir}`)
+    console.log(`  Manifesto : ${result.manifestPath}`)
+    console.log(`  Relatório : ${result.reportPath}`)
+    console.log(`  ${BOLD}Selo do lote (SHA-256 do manifest.json):${RESET}`)
+    console.log(`    ${CYAN}${result.seal}${RESET}`)
+    console.log("")
+    console.log(`${DIM}Verificação (PowerShell): (Get-FileHash .\manifest.json -Algorithm SHA256).Hash.ToLower()${RESET}`)
+    console.log(`${DIM}Verificação (WSL2/Linux): sha256sum manifest.json${RESET}`)
+
+    if (startedHere) await manager.stopLab(labIdArg)
     process.exit(0)
   }
 

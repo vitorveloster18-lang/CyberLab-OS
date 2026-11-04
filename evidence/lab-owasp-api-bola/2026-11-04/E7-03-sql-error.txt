@@ -1,0 +1,20 @@
+# E7 — E7-03-sql-error: H3 — erro SQL (restaurado)
+capturado_em : 2026-11-04T12:59:04.867Z
+duracao_ms   : 1
+expectativa  : Após desligar sanitizeSqlQuery: volta a 500 com SQLITE_ERROR (estado vulnerável).
+
+$ curl -s -o NUL -w "%{http_code}" "http://127.0.0.1:35021/api/v1/search?q=%27"
+
+>>> REQUISICAO
+GET /api/v1/search?q=%27 HTTP/1.1
+Host: 127.0.0.1:35021
+
+<<< RESPOSTA
+HTTP/1.1 500 Internal Server Error
+connection: keep-alive
+content-type: text/plain; charset=utf-8
+date: Wed, 04 Nov 2026 12:59:04 GMT
+keep-alive: timeout=5
+transfer-encoding: chunked
+
+SQLITE_ERROR: near "'": syntax error in SELECT id, amount FROM ledger WHERE memo LIKE '%'%'
