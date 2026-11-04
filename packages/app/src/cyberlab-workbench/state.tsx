@@ -750,7 +750,14 @@ function createWorkbenchService() {
         "/api/cyberlab/labs/control",
         {
           method: "POST",
-          body: JSON.stringify({ action, labId, setActive: action === "start" }),
+          // v6.7: o clique do operador no botão da interface É a confirmação exigida
+          // pela guarda de ações destrutivas (reset/stop são destrutivos; start não é).
+          body: JSON.stringify({
+            action,
+            labId,
+            setActive: action === "start",
+            ...(action === "start" ? {} : { confirm: true }),
+          }),
         },
       )
       if (action === "start") {
@@ -1012,10 +1019,18 @@ function createWorkbenchService() {
   }
 
   async function deleteVaultNote(relativePath: string): Promise<void> {
+    // v6.7: apagar nota não tem volta. A guarda exige `confirm` + `confirmPhrase`;
+    // aqui quem confirma é o humano, numa caixa de diálogo, antes de a chamada sair.
+    if (typeof window !== "undefined") {
+      const ok = window.confirm(
+        `Apagar a nota "${relativePath}"?\n\nNÃO HÁ LIXEIRA — o arquivo é removido do disco e sai do Obsidian.`,
+      )
+      if (!ok) return
+    }
     try {
       const updated = await cyberlabFetch<VaultOverviewDto>(serverTarget(), "/api/cyberlab/vault/delete", {
         method: "POST",
-        body: JSON.stringify({ relativePath }),
+        body: JSON.stringify({ relativePath, confirm: true, confirmPhrase: relativePath }),
       })
       batch(() => {
         setBackend("vault", reconcile(updated))

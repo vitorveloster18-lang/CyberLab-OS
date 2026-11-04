@@ -19,6 +19,7 @@ Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investiga
 6. [Layout Antigravity de 3 Colunas, Topo Retrátil (`28px`) & `noVNC` Nitidez Real](#6-layout-antigravity-de-3-colunas-topo-retrátil-28px--novnc-nitidez-real)
 7. [Catálogo Completo dos 48 Slots Oficiais + Slots Personalizados](#7-catálogo-completo-dos-48-slots-oficiais--slots-personalizados)
 8. [Laboratórios de Treino Prontos para Investigação (v6.4–v6.5)](#8-laboratórios-de-treino-prontos-para-investigação-v64v65)
+   - [8.9 Diagnóstico do Arsenal — `lab slots` e `lab tools`](#89-diagnóstico-do-arsenal--lab-slots-e-lab-tools-v67)
 ---
 
 ## 8. Laboratórios de Treino Prontos para Investigação (v6.4–v6.5)
@@ -88,6 +89,8 @@ Também é possível subir junto da interface: `bun run cyberlab --rebuild --lab
 ```powershell
 bun run cyberlab lab evidence lab-owasp-api-bola
 bun run cyberlab lab evidence lab-owasp-api-bola --out evidence\rodada-01
+bun run cyberlab lab slots --health
+bun run cyberlab lab tools --missing
 ```
 
 Reexecuta **E1–E7** contra um servidor real e grava, para cada requisição, um `.txt` com o
@@ -187,6 +190,47 @@ bun run cyberlab lab evidence lab-owasp-api-bola --out evidence\rodada-02 --regi
 
 Grava os arquivos **e** registra cada requisição no `EvidenceStore` (projeto = `labId`), de
 onde `cyberlab_evidence_list` passa a enxergá-las.
+
+### 8.9 Diagnóstico do Arsenal — `lab slots` e `lab tools` (v6.7)
+
+Duas perguntas apareceram depois da calibração — *"quais slots estão duplicados?"* e
+*"quais ferramentas faltam instalar?"* — e nenhuma das duas tinha resposta verificável.
+Agora tem, sem abrir a interface:
+
+```powershell
+bun run cyberlab lab slots                 # 48 slots: catálogo + personalizados + duplicatas
+bun run cyberlab lab slots --health        # só fantasmas/duplicados/sem binário
+bun run cyberlab lab slots --json          # saída completa p/ o agente
+
+bun run cyberlab lab tools                 # 12 ferramentas do catálogo: ✔ instalada / ✘ falta
+bun run cyberlab lab tools --missing       # só as que faltam, com a dica de instalação
+bun run cyberlab lab tools --script > install-faltantes.sh
+bun run cyberlab lab tools --json
+```
+
+- **`lab slots`** compara os slots por **nome normalizado** e lista as duplicatas reais
+  (`"ssti-advanced-payload-list" -> slot-a, slot-b`), mais o diagnóstico de higiene
+  (`ghost_custom_slot`, `duplicate_custom_slot`, `non_executable_target`,
+  `unconfigured_custom_slot`). Num cofre limpo a resposta é
+  `48 slots — 0 personalizados — nenhuma duplicata`: as duplicatas que a calibração
+  relatou vinham de slots personalizados **gravados no disco por execuções anteriores**,
+  não do catálogo.
+- **`lab tools --script`** gera um `bash` com `set -euo pipefail` para o WSL2 Kali. Ele
+  filtra as dicas do catálogo: entram **só as que são comandos de verdade**
+  (`apt`, `pipx`, `cargo`, …). Dicas descritivas — ex.: `See slot installer
+  (OpenTRAP AppImage in WSL2)` — viram **comentário**, porque quebrariam o script.
+  O que depende de **licença** (Burp Collaborator) ou de **configuração** (slots de
+  wordlist) também fica fora: não é instalável por script.
+
+Para rodar o script gerado **dentro do WSL2 Kali** (PowerShell 5.1-safe):
+
+```powershell
+bun run cyberlab lab tools --script > install-faltantes.sh
+wsl -d kali-linux -- bash -s < install-faltantes.sh
+```
+
+> No Windows, se o `>` do PowerShell gravar UTF-16, converta antes:
+> `Get-Content .\install-faltantes.sh | Set-Content -Encoding utf8 install-faltantes-utf8.sh`
 
 ### 8.5 `cyberlab up` — 1 comando, **1 processo**, alvo embutido (v6.6)
 
@@ -596,6 +640,20 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
   - `lab evidence --register` grava cada requisição também no `EvidenceStore` (SQLite),
     acabando com o "0 registros" da calibração.
   - CI passa a rodar `tests/cyberlab/safety` e `tests/cyberlab/knowledge`.
+  - **Correção da tela vermelha**: a guarda exigia `confirm`, mas a interface chamava
+    `labs/control` (stop/reset) e `vault/delete` sem ele → `HTTP 400` em cascata.
+    `state.tsx` agora envia `confirm: true` (menos em `start`, que não é destrutivo) e
+    `vault/delete` avisa no `window.confirm` que **não há lixeira**. Coberto por
+    `tests/cyberlab/safety/ui-confirmation-wiring-v67.test.ts`, que varre
+    `packages/app/src` e falha se qualquer chamada a rota protegida esquecer o `confirm`.
+  - **`cyberlab lab tools`**: mostra as 12 ferramentas do catálogo (✔/✘), a origem
+    esperada e a dica de instalação; `--missing`, `--json` e `--script` (este gera um
+    bash para o WSL2 Kali filtrando dicas que não são comandos).
+  - **`cyberlab lab slots`**: lista os 48 slots, separa catálogo de personalizados,
+    aponta duplicatas por nome normalizado e mostra os problemas de higiene
+    (`--health`, `--json`).
+  - Teste de integridade das dicas (`tests/cyberlab/arsenal/tool-catalog-hints-v67.test.ts`):
+    garante que nenhuma dica não-executável vire linha de script.
 
 ### Verificação Local Completa (Idêntica ao GitHub Actions Linux + Windows)
 
@@ -611,7 +669,7 @@ bun --cwd packages/cli typecheck
 bun --cwd packages/gui-plugins typecheck
 bun --cwd cyberlab typecheck
 
-# 3. Suíte automatizada de testes (102 testes / 1.445+ asserções)
+# 3. Suíte automatizada de testes (110 testes / 1.516+ asserções)
 bun --cwd cyberlab test
 ```
 

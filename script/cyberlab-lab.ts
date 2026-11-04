@@ -14,6 +14,8 @@
  *   bun run cyberlab lab seed  lab-owasp-api-bola        # grava na memória investigativa
  *   bun run cyberlab lab model lab-owasp-api-bola [--json]
  *   bun run cyberlab lab evidence lab-owasp-api-bola      # E1–E7 + SHA-256
+ *   bun run cyberlab lab tools [--missing] [--script]
+ *   bun run cyberlab lab slots --health
  *   bun run cyberlab lab targets
  *   bun run cyberlab lab scope portswigger-wsa
  */
@@ -29,6 +31,9 @@ import { runBolaEvidenceSuite } from "../cyberlab/labs/evidence-recorder.js"
 import { listTargetProfiles, writeTargetScope } from "../cyberlab/labs/target-profiles.js"
 import { createDefaultCyberLabConfig } from "../cyberlab/config/config.js"
 import { EvidenceStore } from "../cyberlab/evidence/store.js"
+import { inspectExternalToolStatuses } from "../cyberlab/external/control-plane.js"
+import { ArsenalSlotManager, normalizeSlotNameForComparison } from "../cyberlab/arsenal/slot-manager.js"
+import { ScopeController } from "../cyberlab/policy/scope.js"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const args = process.argv.slice(2)
@@ -58,6 +63,8 @@ function usage(): void {
       "  seed   <labId>           Grava missão/escopo/modelo/hipóteses na memória investigativa",
       "  model  <labId> [--json]  Imprime o modelo do sistema (Fase B)",
       "  evidence <labId>         Reexecuta E1–E7 e arquiva comando+resposta com SHA-256",
+      "  tools [--missing] [--script]  Mostra as ferramentas externas e como instalar as que faltam",
+      "  slots [--json] [--health]    Lista os slots do Arsenal, duplicatas e slots fantasmas",
       "  targets                  Lista alvos externos com AUTORIZAÇÃO declarada",
       "  scope <perfil>           Grava SCOPE.md + RULES-OF-ENGAGEMENT.md do alvo",
       "",
@@ -65,6 +72,7 @@ function usage(): void {
       "  --daemon, -d             Segundo plano: o lab CONTINUA rodando após fechar o terminal",
       "  --port <n>               Porta preferida (padrão: hint do catálogo)",
       "  --reset                  Regrava os arquivos do lab antes de subir",
+      "  --restart, --force       Se já houver um daemon no ar, derruba e sobe um novo",
       "",
       "Opções de evidence:",
       "  --out <dir>              Pasta de saída (padrão: evidence/<labId>/<timestamp>)",
@@ -73,7 +81,15 @@ function usage(): void {
       "",
       "Opções de scope:",
       "  --out <dir>              Pasta de saída (padrão: <labsRoot>/targets/<perfil>)",
-      "  --restart, --force       Se já houver um daemon no ar, derruba e sobe um novo",
+      "",
+      "Opções de slots:",
+      "  --json                   Saída completa em JSON (slots, duplicatas, higiene)",
+      "  --health                 Mostra só os problemas de higiene (fantasma/duplicado/sem binário)",
+      "",
+      "Opções de tools:",
+      "  --missing                Mostra só o que NÃO está instalado",
+      "  --script                 Imprime um script bash pronto p/ rodar no WSL2 Kali",
+      "  --json                   Saída em JSON",
       "",
       "",
       "Nota: se o lab já estiver rodando, ‘start’ apenas informa a URL e os próximos",
@@ -526,6 +542,180 @@ switch (command) {
       }
       console.log("")
     }
+    process.exit(0)
+  }
+
+  case "slots": {
+    const asJson = args.includes("--json")
+    const onlyHealth = args.includes("--health")
+    const manager = new ArsenalSlotManager({
+      projectId: "cyberlab-cli",
+      workspaceRoot: resolveWorkspaceRoot(),
+      scopes: new ScopeController(),
+    })
+    const overview = manager.getOverview(true)
+    const custom = overview.slots.filter((s) => s.isCustom)
+
+    // Duplicata "real" = mesmo nome normalizado em mais de um slot.
+    const byName = new Map<string, string[]>()
+    for (const slot of overview.slots) {
+      const key = normalizeSlotNameForComparison(slot.name)
+      byName.set(key, [...(byName.get(key) ?? []), slot.slotId])
+    }
+    const duplicates = [...byName.entries()].filter(([, ids]) => ids.length > 1)
+
+    if (asJson) {
+      console.log(
+        JSON.stringify(
+          {
+            environment: overview.environment,
+            total: overview.slots.length,
+            builtin: overview.slots.length - custom.length,
+            custom: custom.length,
+            duplicates: duplicates.map(([name, slotIds]) => ({ name, slotIds })),
+            health: overview.health,
+            slots: overview.slots.map((s) => ({
+              slotId: s.slotId,
+              name: s.name,
+              kind: s.kind,
+              origin: s.isCustom ? "custom" : "catalogo",
+              installed: s.installed,
+              activeRuntime: s.activeRuntime,
+              resolvedPath: s.resolvedPath,
+            })),
+          },
+          null,
+          2,
+        ),
+      )
+      process.exit(0)
+    }
+
+    if (onlyHealth) {
+      if (overview.health.length === 0) {
+        console.log("Nenhum problema de higiene detectado no Arsenal.")
+      } else {
+        console.log(`${overview.health.length} problema(s) de higiene:`)
+        for (const issue of overview.health) {
+          console.log(`\n[${issue.severity.toUpperCase()}] ${issue.kind} — ${issue.slotId}`)
+          console.log(`  ${issue.message}`)
+          if (issue.configuredPath) console.log(`  caminho: ${issue.configuredPath}`)
+          console.log(`  acao:    ${issue.recommendedAction}`)
+        }
+      }
+      process.exit(0)
+    }
+
+    console.log(
+      `Arsenal — ${overview.slots.length} slot(s) (${overview.slots.length - custom.length} do catalogo, ${custom.length} personalizado(s))`,
+    )
+    console.log(
+      `WSL: ${overview.environment.wslAvailable ? "sim" : "nao"} · distros: ${overview.environment.wslDistros.join(", ") || "(nenhuma)"}`,
+    )
+    console.log("")
+    for (const slot of overview.slots) {
+      const origin = slot.isCustom ? "custom  " : "catalogo"
+      console.log(
+        `  ${origin} ${slot.slotId.padEnd(44)} ${(slot.installed ? "instalado" : "sem-binario").padEnd(12)} ${slot.name}`,
+      )
+    }
+    console.log("")
+    if (duplicates.length === 0) {
+      console.log("Duplicatas por nome normalizado: nenhuma.")
+    } else {
+      console.log(`Duplicatas por nome normalizado: ${duplicates.length}`)
+      for (const [name, ids] of duplicates) console.log(`  "${name}" -> ${ids.join(", ")}`)
+    }
+    if (overview.health.length > 0) {
+      console.log(`\nHigiene: ${overview.health.length} problema(s). Rode: bun run cyberlab lab slots --health`)
+    }
+    process.exit(0)
+  }
+
+  case "tools": {
+    const onlyMissing = args.includes("--missing")
+    const asScript = args.includes("--script")
+    const asJson = args.includes("--json")
+    const all = inspectExternalToolStatuses(resolveWorkspaceRoot())
+    // O catálogo expõe a ferramenta e o alias `external:*` da capability; manter só
+    // a entrada canônica evita mostrar o mesmo binário duas vezes.
+    const seen = new Set<string>()
+    const tools = all.filter((t) => {
+      if (t.toolId.startsWith("external:")) return false
+      if (seen.has(t.toolId)) return false
+      seen.add(t.toolId)
+      return true
+    })
+    const shown = onlyMissing ? tools.filter((t) => !t.available) : tools
+
+    if (asJson) {
+      console.log(JSON.stringify(shown, null, 2))
+      process.exit(0)
+    }
+
+    if (asScript) {
+      // Só entram comandos de verdade: o catálogo traz dicas como
+      // "See slot installer (...)" e parenteses explicativos, que quebrariam o bash
+      // (o script roda com `set -e`).
+      const COMMAND_RE = /^(sudo|apt|apt-get|pipx|pip3?|go|cargo|gem|curl|wget|npm|bun|bash|sh)\b/
+      const scriptable = tools
+        .filter((t) => !t.available)
+        .map((t) => ({ tool: t, cmd: (t.installHintWsl || "").split(" (")[0]!.trim() }))
+        .filter((x) => COMMAND_RE.test(x.cmd))
+      const notScriptable = tools.filter(
+        (t) => !t.available && !scriptable.some((x) => x.tool.toolId === t.toolId),
+      )
+
+      console.log("#!/usr/bin/env bash")
+      console.log("# Gerado por: bun run cyberlab lab tools --script")
+      console.log("# Rode DENTRO do WSL2 Kali:")
+      console.log("#   bun run cyberlab lab tools --script > install-faltantes.sh")
+      console.log("#   wsl -d kali-linux -- bash -s < install-faltantes.sh")
+      console.log("set -euo pipefail")
+      console.log("")
+      console.log("sudo apt update")
+      console.log("")
+      if (scriptable.length === 0) {
+        console.log('echo "Nada do catálogo pode ser instalado por script (o que falta depende de licença ou de configuração)."')
+      }
+      for (const { tool, cmd } of scriptable) {
+        console.log(`# ${tool.displayName}`)
+        console.log(cmd)
+        console.log("")
+      }
+      for (const t of notScriptable) {
+        console.log(`# ${t.toolId}: NÃO é instalável por script — ${t.installHintWsl || t.installHint}`)
+      }
+      console.log("")
+      console.log('echo "--- verificação ---"')
+      for (const { tool } of scriptable) {
+        const probe = tool.toolId.replace(/-headless$/, "")
+        console.log(`command -v ${probe} >/dev/null 2>&1 && echo "OK    ${tool.toolId}" || echo "FALTA ${tool.toolId}"`)
+      }
+      process.exit(0)
+    }
+
+    console.log(`${BOLD}Ferramentas externas${RESET} ${DIM}(${tools.filter((t) => t.available).length}/${tools.length} disponíveis)${RESET}\n`)
+    for (const t of shown) {
+      const mark = t.available ? `${GREEN}✔${RESET}` : `${RED}✘${RESET}`
+      console.log(`${mark} ${BOLD}${t.toolId}${RESET} ${DIM}— ${t.displayName}${RESET}`)
+      if (!t.available) {
+        console.log(`    ${DIM}origem esperada:${RESET} ${t.sourceLocation}`)
+        console.log(`    ${BOLD}WSL2 Kali:${RESET} ${CYAN}${t.installHintWsl || t.installHint}${RESET}`)
+      } else {
+        console.log(`    ${DIM}${t.wslPath ?? t.resolvedPath}${RESET}`)
+      }
+    }
+    if (shown.length === 0) {
+      console.log(`${GREEN}Nada faltando — todas as ferramentas do catálogo estão resolvidas.${RESET}`)
+    } else {
+      console.log("")
+      console.log(`${DIM}Para um script pronto: bun run cyberlab lab tools --script${RESET}`)
+    }
+    console.log("")
+    console.log(`${YELLOW}Obs.:${RESET} nem tudo se resolve instalando.`)
+    console.log(`${DIM}  - Burp Collaborator exige Burp Suite Professional (licença), não é instalável.${RESET}`)
+    console.log(`${DIM}  - Slot de "payload list" aponta para wordlist, não para executável: é config, não instalação.${RESET}`)
     process.exit(0)
   }
 
