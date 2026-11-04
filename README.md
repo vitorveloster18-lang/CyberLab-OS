@@ -229,6 +229,13 @@ bun run cyberlab lab tools --json
   O vínculo vem do campo `externalToolId` no catálogo de slots, e
   `tests/cyberlab/arsenal/slot-tool-bindings-v67.test.ts` garante que ele não aponte
   para uma ferramenta inexistente nem seja repetido em dois slots.
+- **Detecção além do PATH**: algumas distros instalam o binário fora do `PATH`. O caso
+  real é o Ghidra — no Debian/Kali o pacote só põe o launcher gráfico em
+  `/usr/bin/ghidra`, enquanto o `analyzeHeadless` (o que o agente invoca) fica em
+  `/usr/share/ghidra/support/analyzeHeadless`. O catálogo externo agora aceita
+  `posixKnownPaths` por ferramenta e o probe WSL2 testa esses caminhos absolutos com
+  `[ -x ]`, depois de tentar os nomes do `PATH`. Sem isso a ferramenta aparecia como
+  "faltando" estando instalada.
 - **`lab slots`** também compara os slots por **nome normalizado** e lista as duplicatas
   reais (`"ssti-advanced-payload-list" -> slot-a, slot-b`), mais o diagnóstico de higiene
   (`ghost_custom_slot`, `duplicate_custom_slot`, `non_executable_target`,
@@ -695,7 +702,7 @@ bun --cwd packages/cli typecheck
 bun --cwd packages/gui-plugins typecheck
 bun --cwd cyberlab typecheck
 
-# 3. Suíte automatizada de testes (115 testes / 1.546+ asserções)
+# 3. Suíte automatizada de testes (119 testes / 1.568+ asserções)
 bun --cwd cyberlab test
 ```
 

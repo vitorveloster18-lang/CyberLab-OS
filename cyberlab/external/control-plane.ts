@@ -39,6 +39,14 @@ export interface ExternalToolCatalogEntry {
    * enquanto o Kali expõe o binário POSIX puro (ex.: `analyzeHeadless`, `jadx`).
    */
   posixBinaries?: readonly string[]
+  /**
+   * Caminhos absolutos onde o binário POSIX costuma morar **sem estar no PATH**.
+   * Motivação real: no Debian/Kali o pacote `ghidra` só coloca o launcher gráfico
+   * em `/usr/bin/ghidra`; o `analyzeHeadless` (que é o que o agente invoca) fica em
+   * `/usr/share/ghidra/support/analyzeHeadless`, fora do PATH. Procurar só por nome
+   * fazia a ferramenta aparecer como "faltando" mesmo estando instalada.
+   */
+  posixKnownPaths?: readonly string[]
   licenseSpdx: string
   integrationMode: "plugin_only" | "approved_internal_process" | "mcp"
   governedCapabilityId?: string
@@ -148,6 +156,10 @@ export const BUILTIN_EXTERNAL_TOOL_CATALOG: readonly ExternalToolCatalogEntry[] 
     toolId: "ghidra-headless",
     displayName: "Ghidra AnalyzeHeadless (NSA)",
     binaryCandidates: ["analyzeHeadless", "analyzeHeadless.bat", "ghidra-analyzeHeadless"],
+    posixKnownPaths: [
+      "/usr/share/ghidra/support/analyzeHeadless",
+      "/opt/ghidra/support/analyzeHeadless",
+    ],
     licenseSpdx: "Apache-2.0",
     integrationMode: "approved_internal_process",
     governedCapabilityId: "external.ghidra-decompile",
@@ -310,9 +322,10 @@ export function resolveExternalBinary(
   }
 
   // 4. Camada WSL2 — probe batido (um único `wsl.exe` para todos os candidatos).
+  // Nomes primeiro (um binário no PATH é preferível), caminhos absolutos por último.
   const wslNames = Array.from(new Set([...(posixCandidates ?? candidates), ...candidates]))
     .map((n) => n.replace(/\.(exe|cmd|bat)$/i, ""))
-    .filter((n) => /^[a-zA-Z0-9._~-]+$/.test(n))
+    .filter(isProbeablePosix)
   if (wslNames.length > 0) {
     const env = probeWslEnvironment()
     if (env.available) {
@@ -332,6 +345,17 @@ export function resolveExternalBinary(
   }
 
   return { resolvedPath: null, sourceLocation: "missing", wslDistro: null, wslPath: null }
+}
+
+/**
+ * Aceita um nome de binário (`nmap`) ou um caminho absoluto POSIX
+ * (`/usr/share/ghidra/support/analyzeHeadless`) — este último para ferramentas que o
+ * pacote da distro instala fora do PATH. Deliberadamente restritivo: o valor vai para
+ * dentro de um script bash, então só passa o que é inequivocamente seguro.
+ */
+const POSIX_PROBE_RE = /^(?:\/[a-zA-Z0-9._~-]+)+$|^[a-zA-Z0-9._~-]+$/
+export function isProbeablePosix(candidate: string): boolean {
+  return POSIX_PROBE_RE.test(candidate) && !candidate.includes("..")
 }
 
 /** Aliases Windows -> POSIX para binários cujo wrapper difere no Linux. */
@@ -362,7 +386,12 @@ export function resolvePosixCandidates(windowsCandidates: readonly string[]): st
     if (base) out.add(base)
     for (const alias of POSIX_BINARY_ALIASES[c] ?? []) out.add(alias)
   }
-  return Array.from(out).filter((n) => /^[a-zA-Z0-9._~-]+$/.test(n))
+  for (const entry of BUILTIN_EXTERNAL_TOOL_CATALOG) {
+    if (entry.binaryCandidates.some((c) => windowsCandidates.includes(c))) {
+      for (const p of entry.posixKnownPaths ?? []) out.add(p)
+    }
+  }
+  return Array.from(out).filter(isProbeablePosix)
 }
 
 /**
@@ -435,9 +464,10 @@ export function inspectExternalToolStatuses(workspaceRoot: string): ExternalTool
       BUILTIN_EXTERNAL_TOOL_CATALOG.flatMap((e) => [
         ...(e.posixBinaries ?? e.binaryCandidates),
         ...e.binaryCandidates,
+        ...(e.posixKnownPaths ?? []),
       ]).map((n) => n.replace(/\.(exe|cmd|bat)$/i, "")),
     ),
-  ).filter((n) => /^[a-zA-Z0-9._~-]+$/.test(n))
+  ).filter(isProbeablePosix)
   if (probeWslEnvironment().available) {
     probeWslBinaries(allPosix)
   }
@@ -446,7 +476,7 @@ export function inspectExternalToolStatuses(workspaceRoot: string): ExternalTool
       workspaceRoot,
       entry.binaryCandidates,
       overrides,
-      entry.posixBinaries ?? entry.binaryCandidates,
+      [...(entry.posixBinaries ?? entry.binaryCandidates), ...(entry.posixKnownPaths ?? [])],
     )
     return {
       toolId: entry.toolId,

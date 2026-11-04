@@ -152,7 +152,7 @@ export function probeWslBinaries(
   candidates: readonly string[],
   opts: { force?: boolean; distro?: string; timeoutMs?: number } = {},
 ): Map<string, WslBinaryHit> {
-  const names = Array.from(new Set(candidates.filter((c) => /^[a-zA-Z0-9._~-]+$/.test(c))))
+  const names = Array.from(new Set(candidates.filter((c) => /^(?:\/[a-zA-Z0-9._~-]+)+$|^[a-zA-Z0-9._~-]+$/.test(c))))
   if (names.length === 0) return new Map()
 
   const env = probeWslEnvironment(opts.force)
@@ -174,9 +174,13 @@ export function probeWslBinaries(
     'PATH="$CLEAN_PATH"',
     'for d in "$HOME/.local/bin" "$HOME/go/bin" "$HOME/.cargo/bin" "$HOME/.pdtm/go/bin" "$HOME/.strix/bin" /home/*/.local/bin /home/*/go/bin /home/*/.cargo/bin /home/*/.pdtm/go/bin /opt/opentrap /opt/ghidra /opt/jadx/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin /snap/bin; do [ -d "$d" ] && PATH="$d:$PATH"; done',
     "export PATH",
-    ...names.map(
-      (n) =>
-        `p=$(command -v "${n}" 2>/dev/null | head -n 1); case "$p" in /mnt/*|"") ;; *) echo "HIT:${n}=$p" ;; esac`,
+    ...names.map((n) =>
+      // Caminho absoluto: `command -v` não serve (não é um nome), então testa
+      // executabilidade direto. Cobre ferramentas que a distro instala fora do PATH
+      // (ex.: /usr/share/ghidra/support/analyzeHeadless no Debian/Kali).
+      n.startsWith("/")
+        ? `if [ -x "${n}" ] && [ ! -d "${n}" ]; then echo "HIT:${n}=${n}"; fi`
+        : `p=$(command -v "${n}" 2>/dev/null | head -n 1); case "$p" in /mnt/*|"") ;; *) echo "HIT:${n}=$p" ;; esac`,
     ),
   ].join("\n")
 
