@@ -684,7 +684,7 @@ switch (command) {
           ? `✔ ${g.toolId}`.slice(0, 28).padEnd(28)
           : `✘ ${g.candidates[0] ?? g.toolId}`.slice(0, 28).padEnd(28)
       console.log(
-        `  ${origin} ${slot.slotId.padEnd(24)} ${(slot.installed ? "instalado" : "sem-binario").padEnd(12)} ${bin} ${slot.name}`,
+        `  ${origin} ${slot.slotId.padEnd(38)} ${(slot.installed ? "instalado" : "sem-binario").padEnd(12)} ${bin} ${slot.name}`,
       )
     }
     console.log("")
