@@ -1,4 +1,4 @@
-# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.4.2)
+# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.4.3)
 
 Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investigação Orientada por Hipóteses, Bug Bounty Autorizado, Engenharia Reversa, DFIR e Laboratórios de Treinamento**, construída sobre o **OpenCode V2 (`2.1.4`)** e projetada nativamente para **Windows 11 (PowerShell) + WSL2 (`kali-linux` 2026.x)** ou Linux nativo.
 
@@ -43,6 +43,10 @@ bun run cyberlab lab stop   lab-owasp-api-bola
 > por `bun run cyberlab`. Abrir a `/` do lab no navegador mostra uma página de orientação com os controles,
 > os endpoints e o comando de teste; o JSON de diagnóstico fica em `/health`.
 
+> ✅ **Se aparecer "JÁ ESTÁ NO AR", está tudo certo** — não é erro: o lab já está rodando e
+> respondendo. O comando mostra o painel e os próximos passos. Para recomeçar do zero use
+> `bun run cyberlab lab restart lab-owasp-api-bola`.
+
 > ⚠️ **Sem `--daemon` o servidor morre com o terminal.** O comando `start` sem a flag mantém o processo
 > em primeiro plano e exibe `Servidor ativo neste processo. Pressione Ctrl+C para encerrar.` — ao
 > pressionar `Ctrl+C` (ou fechar a janela) o lab é desligado. `seed` e `model` continuam funcionando
@@ -75,7 +79,7 @@ Também é possível subir junto da interface: `bun run cyberlab --rebuild --lab
 
 9. [Os 4 Parceiros Cognitivos CDI (`8788–8791`) & 5 Laboratórios de Treino](#8-os-4-parceiros-cognitivos-cdi-87888791--5-laboratórios-de-treino)
 10. [Governança de Escopo Bug Bounty, Custódia `SHA-256` & Segurança Anti-Prompt-Injection](#9-governança-de-escopo-bug-bounty-custódia-sha-256--segurança-anti-prompt-injection)
-11. [Histórico Completo de Versões (`v1.0` → `v6.4.2`), Verificação CI & Licenciamento MIT](#11-histórico-completo-de-versões-v10--v642-verificação-ci--licenciamento-mit)
+11. [Histórico Completo de Versões (`v1.0` → `v6.4.3`), Verificação CI & Licenciamento MIT](#11-histórico-completo-de-versões-v10--v643-verificação-ci--licenciamento-mit)
 
 ---
 
@@ -353,7 +357,7 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
 
 ---
 
-## 11. Histórico Completo de Versões (`v1.0` → `v6.4.2`), Verificação CI & Licenciamento MIT
+## 11. Histórico Completo de Versões (`v1.0` → `v6.4.3`), Verificação CI & Licenciamento MIT
 
 - **v1.0 – v4.0**: Base OpenCode V2 (`2.1.4`), governança anti-TOCTOU, cofre `SHA-256`, 4 CDIs (`8788–8791`), 5 Labs de Treino e 9 modelos gratuitos OpenCode Zen.
 - **v5.0 – v5.8**: Arquitetura **Real Arsenal Edition** (3 colunas Antigravity, motor `X11/noVNC` 110 DPI sem deslocamento de mouse no zoom, navegador proxy em 1 clique, Burp oficial, REA MCP, PentAGI TLS `:8443` e ferramentas Kali 2026.1).
@@ -395,6 +399,14 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
   aponta para a interface em `http://127.0.0.1:4096`, mostra o estado real dos 4 controles de
   `server-config.json`, lista os endpoints clicáveis com o invariante esperado e traz o comando `curl.exe`
   pronto. `GET /health` continua JSON (usado por scripts e pela sonda TCP do `lab status`).
+
+- **v6.4.3**: **`lab start` quando o lab já está no ar** — rodar `lab start ... --daemon` duas vezes
+  devolvia apenas "Já existe um daemon ativo" + "use `lab stop`", o que parecia um erro e não dizia
+  onde o lab estava. Agora o comando **confirma por sonda TCP** e, se estiver tudo certo, responde
+  `✔ ... JÁ ESTÁ NO AR` com o painel, o smoke test e a lista de próximos passos (`status`, `seed`).
+  Se o PID estiver vivo mas a porta não responder (**daemon zumbi**), ele encerra o órfão e sobe um
+  novo sozinho. Novo comando `lab restart <labId>` (e flag `--restart`/`--force`) para recomeçar do
+  zero. Corrigido também um **ENOENT** quando a raiz `.cyberlab/labs` ainda não existia (primeiro uso).
 
 ### Verificação Local Completa (Idêntica ao GitHub Actions Linux + Windows)
 

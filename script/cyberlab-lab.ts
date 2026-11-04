@@ -8,6 +8,7 @@
  *   bun run cyberlab lab list
  *   bun run cyberlab lab start lab-owasp-api-bola [--port 19081] [--reset]
  *   bun run cyberlab lab stop  lab-owasp-api-bola
+ *   bun run cyberlab lab restart lab-owasp-api-bola        # para e sobe de novo
  *   bun run cyberlab lab status [labId]
  *   bun run cyberlab lab kit   lab-owasp-api-bola        # gera Fases B/D/F
  *   bun run cyberlab lab seed  lab-owasp-api-bola        # grava na memória investigativa
@@ -15,7 +16,7 @@
  */
 
 import { spawn } from "node:child_process"
-import { existsSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import net from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -44,6 +45,7 @@ function usage(): void {
       "  list                     Lista todos os labs com status (provisionado/rodando/porta)",
       "  start  <labId>           Provisiona e sobe o servidor do lab (gera o Kit de Investigação)",
       "  stop   <labId>           Derruba o servidor (funciona mesmo iniciado em outro terminal)",
+      "  restart <labId>          Para o daemon atual e sobe um novo (segundo plano)",
       "  status [labId]           Mostra status detalhado (controles, requisições recentes)",
       "  kit    <labId>           Gera apenas os arquivos das Fases B/D/F (sem subir servidor)",
       "  seed   <labId>           Grava missão/escopo/modelo/hipóteses na memória investigativa",
@@ -53,6 +55,11 @@ function usage(): void {
       "  --daemon, -d             Segundo plano: o lab CONTINUA rodando após fechar o terminal",
       "  --port <n>               Porta preferida (padrão: hint do catálogo)",
       "  --reset                  Regrava os arquivos do lab antes de subir",
+      "  --restart, --force       Se já houver um daemon no ar, derruba e sobe um novo",
+      "",
+      "",
+      "Nota: se o lab já estiver rodando, ‘start’ apenas informa a URL e os próximos",
+      "comandos — use ‘restart’ para recomeçar do zero.",
       "",
       "Fluxo recomendado (1 único terminal):",
       "  bun run cyberlab lab start lab-owasp-api-bola --daemon",
@@ -164,15 +171,81 @@ function resolveKnownPort(labId: string, inProcessPort?: number): number | null 
  * Sobe o lab em SEGUNDO PLANO: processo desanexado que sobrevive ao fechamento
  * do terminal, com PID e log gravados em disco para `lab stop` / `lab status`.
  */
-async function startDaemon(labId: string, portRaw: string | null, reset: boolean): Promise<void> {
+async function startDaemon(
+  labId: string,
+  portRaw: string | null,
+  reset: boolean,
+  forceRestart: boolean,
+): Promise<void> {
   const labsRoot = resolveLabsRoot()
   const existing = readPid(labId)
   if (existing && isPidAlive(existing)) {
-    console.log(`${YELLOW}Já existe um daemon ativo para "${labId}" (PID ${existing}).${RESET}`)
-    console.log(`Use ${BOLD}bun run cyberlab lab stop ${labId}${RESET} antes de subir outro.`)
-    process.exit(0)
+    // Confirma por sonda TCP: PID vivo não significa servidor de pé.
+    const knownPort = resolveKnownPort(labId, portRaw ? Number.parseInt(portRaw, 10) : undefined)
+    const listening = knownPort ? await isPortListening(knownPort) : false
+
+    if (listening) {
+      if (!forceRestart) {
+        console.log(`${GREEN}\u2714 O lab "${labId}" J\u00c1 EST\u00c1 NO AR em segundo plano (PID ${existing}).${RESET}`)
+        console.log(`  ${BOLD}Nada a fazer ${DIM}\u2014 n\u00e3o \u00e9 um erro, o servidor j\u00e1 est\u00e1 rodando e atendendo requisi\u00e7\u00f5es.${RESET}`)
+        console.log("")
+        console.log(`  Painel do lab : ${CYAN}http://127.0.0.1:${knownPort}${RESET}`)
+        console.log(`  Smoke test    : curl.exe -s http://127.0.0.1:${knownPort}/health`)
+        console.log("")
+        console.log(`  ${BOLD}Pr\u00f3ximos passos:${RESET}`)
+        console.log(`    bun run cyberlab lab status ${labId}    ${DIM}\u2192 confirma PID, porta e \u00faltimas requisi\u00e7\u00f5es${RESET}`)
+        console.log(`    bun run cyberlab lab seed ${labId}      ${DIM}\u2192 grava o modelo na mem\u00f3ria investigativa${RESET}`)
+        console.log("")
+        console.log(`  ${BOLD}Quer recome\u00e7ar do zero?${RESET} (para, sobe de novo e regrava os arquivos)`)
+        console.log(`    bun run cyberlab lab restart ${labId}`)
+        console.log(`    bun run cyberlab lab stop ${labId}`)
+        console.log("")
+        console.log(`  ${DIM}Log: ${logFilePath(labId)}${RESET}`)
+        process.exit(0)
+      }
+      // --restart: derruba o daemon atual antes de subir o novo
+      try {
+        process.kill(existing, "SIGTERM")
+      } catch {
+        // ignore
+      }
+      for (let i = 0; i < 20 && isPidAlive(existing); i++) {
+        await new Promise((r) => setTimeout(r, 150))
+      }
+      if (isPidAlive(existing)) {
+        try {
+          process.kill(existing, "SIGKILL")
+        } catch {
+          // ignore
+        }
+        await new Promise((r) => setTimeout(r, 300))
+      }
+      console.log(`${DIM}Daemon anterior (PID ${existing}) encerrado \u2014 subindo um novo...${RESET}`)
+    } else {
+      // PID existe mas nada escuta: daemon zumbi. Limpa e recomeça.
+      console.log(`${YELLOW}\u26a0 PID ${existing} est\u00e1 vivo mas nada responde em 127.0.0.1:${knownPort ?? "?"} (daemon zumbi).${RESET}`)
+      console.log(`${DIM}Encerrando o processo \u00f3rf\u00e3o e subindo um novo...${RESET}`)
+      try {
+        process.kill(existing, "SIGTERM")
+      } catch {
+        // ignore
+      }
+      await new Promise((r) => setTimeout(r, 400))
+      if (isPidAlive(existing)) {
+        try {
+          process.kill(existing, "SIGKILL")
+        } catch {
+          // ignore
+        }
+      }
+    }
+  } else if (existing) {
+    console.log(`${DIM}PID ${existing} registrado mas o processo n\u00e3o existe mais \u2014 limpando registro obsoleto.${RESET}`)
   }
   clearPid(labId)
+
+  // A raiz pode ainda não existir (primeiro uso) — o daemon não passa pelo provisionamento local.
+  mkdirSync(labsRoot, { recursive: true })
 
   const logPath = logFilePath(labId)
   const outFd = openSync(logPath, "a")
@@ -272,7 +345,12 @@ switch (command) {
     }
     const portRaw = readFlag("--port")
     if (args.includes("--daemon") || args.includes("-d") || args.includes("--background")) {
-      await startDaemon(labIdArg, portRaw, args.includes("--reset"))
+      await startDaemon(
+        labIdArg,
+        portRaw,
+        args.includes("--reset"),
+        args.includes("--restart") || args.includes("--force"),
+      )
     }
     const status = await manager.startLab({
       labId: labIdArg,
@@ -316,6 +394,20 @@ switch (command) {
       process.on("SIGTERM", () => void shutdown("SIGTERM"))
       await new Promise<never>(() => {})
     }
+    process.exit(0)
+  }
+
+  case "restart": {
+    if (!labIdArg) {
+      console.error(`${RED}Informe o labId.${RESET}`)
+      process.exit(1)
+    }
+    await startDaemon(
+      labIdArg,
+      readFlag("--port"),
+      args.includes("--reset"),
+      true, // restart sempre força
+    )
     process.exit(0)
   }
 
