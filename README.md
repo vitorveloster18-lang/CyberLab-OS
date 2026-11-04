@@ -21,6 +21,7 @@ Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investiga
 8. [Laboratórios de Treino Prontos para Investigação (v6.4–v6.5)](#8-laboratórios-de-treino-prontos-para-investigação-v64v65)
    - [8.9 Diagnóstico do Arsenal — `lab slots` e `lab tools`](#89-diagnóstico-do-arsenal--lab-slots-e-lab-tools-v67)
    - [8.10 Fase C — Pesquisa: `lab research`](#810-fase-c--pesquisa-lab-research-v67)
+   - [8.11 Fase D — Hipóteses ancoradas + priorização (Fase E)](#811-fase-d--hipóteses-ancoradas-na-fase-c--priorização-fase-e)
 ---
 
 ## 8. Laboratórios de Treino Prontos para Investigação (v6.4–v6.5)
@@ -310,6 +311,57 @@ Dois ajustes que vieram de dados reais:
   devolvia 17 linhas (3 advisories) por causa de faixas repetidas e pacotes irmãos.
 - `pyjwt` aparece em três grafias (`pyjwt`, `PyJWT`, `pyJWT`); o colapso casa ignorando
   caixa.
+
+### 8.11 Fase D — Hipóteses ancoradas na Fase C + priorização (Fase E)
+
+As sementes de hipótese já existiam (com os 6 elementos obrigatórios), mas tinham dois
+furos metodológicos: **nenhuma hipótese consumia a Fase C**, e **não havia Fase E** — a
+ordem de investigação era simplesmente a ordem em que as sementes foram digitadas.
+
+```powershell
+bun run cyberlab lab hypothesize lab-owasp-api-bola
+bun run cyberlab lab hypothesize lab-owasp-api-bola --register
+bun run cyberlab lab hypothesize lab-owasp-api-bola --json
+```
+
+- **Ancoragem**: cada hipótese é ligada aos achados **reais** da Fase C — advisories
+  (GHSA/CVE), classificação CWE e fontes primárias (RFC/OWASP/MITRE). Só entra o que a
+  consulta realmente retornou; nada é citado de memória.
+- **Priorização (Fase E)** com rubrica explícita e determinística, impressa no relatório:
+
+  | Critério | Peso | De onde vem |
+  |---|---|---|
+  | Plausibilidade | 0.25 | controle reparador DESLIGADO + existência de âncora |
+  | Impacto | 0.25 | severidade declarada na semente (teto, se for faixa) |
+  | Poder diferenciador | 0.15 | nº de experimentos independentes |
+  | Evidência disponível | 0.15 | cruza Fase C (âncoras) com Fase F (experimentos) |
+  | Custo (5 = barato) | 0.10 | proxy pelos comandos já prontos |
+  | Risco de execução | −0.10 | 1 (alvo é loopback, nenhum alvo externo) |
+
+- **Lacunas declaradas**: hipótese sem âncora não é escondida — recebe
+  `Sem nenhuma âncora na Fase C`. E a que só tem CWE/fonte primária recebe
+  `sem advisory: esperado para falhas de lógica de aplicação`.
+
+Resultado real no `lab-owasp-api-bola`:
+
+```
+#  Hipótese                                  Score  Ancoras
+1  H2  Bypass de assinatura JWT (alg:none)    4.05    36   (32 advisories + CWE-347 + RFC 8725)
+2  H1  BOLA/IDOR (token do User A lê User B)  3.95     3   (CWE-639 + OWASP API1:2023)
+3  H3  Vazamento de erro SQL                  3.9      2   (CWE-209 + MITRE)
+4  H4  Ausência de headers de segurança       3.25     0   (sem âncora — lacuna declarada)
+```
+
+O H2 fica em primeiro porque é o único com histórico real de falha documentado
+(**CVE-2015-9235**, `critical`, bypass de verificação de assinatura) **e** com o controle
+reparador desligado. H1 e H3 são falhas de lógica de aplicação: não têm CVE de biblioteca,
+e o relatório diz isso em vez de inventar.
+
+> **Âncora falsa é pior que âncora faltando.** Na primeira versão, a keyword `token` fez o
+> H1 (BOLA) puxar os 32 advisories de JWT — o operador leria que uma falha de lógica tem
+> CVE de biblioteca. O casamento agora é por **palavra** (`\b`), não por substring, e as
+> keywords são específicas (`jwt`, `alg:none`, `assinatura` — não `alg`, que casaria com
+> "algum"; não `token`, que casa com qualquer Bearer). Há teste de regressão para isso.
 
 ### 8.5 `cyberlab up` — 1 comando, **1 processo**, alvo embutido (v6.6)
 
@@ -748,7 +800,7 @@ bun --cwd packages/cli typecheck
 bun --cwd packages/gui-plugins typecheck
 bun --cwd cyberlab typecheck
 
-# 3. Suíte automatizada de testes (137 testes / 1.688+ asserções)
+# 3. Suíte automatizada de testes (151 testes / 1.739+ asserções)
 bun --cwd cyberlab test
 ```
 

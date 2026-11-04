@@ -17,6 +17,7 @@
  *   bun run cyberlab lab tools [--missing] [--script]
  *   bun run cyberlab lab slots --health
  *   bun run cyberlab lab research lab-owasp-api-bola --register
+ *   bun run cyberlab lab hypothesize lab-owasp-api-bola --register
  *   bun run cyberlab lab targets
  *   bun run cyberlab lab scope portswigger-wsa
  */
@@ -37,6 +38,7 @@ import { ArsenalSlotManager, normalizeSlotNameForComparison } from "../cyberlab/
 import { OFFICIAL_ARSENAL_SLOTS } from "../cyberlab/arsenal/catalog.js"
 import { ScopeController } from "../cyberlab/policy/scope.js"
 import { runLabResearch } from "../cyberlab/labs/research-phase.js"
+import { runHypothesisPhase } from "../cyberlab/labs/hypothesis-phase.js"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const args = process.argv.slice(2)
@@ -69,6 +71,7 @@ function usage(): void {
       "  tools [--missing] [--script]  Mostra as ferramentas externas e como instalar as que faltam",
       "  slots [--json] [--health]    Lista os slots do Arsenal, duplicatas e slots fantasmas",
       "  research <labId>         FASE C: pesquisa CyberLab-Knowledge + advisories (CVE/GHSA)",
+      "  hypothesize <labId>     FASE D: hipóteses ancoradas na Fase C + priorização (Fase E)",
       "  targets                  Lista alvos externos com AUTORIZAÇÃO declarada",
       "  scope <perfil>           Grava SCOPE.md + RULES-OF-ENGAGEMENT.md do alvo",
       "",
@@ -826,6 +829,109 @@ switch (command) {
           n += 1
         }
         console.log(`${GREEN}✔ ${n} artefato(s) da Fase C registrados no EvidenceStore${RESET} (projeto: ${labIdArg})`)
+      } finally {
+        store.close()
+      }
+    }
+    process.exit(0)
+  }
+
+  case "hypothesize": {
+    if (!labIdArg) {
+      console.error(`${RED}Informe o labId. Ex.: bun run cyberlab lab hypothesize lab-owasp-api-bola${RESET}`)
+      process.exit(1)
+    }
+    const asJson = args.includes("--json")
+    const outFlag = readFlag("--out")
+    const wsRoot = resolveWorkspaceRoot()
+
+    let board
+    try {
+      board = runHypothesisPhase({
+        labId: labIdArg,
+        workspaceRoot: wsRoot,
+        ...(outFlag ? { outDir: outFlag } : {}),
+      })
+    } catch (err) {
+      console.error(`${RED}${err instanceof Error ? err.message : String(err)}${RESET}`)
+      process.exit(1)
+    }
+
+    if (asJson) {
+      console.log(JSON.stringify(board, null, 2))
+    } else {
+      console.log(`${BOLD}Fase D — Hipóteses & priorização (Fase E)${RESET} ${CYAN}${board.labId}${RESET}`)
+      console.log(
+        board.researchDir
+          ? `  Ancorado na Fase C: ${board.researchDir}`
+          : `  ${YELLOW}NÃO ancorado na Fase C — rode: bun run cyberlab lab research ${board.labId}${RESET}`,
+      )
+      console.log("")
+      console.log("  #  Hipótese                                    Score  Plaus Imp Dif Evid Custo Risco  Ancoras")
+      for (const [i, h] of board.hypotheses.entries()) {
+        const s = h.scores
+        console.log(
+          `  ${String(i + 1).padStart(2)} ${h.id} ${h.title.slice(0, 36).padEnd(37)} ${String(h.priorityScore).padStart(5)}  ${s.plausibility}    ${s.impact}   ${s.discriminatingPower}   ${s.evidenceAvailable}    ${s.cost}     ${s.executionRisk}     ${h.anchors.length}`,
+        )
+      }
+      console.log("")
+      for (const h of board.hypotheses) {
+        const adv = h.anchors.filter((a) => a.kind === "advisory")
+        const cwe = h.anchors.filter((a) => a.kind === "weakness")
+        const src = h.anchors.filter((a) => a.kind === "primary_source")
+        console.log(`  ${BOLD}${h.id}${RESET} ${h.title}`)
+        console.log(
+          `     controle ${h.relatedControlFlag ?? "—"}: ${
+            h.controlCurrentlyOff ? `${RED}DESLIGADO${RESET}` : "ligado"
+          } · experimentos: ${h.experimentIds.join(", ") || "—"}`,
+        )
+        console.log(
+          `     ancoras: ${adv.length} advisory(ies), ${cwe.length} CWE, ${src.length} fonte(s) primária(s)`,
+        )
+        for (const a of adv.slice(0, 4)) console.log(`       ${DIM}${a.ref} — ${a.detail.slice(0, 90)}${RESET}`)
+        if (h.gap) console.log(`     ${YELLOW}${h.gap}${RESET}`)
+        console.log("")
+      }
+      console.log(`  ${GREEN}Relatório:${RESET} ${path.join(board.outputDir, "HYPOTHESES-D.md")}`)
+      console.log(`  ${DIM}Lacre: ${board.seal}${RESET}`)
+    }
+
+    if (args.includes("--register")) {
+      const cfg = createDefaultCyberLabConfig(wsRoot)
+      const store = new EvidenceStore({
+        databasePath: cfg.databaseFilename,
+        artifactsDir: cfg.artifactsDirectory,
+      })
+      try {
+        const executionId = `lab-hypotheses-${Date.now()}`
+        let n = 0
+        for (const f of board.files) {
+          const isJson = f.name.endsWith(".json")
+          store.storeEvidence(
+            labIdArg,
+            {
+              kind: isJson ? "json" : "file",
+              title: `Fase D — ${labIdArg} — ${f.name}`,
+              source: {
+                toolId: "cyberlab-lab-hypotheses",
+                toolVersion: "6.7.0",
+                executorId: "operator",
+                executionId,
+              },
+              content: {
+                mediaType: isJson ? "application/json" : "text/markdown",
+                inlineText: readFileSync(path.join(board.outputDir, f.name), "utf8"),
+                sha256: f.sha256,
+                byteLength: f.bytes,
+              },
+              observedAt: board.generatedAt,
+              labels: ["lab", labIdArg, "fase-d", "hypotheses"],
+            },
+            { applyRedactionBeforeStore: false },
+          )
+          n += 1
+        }
+        console.log(`${GREEN}✔ ${n} artefato(s) da Fase D registrados no EvidenceStore${RESET} (projeto: ${labIdArg})`)
       } finally {
         store.close()
       }

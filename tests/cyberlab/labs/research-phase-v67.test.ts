@@ -26,6 +26,7 @@ const TARGET: AdvisoryTarget = {
   ecosystem: "npm",
   package: "jsonwebtoken",
   rationale: "teste",
+  anchorKeywords: ["jwt", "alg"],
 }
 
 /**
@@ -178,10 +179,10 @@ describe("Fase C — normalização de advisories (v6.7)", () => {
         ],
       },
     ]
-    const expanded = normalizeAdvisories(raw, { ecosystem: "npm", package: "jose", rationale: "t" })
+    const expanded = normalizeAdvisories(raw, { ecosystem: "npm", package: "jose", rationale: "t", anchorKeywords: ["jwt"] })
     expect(expanded.length).toBe(4)
 
-    const collapsed = collapseForTarget(expanded, { ecosystem: "npm", package: "jose", rationale: "t" })
+    const collapsed = collapseForTarget(expanded, { ecosystem: "npm", package: "jose", rationale: "t", anchorKeywords: ["jwt"] })
     expect(collapsed.length).toBe(1)
     expect(collapsed[0]!.packageName).toBe("jose")
     expect(collapsed[0]!.vulnerableVersionRange).toContain("< 4.9.2")
@@ -200,8 +201,8 @@ describe("Fase C — normalização de advisories (v6.7)", () => {
       },
     ]
     const collapsed = collapseForTarget(
-      normalizeAdvisories(raw, { ecosystem: "pip", package: "pyjwt", rationale: "t" }),
-      { ecosystem: "pip", package: "pyjwt", rationale: "t" },
+      normalizeAdvisories(raw, { ecosystem: "pip", package: "pyjwt", rationale: "t", anchorKeywords: ["jwt"] }),
+      { ecosystem: "pip", package: "pyjwt", rationale: "t", anchorKeywords: ["jwt"] },
     )
     // 2 faixas distintas (< 2.4.0 e <= 2.4.0), não 3 linhas idênticas.
     expect(collapsed.length).toBe(1)
