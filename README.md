@@ -888,9 +888,24 @@ bun --cwd packages/cli typecheck
 bun --cwd packages/gui-plugins typecheck
 bun --cwd cyberlab typecheck
 
-# 3. Suíte automatizada de testes (168 testes / 1.844+ asserções)
+# 3. Suíte automatizada de testes (175 testes / 1.868+ asserções)
 bun --cwd cyberlab test
 ```
+
+> **Falha aqui pode ser da sua máquina, não do código.** Alguns testes dependem de
+> pré-requisitos que nem todo Windows tem: **Python no PATH** (parceiros CDI e
+> `chat_py_bridge.py`) e **permissão de criar symlink** (Developer Mode ou
+> administrador). Quando o pré-requisito falta, o teste é **PULADO com o motivo
+> explícito** — nunca aprovado calado, nunca falho por ambiente:
+>
+> ```
+>  171 pass
+>  4 skip     # sem Python no PATH
+>  0 fail
+> ```
+>
+> Para manter a cobertura completa, instale o interpretador:
+> `winget install Python.Python.3.12` (e reabra o PowerShell).
 
 ### Documentação Complementar
 - [`docs/PLAYBOOK_POWERSHELL_WSL2_ARSENAL.md`](docs/PLAYBOOK_POWERSHELL_WSL2_ARSENAL.md) — Operação híbrida Windows PowerShell + WSL2 Kali Linux.
