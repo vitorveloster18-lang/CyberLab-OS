@@ -400,6 +400,23 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
       ),
   )
   .add(
+    HttpApiEndpoint.post("cyberlab.arsenal.prune", "/api/cyberlab/arsenal/prune", {
+      query: LocationQuery,
+      payload: CyberLab.ArsenalPruneCustomSlotsInput,
+      success: Location.response(CyberLab.ArsenalOverview),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.arsenal.prune",
+          summary: "Remove broken (ghost) and duplicate Custom User Arsenal Slots",
+          description:
+            "Deletes custom slots whose configured executable no longer exists on Windows/PATH/WSL2 and custom slots that duplicate an already-installed slot. Official slots are never removed.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.post("cyberlab.arsenal.custom.remove", "/api/cyberlab/arsenal/custom/remove", {
       query: LocationQuery,
       payload: CyberLab.ArsenalCustomSlotRemoveInput,

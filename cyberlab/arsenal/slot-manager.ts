@@ -109,11 +109,42 @@ export interface ArsenalEnvironmentSummary {
   lastProbedAt: string | null
 }
 
+/**
+ * Tipos de problema detectados na higiene do Arsenal (v6.3.1).
+ * Motivação: a Fase A encontrou 3 slots personalizados ativos SEM binário
+ * (`custom-metasploit-framework-c421`, `custom-metasploit-framework-ce52`,
+ * `custom-ssti-advanced-payload-list-9b27`) — dois deles duplicatas de slots
+ * já instalados. Sem diagnóstico explícito o operador não tem como descobrir
+ * por que o slot aparece "ativo" mas não executa.
+ */
+export type ArsenalSlotHealthKind =
+  | "ghost_custom_slot"
+  | "duplicate_custom_slot"
+  | "non_executable_target"
+  | "unconfigured_custom_slot"
+
+export interface ArsenalSlotHealthIssue {
+  slotId: string
+  name: string
+  kind: ArsenalSlotHealthKind
+  severity: "warning" | "error"
+  /** Mensagem em pt-BR pronta para exibição ao operador. */
+  message: string
+  /** Caminho/URL configurado pelo operador (quando houver). */
+  configuredPath: string | null
+  /** Ação concreta recomendada. */
+  suggestion: string
+  /** Slot que deve ser mantido no caso de duplicata. */
+  duplicateOfSlotId: string | null
+}
+
 export interface ArsenalOverview {
   environment: ArsenalEnvironmentSummary
   categories: Array<{ id: ArsenalCategory; title: string; subtitle: string }>
   slots: ArsenalSlotStatus[]
   runs: ArsenalLiveRun[]
+  /** Diagnóstico de slots personalizados quebrados/duplicados (v6.3.1). */
+  health: ArsenalSlotHealthIssue[]
 }
 
 const IN_DOCUMENT_ZOOM_SCRIPT = `<script data-cyberlab-zoom="1">(function(){if(window.__cyberlabZoomHook)return;window.__cyberlabZoomHook=true;window.addEventListener("message",function(ev){var d=ev&&ev.data;if(!d||d.type!=="cyberlab-canvas-control")return;var z=typeof d.zoom==="number"?Math.max(50,Math.min(180,d.zoom))/100:1;document.documentElement.style.zoom=z===1?"":String(z);if(d.mode==="scroll"){document.documentElement.style.overflow="auto";if(document.body)document.body.style.overflow="auto";}});})();</script>`
@@ -229,6 +260,129 @@ export function splitCommandLineArgs(raw: string): string[] {
   }
   if (current.length > 0) args.push(current)
   return args
+}
+
+/** Extensões que indicam que o "executável" configurado é na verdade um arquivo de dados. */
+const NON_EXECUTABLE_EXTENSIONS = /\.(txt|md|json|ya?ml|lst|csv|log|xml|html?|pdf|zip|tar|gz|7z|rar)$/i
+
+/** Normaliza o nome de um slot para comparar duplicatas ("Metasploit Framework" → "metasploitframework"). */
+export function normalizeSlotNameForComparison(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "")
+}
+
+/**
+ * Diagnóstico puro (sem estado) dos slots do Arsenal.
+ *
+ * Detecta os 4 problemas que fazem um slot aparecer "ativo" mas não executar:
+ * 1. `ghost_custom_slot` — slot personalizado cujo executável configurado não existe em nenhum runtime.
+ * 2. `duplicate_custom_slot` — slot personalizado com o mesmo nome de outro slot (oficial ou já instalado).
+ * 3. `non_executable_target` — caminho existe, mas aponta para arquivo de dados (lista de payload etc.).
+ * 4. `unconfigured_custom_slot` — slot personalizado sem executável e sem URL de embed.
+ */
+export function computeArsenalSlotHealth(
+  slots: readonly ArsenalSlotStatus[],
+  overrides: Record<string, SlotUserOverride> = {},
+): ArsenalSlotHealthIssue[] {
+  const issues: ArsenalSlotHealthIssue[] = []
+
+  // --- 1 & 3 & 4: problemas individuais de slots personalizados ---
+  for (const slot of slots) {
+    if (!slot.isCustom) continue
+    const override = overrides[slot.slotId] ?? {}
+    const configuredPath = override.customExecutablePath ?? override.customEmbedUrl ?? null
+
+    if (!configuredPath) {
+      issues.push({
+        slotId: slot.slotId,
+        name: slot.name,
+        kind: "unconfigured_custom_slot",
+        severity: "error",
+        message: `O slot personalizado "${slot.name}" não possui executável nem URL configurados.`,
+        configuredPath: null,
+        suggestion: `Reaponte o caminho do executável em Configurações do Slot ou remova o slot.`,
+        duplicateOfSlotId: null,
+      })
+      continue
+    }
+
+    const isUrl = /^https?:\/\//i.test(configuredPath)
+    const existsOnDisk = !isUrl && existsSync(configuredPath)
+
+    if (!isUrl && !existsOnDisk && !slot.installed) {
+      issues.push({
+        slotId: slot.slotId,
+        name: slot.name,
+        kind: "ghost_custom_slot",
+        severity: "error",
+        message:
+          `Slot fantasma: "${slot.name}" está ativo mas o executável configurado não foi encontrado ` +
+          `no Windows, no PATH nem no WSL2 (${configuredPath}).`,
+        configuredPath,
+        suggestion: `Reinstale a ferramenta (Kali: apt install correspondente), reaponte o caminho ou remova o slot duplicado.`,
+        duplicateOfSlotId: null,
+      })
+      continue
+    }
+
+    if (existsOnDisk && NON_EXECUTABLE_EXTENSIONS.test(configuredPath)) {
+      issues.push({
+        slotId: slot.slotId,
+        name: slot.name,
+        kind: "non_executable_target",
+        severity: "warning",
+        message:
+          `"${slot.name}" aponta para um arquivo de dados (${path.basename(configuredPath)}), ` +
+          `não para um executável — este slot não pode ser executado como ferramenta CLI.`,
+        configuredPath,
+        suggestion: `Converta em preset/wordlist de outro slot (ex.: ffuf/dalfox) ou remova o slot.`,
+        duplicateOfSlotId: null,
+      })
+    }
+  }
+
+  // --- 2: duplicatas por nome normalizado ---
+  const groups = new Map<string, ArsenalSlotStatus[]>()
+  for (const slot of slots) {
+    const key = normalizeSlotNameForComparison(slot.name)
+    if (!key) continue
+    const list = groups.get(key) ?? []
+    list.push(slot)
+    groups.set(key, list)
+  }
+
+  for (const [, group] of groups) {
+    if (group.length < 2) continue
+    // Mantém: primeiro os oficiais, depois os instalados, depois o mais antigo (menor sufixo aleatório)
+    const ranked = [...group].sort((a, b) => {
+      if (a.isCustom !== b.isCustom) return a.isCustom ? 1 : -1
+      if (a.installed !== b.installed) return a.installed ? -1 : 1
+      return a.slotId.localeCompare(b.slotId)
+    })
+    const keeper = ranked[0]!
+    for (const dupe of ranked.slice(1)) {
+      // Só reportamos duplicatas que envolvam ao menos 1 slot personalizado
+      if (!dupe.isCustom && !keeper.isCustom) continue
+      if (!dupe.isCustom) continue // nunca sugerimos remover um slot oficial
+      issues.push({
+        slotId: dupe.slotId,
+        name: dupe.name,
+        kind: "duplicate_custom_slot",
+        severity: "warning",
+        message:
+          `Duplicata: "${dupe.name}" (${dupe.slotId}) repete "${keeper.name}" (${keeper.slotId}), ` +
+          `que já está ${keeper.installed ? "instalado e operacional" : "registrado"}.`,
+        configuredPath: (overrides[dupe.slotId] ?? {}).customExecutablePath ?? null,
+        suggestion: `Remova "${dupe.slotId}" e mantenha "${keeper.slotId}".`,
+        duplicateOfSlotId: keeper.slotId,
+      })
+    }
+  }
+
+  return issues
 }
 
 function defaultToolsRoot(): string {
@@ -1138,7 +1292,46 @@ export class ArsenalSlotManager {
       categories,
       slots,
       runs,
+      health: computeArsenalSlotHealth(slots, this.config.slotOverrides),
     }
+  }
+
+  /**
+   * Remove slots personalizados quebrados (fantasmas) e/ou duplicatas.
+   * NUNCA toca slots oficiais — somente `customSlots` criados pelo operador.
+   */
+  pruneBrokenCustomSlots(options: { removeGhosts?: boolean; removeDuplicates?: boolean } = {}): {
+    removed: string[]
+    skipped: string[]
+    overview: ArsenalOverview
+  } {
+    const removeGhosts = options.removeGhosts ?? true
+    const removeDuplicates = options.removeDuplicates ?? true
+    const removed: string[] = []
+    const skipped: string[] = []
+
+    const overview = this.getOverview()
+    for (const issue of overview.health) {
+      const def = this.config.customSlots.find((s) => s.slotId === issue.slotId)
+      if (!def) {
+        skipped.push(issue.slotId)
+        continue
+      }
+      const isGhost = issue.kind === "ghost_custom_slot" || issue.kind === "unconfigured_custom_slot"
+      const isDup = issue.kind === "duplicate_custom_slot"
+      if ((isGhost && removeGhosts) || (isDup && removeDuplicates)) {
+        this.config.customSlots = this.config.customSlots.filter((s) => s.slotId !== issue.slotId)
+        delete this.config.slotOverrides[issue.slotId]
+        removed.push(issue.slotId)
+      } else {
+        skipped.push(issue.slotId)
+      }
+    }
+
+    if (removed.length > 0) {
+      this.saveConfig()
+    }
+    return { removed, skipped, overview: this.getOverview(true) }
   }
 
   configureSettings(params: {

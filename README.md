@@ -1,4 +1,4 @@
-# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.3)
+# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.3.1)
 
 Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investigação Orientada por Hipóteses, Bug Bounty Autorizado, Engenharia Reversa, DFIR e Laboratórios de Treinamento**, construída sobre o **OpenCode V2 (`2.1.4`)** e projetada nativamente para **Windows 11 (PowerShell) + WSL2 (`kali-linux` 2026.x)** ou Linux nativo.
 
@@ -20,7 +20,7 @@ Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investiga
 7. [Catálogo Completo dos 48 Slots Oficiais + Slots Personalizados](#7-catálogo-completo-dos-48-slots-oficiais--slots-personalizados)
 8. [Os 4 Parceiros Cognitivos CDI (`8788–8791`) & 5 Laboratórios de Treino](#8-os-4-parceiros-cognitivos-cdi-87888791--5-laboratórios-de-treino)
 9. [Governança de Escopo Bug Bounty, Custódia `SHA-256` & Segurança Anti-Prompt-Injection](#9-governança-de-escopo-bug-bounty-custódia-sha-256--segurança-anti-prompt-injection)
-10. [Histórico Completo de Versões (`v1.0` → `v6.3`), Verificação CI & Licenciamento MIT](#10-histórico-completo-de-versões-v10--v63-verificação-ci--licenciamento-mit)
+10. [Histórico Completo de Versões (`v1.0` → `v6.3.1`), Verificação CI & Licenciamento MIT](#10-histórico-completo-de-versões-v10--v631-verificação-ci--licenciamento-mit)
 
 ---
 
@@ -298,7 +298,7 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
 
 ---
 
-## 10. Histórico Completo de Versões (`v1.0` → `v6.3`), Verificação CI & Licenciamento MIT
+## 10. Histórico Completo de Versões (`v1.0` → `v6.3.1`), Verificação CI & Licenciamento MIT
 
 - **v1.0 – v4.0**: Base OpenCode V2 (`2.1.4`), governança anti-TOCTOU, cofre `SHA-256`, 4 CDIs (`8788–8791`), 5 Labs de Treino e 9 modelos gratuitos OpenCode Zen.
 - **v5.0 – v5.8**: Arquitetura **Real Arsenal Edition** (3 colunas Antigravity, motor `X11/noVNC` 110 DPI sem deslocamento de mouse no zoom, navegador proxy em 1 clique, Burp oficial, REA MCP, PentAGI TLS `:8443` e ferramentas Kali 2026.1).
@@ -307,6 +307,15 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
 - **v6.1**: **Hub MCP Unificado (`cyberlab-arsenal` `--slot __hub__`)** consolidando todos os slots em 1 único processo (~3,5 GB de RAM economizados no Windows), resolução completa de caminhos Windows (`Program Files`/WinGet/Scoop) + WSL2 e instaladores/pontes de 1 clique para **`GhidraMCP (:8080)`** e **`JADX-AI-MCP (:8650)`**.
 - **v6.2**: **Investigative Security Orchestrator** em `pt-BR` (Ciclo Fases A–I + validação em 5 níveis), **6 Subagentes Especializados sob demanda** com limites rígidos de profundidade (`1`), concorrência (`3`) e quantidade por sessão (`12`), biblioteca curada **`CyberLab-Knowledge/`** integrada ao Cofre Obsidian com **8 tools MCP de Conhecimento e Memória Investigativa** (preservando resultados negativos e imutabilidade dos documentos curados) e atualização integral da documentação.
 - **v6.3**: **Paridade de Runtime WSL2 + Expansão da Biblioteca Curada (34 docs)** — correção da divergência crítica reportada na Fase A: as 7 capabilities `external.*` (`nuclei`, `tshark`, `ghidra`, `jadx`, `yarax`, `dalfox`, `keyhunter`) que diziam `not installed` enquanto os slots MCP diziam `INSTALLED`. O control plane agora resolve binários em **4 camadas** (`external-tools.json` → `.cyberlab/bin` → `PATH` Windows → **WSL2**), com probe batido único (`wsl.exe -d kali-linux -u root -- bash -s`, retry para VM fria), tradução automática de caminhos Windows → `/mnt/...` e encapsulamento transparente em `wsl.exe`. Biblioteca curada expandida de 20 → **34 documentos** cobrindo JWT/OAuth, CSRF/CORS/SameSite, TLS & cripto, SSRF, desserialização/XXE/upload, GraphQL/WebSocket, cache poisoning/deception, race conditions (protocolo concorrente N=20), mass assignment/BOPLA/rate limiting, mobile, engenharia reversa, cloud/IAM/contêineres, logging/forense e fluxos com IA orientados por hipótese.
+
+- **v6.3.1**: **Higiene de Slots Personalizados** — resolve os 3 slots ativos sem binário encontrados pela Fase A
+  (`custom-metasploit-framework-c421`, `custom-metasploit-framework-ce52`, `custom-ssti-advanced-payload-list-9b27`).
+  Novo diagnóstico `health` no overview do Arsenal detecta **slot fantasma** (executável configurado ausente no
+  Windows/PATH/WSL2), **duplicata** (mesmo nome normalizado de outro slot já instalado — nunca sugere remover
+  oficial), **alvo não-executável** (aponta para lista de payload/JSON em vez de binário) e **slot sem
+  configuração**. Exposição em 3 superfícies: banner âmbar na barra Slots com botão
+  **🧹 Limpar Fantasmas & Duplicatas**, tool MCP `arsenal_slot_health` no Hub e endpoint
+  `POST /api/cyberlab/arsenal/prune` (nunca remove slots oficiais).
 
 ### Verificação Local Completa (Idêntica ao GitHub Actions Linux + Windows)
 
@@ -322,7 +331,7 @@ bun --cwd packages/cli typecheck
 bun --cwd packages/gui-plugins typecheck
 bun --cwd cyberlab typecheck
 
-# 3. Suíte automatizada de testes (59 testes / 1.010+ asserções)
+# 3. Suíte automatizada de testes (67 testes / 1.038+ asserções)
 bun --cwd cyberlab test
 ```
 

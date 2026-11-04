@@ -597,6 +597,30 @@ function createWorkbenchService() {
     }
   }
 
+  /** Remove slots personalizados fantasmas (sem binário) e duplicatas — nunca remove slots oficiais. */
+  async function pruneBrokenCustomSlots(): Promise<void> {
+    setUi("busy", true)
+    try {
+      const updated = await cyberlabFetch<ArsenalOverviewDto>(
+        serverTarget(),
+        "/api/cyberlab/arsenal/prune",
+        { method: "POST", body: JSON.stringify({ removeGhosts: true, removeDuplicates: true }) },
+      )
+      batch(() => {
+        setBackend("arsenal", reconcile(updated))
+        setNotice(
+          updated.health && updated.health.length > 0
+            ? `Limpeza concluída — ainda restam ${updated.health.length} aviso(s).`
+            : "Limpeza concluída — nenhum slot personalizado quebrado restante.",
+        )
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUi("busy", false)
+    }
+  }
+
   async function launchProxyBrowser(params: {
     proxyPort?: number
     startUrl?: string
@@ -1165,6 +1189,7 @@ function createWorkbenchService() {
     configureArsenal,
     upsertCustomSlot,
     removeCustomSlot,
+    pruneBrokenCustomSlots,
     launchProxyBrowser,
     persistOutputToEvidence,
     uploadExternalFile,

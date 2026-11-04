@@ -612,6 +612,22 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
         }),
       ),
     )
+    .handle("cyberlab.arsenal.prune", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          const [updated, availableBrowsers] = yield* runBadRequest(async () => {
+            const ov = await ws.pruneBrokenCustomArsenalSlots({
+              ...(payload.removeGhosts !== undefined ? { removeGhosts: payload.removeGhosts } : {}),
+              ...(payload.removeDuplicates !== undefined ? { removeDuplicates: payload.removeDuplicates } : {}),
+            })
+            return [ov, await ws.listAvailableBrowsers()] as const
+          })
+          const clean = JSON.parse(JSON.stringify(updated)) as typeof updated
+          return { ...clean, availableBrowsers }
+        }),
+      ),
+    )
     .handle("cyberlab.arsenal.launch", ({ payload }) =>
       response(
         Effect.gen(function* () {

@@ -25,6 +25,11 @@ import http from "node:http"
 import os from "node:os"
 import path from "node:path"
 import { OFFICIAL_ARSENAL_SLOTS, type ArsenalSlotDefinition } from "../arsenal/catalog.js"
+import {
+  computeArsenalSlotHealth,
+  type ArsenalSlotHealthIssue,
+  type ArsenalSlotStatus,
+} from "../arsenal/slot-manager.js"
 import { redactSensitiveContent } from "../evidence/provenance.js"
 import {
   CyberLabKnowledgeEngine,
@@ -1576,6 +1581,23 @@ function buildHubToolsList() {
       },
     },
     {
+      name: "arsenal_slot_health",
+      description:
+        `Diagnostica slots personalizados quebrados (fantasmas), duplicados ou apontando para arquivos não-executáveis ` +
+        `(v6.3.1). Retorna slotId, tipo do problema, caminho configurado e a ação recomendada. ` +
+        `Use quando um slot aparecer "ativo" mas não executar, ou antes de iniciar uma investigação para garantir que o arsenal está limpo.`,
+      inputSchema: {
+        type: "object",
+        properties: {
+          prune: {
+            type: "boolean",
+            description:
+              "Se true, REMOVE automaticamente os slots personalizados fantasmas e duplicados (nunca remove slots oficiais).",
+          },
+        },
+      },
+    },
+    {
       name: "arsenal_run_tool",
       description: `Executa qualquer ferramenta CLI/scanner habilitada com 🟢 MCP no CyberLab OS (${slotListPreview}) resolvendo automaticamente caminhos completos do Windows (C:\\Program Files\\..., WinGet, Scoop) ou Kali WSL2, com proteção da Trava de Escopo Bug Bounty e redação SHA-256 de segredos.`,
       inputSchema: {
@@ -1642,6 +1664,121 @@ function sendResponse(payload: Record<string, unknown>) {
   } else {
     process.stdout.write(`${json}\n`)
   }
+}
+
+/**
+ * Converte o cache de probe + catálogo oficial + slots personalizados no formato
+ * `ArsenalSlotStatus` exigido por `computeArsenalSlotHealth`.
+ */
+function buildHealthSnapshot(): { slots: ArsenalSlotStatus[]; overrides: Record<string, { customExecutablePath?: string; customEmbedUrl?: string }> } {
+  const cache = readProbeCache()
+  const defs = getAllKnownSlotDefinitions(cache)
+  const overrides: Record<string, { customExecutablePath?: string; customEmbedUrl?: string }> = {}
+  for (const [slotIdRaw, ov] of Object.entries(cache.slotOverrides ?? {})) {
+    if (!ov) continue
+    overrides[slotIdRaw] = {
+      ...(ov.customBinaryPath ? { customExecutablePath: ov.customBinaryPath } : {}),
+      ...(ov.customEmbedUrl ? { customEmbedUrl: ov.customEmbedUrl } : {}),
+    }
+  }
+
+  const slots: ArsenalSlotStatus[] = []
+  for (const [sId, def] of defs) {
+    const probe = cache.slots?.[sId]
+    const installed = Boolean(
+      probe?.windowsPath || probe?.wslPath || probe?.posixPath || probe?.localHtmlEntry || overrides[sId]?.customEmbedUrl,
+    )
+    slots.push({
+      slotId: sId,
+      name: def.name,
+      shortLabel: def.shortLabel,
+      category: def.category,
+      kind: def.kind,
+      tagline: def.tagline,
+      description: def.description,
+      upstreamUrl: def.upstreamUrl,
+      licenseNote: def.licenseNote,
+      isCustom: Boolean(def.isCustom),
+      installed,
+      availableRuntimes: [
+        ...(probe?.windowsPath ? (["windows"] as const) : []),
+        ...(probe?.wslPath ? (["wsl"] as const) : []),
+        ...(probe?.posixPath ? (["linux_mac"] as const) : []),
+      ],
+      activeRuntime: probe?.windowsPath ? "windows" : probe?.posixPath ? "linux_mac" : probe?.wslPath ? "wsl" : "none",
+      resolvedPath: probe?.windowsPath ?? probe?.posixPath ?? probe?.wslPath ?? probe?.localHtmlEntry ?? null,
+      windowsPath: probe?.windowsPath ?? null,
+      wslPath: probe?.wslPath ?? null,
+      posixPath: probe?.posixPath ?? null,
+      embedUrl: overrides[sId]?.customEmbedUrl ?? null,
+      daemonRunning: false,
+      companionProxyPort: def.companionProxyPort ?? null,
+      mcpCapable: false,
+      mcpConnected: false,
+      mcpLabel: null,
+      installPowerShell: def.installPowerShell,
+      installKaliWsl: def.installKaliWsl,
+      presets: def.presets ?? [],
+      override: {},
+    })
+  }
+  return { slots, overrides }
+}
+
+const HEALTH_KIND_LABEL: Record<ArsenalSlotHealthIssue["kind"], string> = {
+  ghost_custom_slot: "👻 Slot Fantasma",
+  duplicate_custom_slot: "👥 Duplicata",
+  non_executable_target: "📄 Alvo Não-Executável",
+  unconfigured_custom_slot: "⚙️ Slot Sem Configuração",
+}
+
+async function handleArsenalSlotHealthCall(
+  id: string | number | null,
+  callArgs: Record<string, unknown>,
+): Promise<void> {
+  const { slots, overrides } = buildHealthSnapshot()
+  const issues = computeArsenalSlotHealth(slots, overrides as never)
+
+  const lines: string[] = [
+    `# Higiene do Arsenal CyberLab OS (${slots.length} slots — ${slots.filter((s) => s.isCustom).length} personalizados)`,
+    "",
+  ]
+
+  if (issues.length === 0) {
+    lines.push("✅ **Nenhum problema detectado.** Todos os slots personalizados possuem executável resolvido e não há duplicatas.")
+  } else {
+    const errors = issues.filter((i) => i.severity === "error")
+    const warnings = issues.filter((i) => i.severity === "warning")
+    lines.push(`**${issues.length} problema(s)**: ${errors.length} erro(s), ${warnings.length} aviso(s).`, "")
+    for (const issue of issues) {
+      lines.push(
+        `### ${HEALTH_KIND_LABEL[issue.kind]} — \`${issue.slotId}\``,
+        `- **Slot**: ${issue.name}`,
+        `- **Diagnóstico**: ${issue.message}`,
+        ...(issue.configuredPath ? [`- **Caminho configurado**: \`${issue.configuredPath}\``] : []),
+        ...(issue.duplicateOfSlotId ? [`- **Manter em vez deste**: \`${issue.duplicateOfSlotId}\``] : []),
+        `- **Ação recomendada**: ${issue.suggestion}`,
+        "",
+      )
+    }
+  }
+
+  const prune = callArgs.prune === true
+  if (prune) {
+    lines.push(
+      "",
+      "> ⚠️ Esta tool é **somente leitura** (diagnóstico). Para remover de fato, use o botão " +
+        "**🧹 Limpar Fantasmas & Duplicatas** (ou **Remover** em cada aviso) na barra Slots do CyberLab OS.",
+    )
+  }
+
+  sendResponse({
+    jsonrpc: "2.0",
+    id,
+    result: {
+      content: [{ type: "text", text: lines.join("\n") }],
+    },
+  })
 }
 
 async function handleArsenalStatusCall(
@@ -2462,6 +2599,11 @@ async function handleRpc(msg: JsonRpcRequest): Promise<void> {
 
     if (toolName === "arsenal_mcp_status") {
       await handleArsenalStatusCall(msg.id ?? null, callArgs)
+      return
+    }
+
+    if (toolName === "arsenal_slot_health") {
+      await handleArsenalSlotHealthCall(msg.id ?? null, callArgs)
       return
     }
 

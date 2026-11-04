@@ -681,6 +681,15 @@ export class CyberLabWorkspace {
     return this.arsenal.removeCustomSlot(slotId)
   }
 
+  /** Remove slots personalizados fantasmas (sem binário) e duplicatas. Nunca toca slots oficiais. */
+  async pruneBrokenCustomArsenalSlots(params: {
+    removeGhosts?: boolean
+    removeDuplicates?: boolean
+  }): Promise<ArsenalOverview> {
+    await this.ensureInitialized()
+    return this.arsenal.pruneBrokenCustomSlots(params).overview
+  }
+
   async launchArsenalSlot(params: {
     slotId: string
     action: "run_cli" | "launch_desktop" | "start_web" | "stop_web" | "install_tool"

@@ -244,6 +244,66 @@ export function CyberLabLeftExplorer() {
               </button>
             </Show>
 
+            {/* Diagnóstico de Higiene do Arsenal (v6.3.1) — slots personalizados quebrados/duplicados */}
+            <Show when={(wb.backend.arsenal?.health?.length ?? 0) > 0}>
+              <div class="mt-1 rounded-lg border border-amber-500/50 bg-amber-500/10 p-2.5 text-[11px]">
+                <div class="mb-1.5 flex items-center justify-between gap-2">
+                  <span class="font-semibold text-amber-400">
+                    ⚠️ {wb.backend.arsenal?.health?.length ?? 0} problema(s) de slot personalizado
+                  </span>
+                  <button
+                    type="button"
+                    disabled={wb.ui.busy}
+                    class="rounded bg-amber-500/25 px-2 py-0.5 text-[10px] font-semibold text-amber-200 hover:bg-amber-500/40 cursor-pointer disabled:opacity-60"
+                    onClick={() => void wb.pruneBrokenCustomSlots()}
+                  >
+                    🧹 Limpar Fantasmas & Duplicatas
+                  </button>
+                </div>
+                <div class="flex flex-col gap-1.5">
+                  <For each={wb.backend.arsenal?.health ?? []}>
+                    {(issue) => (
+                      <div class="rounded border border-amber-500/25 bg-zinc-950/70 p-1.5">
+                        <div class="flex items-start justify-between gap-2">
+                          <div class="min-w-0 flex-1">
+                            <div class="truncate font-medium text-v2-text-text-strong">
+                              {issue.kind === "ghost_custom_slot"
+                                ? "👻"
+                                : issue.kind === "duplicate_custom_slot"
+                                  ? "👥"
+                                  : issue.kind === "non_executable_target"
+                                    ? "📄"
+                                    : "⚙️"}{" "}
+                              {issue.name}{" "}
+                              <span class="font-mono text-[10px] text-v2-text-text-weak">
+                                ({issue.slotId})
+                              </span>
+                            </div>
+                            <div class="mt-0.5 text-[10.5px] text-v2-text-text-base">{issue.message}</div>
+                            <Show when={issue.configuredPath}>
+                              <div class="mt-0.5 truncate font-mono text-[10px] text-v2-text-text-weak">
+                                {issue.configuredPath}
+                              </div>
+                            </Show>
+                            <div class="mt-0.5 text-[10.5px] text-amber-300">→ {issue.suggestion}</div>
+                          </div>
+                          <button
+                            type="button"
+                            title="Remover este slot personalizado"
+                            disabled={wb.ui.busy}
+                            class="shrink-0 rounded border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[10px] text-red-400 hover:bg-red-500/20 cursor-pointer disabled:opacity-60"
+                            onClick={() => void wb.removeCustomSlot(issue.slotId)}
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </div>
+            </Show>
+
             {/* Formulário Rápido p/ Criar Novo Slot Custom */}
             <Show when={showCustomModal()}>
               <div class="mt-1 flex flex-col gap-1.5 rounded-lg border border-emerald-600/40 bg-v2-background-bg-base p-2.5 text-[11px]">

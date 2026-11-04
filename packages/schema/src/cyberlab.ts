@@ -407,12 +407,34 @@ export namespace CyberLab {
     lastProbedAt: Schema.NullOr(Schema.String),
   })
 
+  export const ArsenalSlotHealthInfo = Schema.Struct({
+    slotId: Schema.String,
+    name: Schema.String,
+    kind: Schema.Literals([
+      "ghost_custom_slot",
+      "duplicate_custom_slot",
+      "non_executable_target",
+      "unconfigured_custom_slot",
+    ]),
+    severity: Schema.Literals(["warning", "error"]),
+    message: Schema.String,
+    configuredPath: Schema.NullOr(Schema.String),
+    suggestion: Schema.String,
+    duplicateOfSlotId: Schema.NullOr(Schema.String),
+  })
+
   export const ArsenalOverview = Schema.Struct({
     environment: ArsenalEnvironmentSummaryInfo,
     categories: Schema.Array(ArsenalCategoryInfo),
     slots: Schema.Array(ArsenalSlotStatusInfo),
     runs: Schema.Array(ArsenalLiveRunInfo),
     availableBrowsers: optional(Schema.Array(ProxyBrowserInfo)),
+    health: Schema.Array(ArsenalSlotHealthInfo),
+  })
+
+  export const ArsenalPruneCustomSlotsInput = Schema.Struct({
+    removeGhosts: optional(Schema.Boolean),
+    removeDuplicates: optional(Schema.Boolean),
   })
 
   export const ArsenalConfigPatchInput = Schema.Struct({

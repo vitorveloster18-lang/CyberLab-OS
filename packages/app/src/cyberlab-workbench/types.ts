@@ -99,12 +99,24 @@ export interface ProxyBrowserLaunchResultDto {
   manualBashCommand: string
 }
 
+export interface ArsenalSlotHealthIssueDto {
+  slotId: string
+  name: string
+  kind: "ghost_custom_slot" | "duplicate_custom_slot" | "non_executable_target" | "unconfigured_custom_slot"
+  severity: "warning" | "error"
+  message: string
+  configuredPath: string | null
+  suggestion: string
+  duplicateOfSlotId: string | null
+}
+
 export interface ArsenalOverviewDto {
   environment: ArsenalEnvironmentDto
   categories: ArsenalCategoryDto[]
   slots: ArsenalSlotStatusDto[]
   runs: ArsenalLiveRunDto[]
   availableBrowsers?: ProxyBrowserInfoDto[]
+  health?: ArsenalSlotHealthIssueDto[]
 }
 
 export interface ArsenalLaunchResultDto {
