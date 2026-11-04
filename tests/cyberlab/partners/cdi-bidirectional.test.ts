@@ -6,6 +6,15 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { CyberLabWorkspace, CyberLabWorkspaceManager } from "../../../cyberlab/index.js"
+import { hasPython, pythonCommand } from "../helpers/env-gates.js"
+
+/**
+ * Estes testes sobem parceiros CDI reais em Python. Sem interpretador no PATH eles sao
+ * PULADOS com motivo: no Windows o atalho da Microsoft Store devolvia exit 49 e o teste
+ * morria por timeout, o que parecia falha de produto e nao era.
+ */
+const PY = pythonCommand()
+const pyTest = hasPython() ? test : test.skip
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url))
 const bridgeScriptPath = path.join(repoRoot, "integrations", "partners", "chat_py_bridge.py")
@@ -38,7 +47,7 @@ async function waitForHealth(port: number, timeoutMs = 15_000): Promise<void> {
 }
 
 describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", () => {
-  test("supports auto-generated or user-defined secrets, parallel multi-CDI dispatch (Salem + Kairos), and autonomous CDI -> CyberLab OS actions", async () => {
+  pyTest("supports auto-generated or user-defined secrets, parallel multi-CDI dispatch (Salem + Kairos), and autonomous CDI -> CyberLab OS actions", async () => {
     const tmpDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-cdi-bidir-"))
     mkdirSync(path.join(tmpDir, "logs"), { recursive: true })
     writeFileSync(
@@ -159,12 +168,12 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
     )
 
     const salemProc = spawn(
-      "python3",
+      PY!,
       [bridgeScriptPath, "--partner-id", "salem", "--port", String(salemPort), "--mode", "arg", "--script", salemScript],
       { env: { ...process.env, CYBERLAB_PARTNER_SECRET: customSecret }, stdio: ["ignore", "pipe", "pipe"] },
     )
     const kairosProc = spawn(
-      "python3",
+      PY!,
       [bridgeScriptPath, "--partner-id", "kairos", "--port", String(kairosPort), "--mode", "arg", "--script", kairosScript],
       { env: { ...process.env, CYBERLAB_PARTNER_SECRET: customSecret }, stdio: ["ignore", "pipe", "pipe"] },
     )
@@ -276,7 +285,7 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
     }
   })
 
-  test("autonomous peer CDIs execute all 9 canonical gateway actions (including action.status & autonomous_in_scope) with individual profiles", async () => {
+  pyTest("autonomous peer CDIs execute all 9 canonical gateway actions (including action.status & autonomous_in_scope) with individual profiles", async () => {
     const tmpDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-cdi-peer-9actions-"))
     writeFileSync(path.join(tmpDir, "architecture-notes.md"), "# Curated Lab Notes\nTarget API v2 on loopback.\n", "utf8")
 
@@ -413,7 +422,7 @@ print(json.dumps({
         "utf8",
       )
 
-      const proc = Bun.spawn(["python3", novaAutonomousScript], { stdout: "pipe", stderr: "pipe" })
+      const proc = Bun.spawn([PY!, novaAutonomousScript], { stdout: "pipe", stderr: "pipe" })
       const [stdoutText, stderrText, exitCode] = await Promise.all([
         new Response(proc.stdout).text(),
         new Response(proc.stderr).text(),
@@ -463,7 +472,7 @@ print(json.dumps({
     }
   })
 
-  test("unshackled CDI full autonomy: project creation, live training labs, code authoring/patching, and full runtime source inspection", async () => {
+  pyTest("unshackled CDI full autonomy: project creation, live training labs, code authoring/patching, and full runtime source inspection", async () => {
     const tmpRoot = mkdtempSync(path.join(os.tmpdir(), "cyberlab-cdi-full-autonomy-"))
     const baseProjectDir = path.join(tmpRoot, "initial-workspace")
     mkdirSync(baseProjectDir, { recursive: true })
@@ -609,7 +618,7 @@ print(json.dumps({
         "utf8",
       )
 
-      const proc = Bun.spawn(["python3", kairosScript], { stdout: "pipe", stderr: "pipe" })
+      const proc = Bun.spawn([PY!, kairosScript], { stdout: "pipe", stderr: "pipe" })
       const [stdoutText, stderrText, exitCode] = await Promise.all([
         new Response(proc.stdout).text(),
         new Response(proc.stderr).text(),

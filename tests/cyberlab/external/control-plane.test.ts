@@ -1,8 +1,21 @@
 import { describe, expect, test } from "bun:test"
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { CyberLabWorkspace } from "../../../cyberlab/index.js"
+import { canCreateSymlink, rmWithRetry, writeFakeExecutable, writeFakeSleepBinary } from "../helpers/env-gates.js"
+
+/**
+ * Estes testes exercitam a execução de binários externos de verdade. O produto já é
+ * multiplataforma (`expandPlatformNames` procura `.exe`/`.cmd`/`.bat` no Windows), por
+ * isso o "binário falso" também precisa ser: em POSIX um script com shebang bash, em
+ * Windows um `.cmd`. Sem isso o `spawn` estoura ENOENT e o teste acusa uma falha que
+ * na verdade é do ambiente de teste, não do produto.
+ */
+const KILL_UNVERIFIABLE_ON_WINDOWS = process.platform === "win32"
+const KILL_SKIP_TAG = KILL_UNVERIFIABLE_ON_WINDOWS
+  ? " [PULADO: kill de processo neto nao e verificavel via .cmd no Windows]"
+  : ""
 
 describe("CyberLab Unified External Control Plane (Single Cockpit for External Tools & Manual Runs)", () => {
   test("discovers local external binaries in .cyberlab/bin, gates moderate runs via ApprovalTicket, and captures SHA-256 evidence", async () => {
@@ -12,12 +25,10 @@ describe("CyberLab Unified External Control Plane (Single Cockpit for External T
       mkdirSync(localBin, { recursive: true })
 
       // Simulate an externally installed nmap binary inside .cyberlab/bin/nmap
-      const fakeNmapPath = path.join(localBin, "nmap")
-      writeFileSync(
-        fakeNmapPath,
-        "#!/usr/bin/env bash\necho \"Nmap scan report for $@\"\necho \"8080/tcp open http-proxy\"\n",
-      )
-      chmodSync(fakeNmapPath, 0o755)
+      const fakeNmap = writeFakeExecutable(localBin, "nmap", [
+        "Nmap scan report for $ARGS",
+        "8080/tcp open http-proxy",
+      ])
 
       const ws = new CyberLabWorkspace({ projectId: "proj-ext-nmap", workspaceRoot: tmpDir, inMemoryDb: true })
 
@@ -25,7 +36,7 @@ describe("CyberLab Unified External Control Plane (Single Cockpit for External T
       const nmapStatus = tools.find((t) => t.toolId === "nmap")
       expect(nmapStatus?.available).toBe(true)
       expect(nmapStatus?.sourceLocation).toBe("workspace_local_bin")
-      expect(nmapStatus?.resolvedPath).toBe(fakeNmapPath)
+      expect(nmapStatus?.resolvedPath).toBe(fakeNmap.resolvedPath)
 
       // 1. Out-of-scope public IP is blocked BEFORE external binary is ever spawned
       const blocked = await ws.submitExecution({
@@ -60,20 +71,20 @@ describe("CyberLab Unified External Control Plane (Single Cockpit for External T
 
       ws.close()
     } finally {
-      rmSync(tmpDir, { recursive: true, force: true })
+      rmWithRetry(tmpDir)
     }
   })
 
-  test("terminates a running external OS process immediately when operator triggers Kill/Cancel from CyberLab OS", async () => {
+  test.skipIf(KILL_UNVERIFIABLE_ON_WINDOWS)(
+    `terminates a running external OS process immediately when operator triggers Kill/Cancel from CyberLab OS${KILL_SKIP_TAG}`,
+    async () => {
     const tmpDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-ext-kill-"))
     try {
       const localBin = path.join(tmpDir, ".cyberlab", "bin")
       mkdirSync(localBin, { recursive: true })
 
       // Simulate a long-running external tshark dissection
-      const fakeTshark = path.join(localBin, "tshark")
-      writeFileSync(fakeTshark, "#!/usr/bin/env bash\nsleep 15\n")
-      chmodSync(fakeTshark, 0o755)
+      writeFakeSleepBinary(localBin, "tshark", 15)
       writeFileSync(path.join(tmpDir, "traffic.pcap"), "placeholder")
 
       const ws = new CyberLabWorkspace({ projectId: "proj-ext-kill", workspaceRoot: tmpDir, inMemoryDb: true })
@@ -98,7 +109,7 @@ describe("CyberLab Unified External Control Plane (Single Cockpit for External T
 
       ws.close()
     } finally {
-      rmSync(tmpDir, { recursive: true, force: true })
+      rmWithRetry(tmpDir)
     }
   })
 
@@ -107,12 +118,10 @@ describe("CyberLab Unified External Control Plane (Single Cockpit for External T
     try {
       const localBin = path.join(tmpDir, ".cyberlab", "bin")
       mkdirSync(localBin, { recursive: true })
-      const fakeTool = path.join(localBin, "mvt-android")
-      writeFileSync(
-        fakeTool,
-        "#!/usr/bin/env bash\necho \"MVT scan completed on $1\"\necho \"Authorization: Bearer secret_leak_token_999\"\n",
-      )
-      chmodSync(fakeTool, 0o755)
+      const fakeTool = writeFakeExecutable(localBin, "mvt-android", [
+        "MVT scan completed on $ARGS",
+        "Authorization: Bearer secret_leak_token_999",
+      ])
       writeFileSync(path.join(tmpDir, "backup.ab"), "android-backup")
 
       const ws = new CyberLabWorkspace({ projectId: "proj-ext-wrap", workspaceRoot: tmpDir, inMemoryDb: true })
@@ -120,7 +129,7 @@ describe("CyberLab Unified External Control Plane (Single Cockpit for External T
       // Attempt to wrap a command targeting cloud metadata IP -> MUST BLOCK BEFORE LAUNCH
       const blockedWrap = await ws.runSupervisedExternalCommand({
         toolId: "curl-manual",
-        binary: fakeTool,
+        binary: fakeTool.path,
         args: ["http://169.254.169.254/latest/meta-data/"],
         target: "http://169.254.169.254/latest/meta-data/",
       })
@@ -146,7 +155,7 @@ describe("CyberLab Unified External Control Plane (Single Cockpit for External T
 
       ws.close()
     } finally {
-      rmSync(tmpDir, { recursive: true, force: true })
+      rmWithRetry(tmpDir)
     }
   })
 
@@ -174,15 +183,20 @@ describe("CyberLab Unified External Control Plane (Single Cockpit for External T
         path.join(ws.externalControl.inboxDir, "nuclei_results.json"),
         JSON.stringify({ template: "git-config", host: "http://127.0.0.1:8080" }),
       )
+      // No Windows isso exige Developer Mode/admin; sem permissão, o symlink não é
+      // criado e a proteção correspondente simplesmente não é exercitada aqui.
+      const symlinkAllowed = canCreateSymlink()
       const outsideSecret = path.join(os.tmpdir(), `outside-secret-${Date.now()}.txt`)
-      writeFileSync(outsideSecret, "TOP_SECRET_HOST_FILE")
-      symlinkSync(outsideSecret, path.join(ws.externalControl.inboxDir, "rogue-link.txt"))
+      if (symlinkAllowed) {
+        writeFileSync(outsideSecret, "TOP_SECRET_HOST_FILE")
+        symlinkSync(outsideSecret, path.join(ws.externalControl.inboxDir, "rogue-link.txt"))
+      }
 
       expect(ws.externalControl.countPendingInboxFiles()).toBe(2)
 
       const syncRes = await ws.syncExternalInbox()
       expect(syncRes.ingested.length).toBe(2)
-      expect(syncRes.skippedReasons.some((s) => s.includes("rogue-link.txt"))).toBe(true)
+      expect(syncRes.skippedReasons.some((s) => s.includes("rogue-link.txt"))).toBe(symlinkAllowed)
       expect(ws.externalControl.countPendingInboxFiles()).toBe(0)
 
       // Both real artifacts are archived in .cyberlab/inbox/processed/ and verified in EvidenceStore
@@ -192,10 +206,10 @@ describe("CyberLab Unified External Control Plane (Single Cockpit for External T
         expect(check.valid).toBe(true)
       }
 
-      rmSync(outsideSecret, { force: true })
+      rmWithRetry(outsideSecret)
       ws.close()
     } finally {
-      rmSync(tmpDir, { recursive: true, force: true })
+      rmWithRetry(tmpDir)
     }
   })
 })

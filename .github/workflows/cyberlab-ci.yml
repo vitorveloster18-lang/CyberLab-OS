@@ -86,4 +86,8 @@ jobs:
         run: |
           bun run script/check-cyberlab-licenses.ts
           bun --cwd cyberlab typecheck
-          bun test --cwd cyberlab --timeout 60000 ../tests/cyberlab/partners ../tests/cyberlab/labs ../tests/cyberlab/safety ../tests/cyberlab/knowledge ../tests/cyberlab/arsenal
+          # `execution` e `external` entraram aqui porque escondiam falhas reais de
+          # Windows: spawn de binario externo (ENOENT), symlink sem permissao (EPERM) e
+          # rmSync com handle preso (EBUSY). Sem eles no CI, a suíte so quebrava na
+          # máquina de quem rodasse local.
+          bun test --cwd cyberlab --timeout 60000 ../tests/cyberlab/partners ../tests/cyberlab/labs ../tests/cyberlab/safety ../tests/cyberlab/knowledge ../tests/cyberlab/arsenal ../tests/cyberlab/execution ../tests/cyberlab/external

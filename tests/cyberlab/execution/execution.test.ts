@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { Schema } from "effect"
@@ -21,6 +21,7 @@ import {
   WorkspaceAuditExecutor,
   WorkspaceAuditInputSchema,
 } from "../../../integrations/code-analysis/workspace-audit-executor.js"
+import { rmWithRetry } from "../helpers/env-gates.js"
 
 function setupExecutionEnv(workspaceRoot: string) {
   const capabilities = new ControlledCapabilityRegistry()
@@ -116,7 +117,7 @@ describe("CyberLab Execution Dispatcher & First Read-Only Lab Executor", () => {
 
       evidenceStore.close()
     } finally {
-      rmSync(tmpWorkspace, { recursive: true, force: true })
+      rmWithRetry(tmpWorkspace)
     }
   })
 
@@ -224,7 +225,7 @@ describe("CyberLab Execution Dispatcher & First Read-Only Lab Executor", () => {
 
       evidenceStore.close()
     } finally {
-      rmSync(tmpWorkspace, { recursive: true, force: true })
+      rmWithRetry(tmpWorkspace)
     }
   })
 })
