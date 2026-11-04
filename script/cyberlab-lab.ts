@@ -31,8 +31,9 @@ import { runBolaEvidenceSuite } from "../cyberlab/labs/evidence-recorder.js"
 import { listTargetProfiles, writeTargetScope } from "../cyberlab/labs/target-profiles.js"
 import { createDefaultCyberLabConfig } from "../cyberlab/config/config.js"
 import { EvidenceStore } from "../cyberlab/evidence/store.js"
-import { inspectExternalToolStatuses } from "../cyberlab/external/control-plane.js"
+import { BUILTIN_EXTERNAL_TOOL_CATALOG, inspectExternalToolStatuses } from "../cyberlab/external/control-plane.js"
 import { ArsenalSlotManager, normalizeSlotNameForComparison } from "../cyberlab/arsenal/slot-manager.js"
+import { OFFICIAL_ARSENAL_SLOTS } from "../cyberlab/arsenal/catalog.js"
 import { ScopeController } from "../cyberlab/policy/scope.js"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -548,13 +549,43 @@ switch (command) {
   case "slots": {
     const asJson = args.includes("--json")
     const onlyHealth = args.includes("--health")
+    const workspaceRoot = resolveWorkspaceRoot()
     const manager = new ArsenalSlotManager({
       projectId: "cyberlab-cli",
-      workspaceRoot: resolveWorkspaceRoot(),
+      workspaceRoot,
       scopes: new ScopeController(),
     })
     const overview = manager.getOverview(true)
     const custom = overview.slots.filter((s) => s.isCustom)
+
+    // Um slot "instalado" só diz que o caminho configurado existe. Para saber se o
+    // binário que o AGENTE invoca está de fato no PATH, é preciso cruzar com o
+    // catálogo externo — é exatamente a junção que `lab tools` já fazia em separado.
+    const slotToTool = new Map(
+      OFFICIAL_ARSENAL_SLOTS.filter((d) => d.externalToolId).map((d) => [d.slotId, d.externalToolId!]),
+    )
+    const toolById = new Map(BUILTIN_EXTERNAL_TOOL_CATALOG.map((e) => [e.toolId, e]))
+    const toolStatus = new Map(
+      inspectExternalToolStatuses(workspaceRoot)
+        .filter((t) => !t.toolId.startsWith("external:"))
+        .map((t) => [t.toolId, t]),
+    )
+    const governed = [...slotToTool.keys()].map((slotId) => {
+      const toolId = slotToTool.get(slotId)!
+      const status = toolStatus.get(toolId)
+      const entry = toolById.get(toolId)
+      const candidates = entry?.posixBinaries ?? entry?.binaryCandidates ?? [toolId]
+      return {
+        slotId,
+        toolId,
+        available: status?.available ?? false,
+        resolvedPath: status?.resolvedPath ?? null,
+        candidates,
+        installKaliWsl: status?.installHintWsl ?? entry?.installKaliWsl ?? null,
+      }
+    })
+    const governedBySlot = new Map(governed.map((g) => [g.slotId, g]))
+    const missing = governed.filter((g) => !g.available)
 
     // Duplicata "real" = mesmo nome normalizado em mais de um slot.
     const byName = new Map<string, string[]>()
@@ -574,15 +605,37 @@ switch (command) {
             custom: custom.length,
             duplicates: duplicates.map(([name, slotIds]) => ({ name, slotIds })),
             health: overview.health,
-            slots: overview.slots.map((s) => ({
-              slotId: s.slotId,
-              name: s.name,
-              kind: s.kind,
-              origin: s.isCustom ? "custom" : "catalogo",
-              installed: s.installed,
-              activeRuntime: s.activeRuntime,
-              resolvedPath: s.resolvedPath,
-            })),
+            governedTools: {
+              total: governed.length,
+              available: governed.length - missing.length,
+              missing: missing.map((g) => ({
+                slotId: g.slotId,
+                toolId: g.toolId,
+                expectedBinaries: g.candidates,
+                installKaliWsl: g.installKaliWsl,
+              })),
+            },
+            slots: overview.slots.map((s) => {
+              const g = governedBySlot.get(s.slotId)
+              return {
+                slotId: s.slotId,
+                name: s.name,
+                kind: s.kind,
+                origin: s.isCustom ? "custom" : "catalogo",
+                installed: s.installed,
+                activeRuntime: s.activeRuntime,
+                resolvedPath: s.resolvedPath,
+                tool: g
+                  ? {
+                      toolId: g.toolId,
+                      available: g.available,
+                      expectedBinaries: g.candidates,
+                      resolvedPath: g.resolvedPath,
+                      installKaliWsl: g.installKaliWsl,
+                    }
+                  : null,
+              }
+            }),
           },
           null,
           2,
@@ -603,6 +656,14 @@ switch (command) {
           console.log(`  acao:    ${issue.recommendedAction}`)
         }
       }
+      if (missing.length > 0) {
+        console.log("")
+        console.log(`${missing.length} binario(s) governado(s) ausente(s) — o slot existe, o binario nao:`)
+        for (const g of missing) {
+          console.log(`  ✘ ${g.slotId} (${g.toolId}): esperado ${g.candidates.join(" / ")}`)
+          if (g.installKaliWsl) console.log(`     WSL2 Kali: ${g.installKaliWsl}`)
+        }
+      }
       process.exit(0)
     }
 
@@ -615,8 +676,15 @@ switch (command) {
     console.log("")
     for (const slot of overview.slots) {
       const origin = slot.isCustom ? "custom  " : "catalogo"
+      const g = governedBySlot.get(slot.slotId)
+      // Só o primeiro candidato cabe na coluna; a lista completa sai no rodapé.
+      const bin = !g
+        ? "—".padEnd(28)
+        : g.available
+          ? `✔ ${g.toolId}`.slice(0, 28).padEnd(28)
+          : `✘ ${g.candidates[0] ?? g.toolId}`.slice(0, 28).padEnd(28)
       console.log(
-        `  ${origin} ${slot.slotId.padEnd(44)} ${(slot.installed ? "instalado" : "sem-binario").padEnd(12)} ${slot.name}`,
+        `  ${origin} ${slot.slotId.padEnd(24)} ${(slot.installed ? "instalado" : "sem-binario").padEnd(12)} ${bin} ${slot.name}`,
       )
     }
     console.log("")
@@ -625,6 +693,14 @@ switch (command) {
     } else {
       console.log(`Duplicatas por nome normalizado: ${duplicates.length}`)
       for (const [name, ids] of duplicates) console.log(`  "${name}" -> ${ids.join(", ")}`)
+    }
+    console.log("")
+    console.log(
+      `Binarios governados: ${governed.length} · disponiveis ${governed.length - missing.length} · faltando ${missing.length}`,
+    )
+    for (const g of missing) {
+      console.log(`  ✘ ${g.slotId} -> ${g.toolId} (esperado: ${g.candidates.join(" / ")})`)
+      if (g.installKaliWsl) console.log(`     WSL2 Kali: ${g.installKaliWsl}`)
     }
     if (overview.health.length > 0) {
       console.log(`\nHigiene: ${overview.health.length} problema(s). Rode: bun run cyberlab lab slots --health`)

@@ -39,6 +39,14 @@ export interface ArsenalSlotDefinition {
   upstreamUrl: string
   licenseNote: string
   isCustom?: boolean
+  /**
+   * ID da ferramenta do catálogo externo (`BUILTIN_EXTERNAL_TOOL_CATALOG`) que
+   * este slot governa — quando há uma. Só 12 dos 48 slots têm binário governado;
+   * o resto é GUI, embed web ou configuração. Sem esse vínculo o operador precisa
+   * rodar dois comandos (`lab slots` e `lab tools`) para saber se o binário que o
+   * agente invoca de fato existe.
+   */
+  externalToolId?: string
   /** Candidate binary names on Windows */
   windowsBinaries: string[]
   /** Well-known Windows installation paths (supports %LOCALAPPDATA%, %ProgramFiles%, %USERPROFILE%, {toolsRoot}) */
@@ -158,6 +166,7 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
   },
   {
     slotId: "opentrap",
+    externalToolId: "opentrap",
     name: "OpenTRAP (ZAP Active Scanner + Intruder s/ Limite + Collaborator)",
     shortLabel: "OpenTRAP",
     category: "web_proxy_suite",
@@ -303,6 +312,7 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
   // =========================================================================
   {
     slotId: "nuclei",
+    externalToolId: "nuclei",
     name: "ProjectDiscovery Nuclei (11.000+ Templates Oficiais)",
     shortLabel: "Nuclei",
     category: "web_bounty_cli",
@@ -341,6 +351,7 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
   },
   {
     slotId: "ffuf",
+    externalToolId: "ffuf",
     name: "ffuf — Fuzz Faster U Fool",
     shortLabel: "ffuf",
     category: "web_bounty_cli",
@@ -468,6 +479,7 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
   },
   {
     slotId: "dalfox",
+    externalToolId: "dalfox",
     name: "Dalfox (XSS Scanner & Parameter Analyzer)",
     shortLabel: "Dalfox",
     category: "web_bounty_cli",
@@ -556,6 +568,7 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
   },
   {
     slotId: "nmap",
+    externalToolId: "nmap",
     name: "Nmap + NSE Vulnerability & Service Engine",
     shortLabel: "Nmap",
     category: "recon_network_ad",
@@ -625,6 +638,7 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
   },
   {
     slotId: "wireshark",
+    externalToolId: "tshark",
     name: "Wireshark GUI & tshark Oficial",
     shortLabel: "Wireshark / tshark",
     category: "recon_network_ad",
@@ -689,6 +703,7 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
   // =========================================================================
   {
     slotId: "ghidra",
+    externalToolId: "ghidra-headless",
     name: "NSA Ghidra (GUI Completa + Decompilador C Headless)",
     shortLabel: "Ghidra",
     category: "reverse_mobile",
@@ -713,6 +728,7 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
   },
   {
     slotId: "jadx",
+    externalToolId: "jadx",
     name: "JADX & JADX-GUI (Descompilador Oficial Android APK / DEX -> Java)",
     shortLabel: "JADX Android",
     category: "reverse_mobile",
@@ -830,6 +846,7 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
   // =========================================================================
   {
     slotId: "keyhunter",
+    externalToolId: "keyhunter",
     name: "KeyHunter Rust Oficial (fadidevv/keyhunter)",
     shortLabel: "KeyHunter Rust",
     category: "secrets_sast_cloud",
@@ -920,6 +937,7 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
   },
   {
     slotId: "trivy",
+    externalToolId: "trivy",
     name: "Aqua Trivy (CVEs Reais, SBOM CycloneDX, Containers, K8s & IaC)",
     shortLabel: "Aqua Trivy",
     category: "secrets_sast_cloud",
@@ -976,6 +994,7 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
   },
   {
     slotId: "hayabusa-yarax",
+    externalToolId: "yarax",
     name: "Hayabusa (Windows .evtx Sigma) & VirusTotal YARA-X",
     shortLabel: "Hayabusa / YARA-X",
     category: "cyberchef_dfir_kali",
@@ -1075,6 +1094,7 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
   },
   {
     slotId: "mvt",
+    externalToolId: "mvt-android",
     name: "MVT — Mobile Verification Toolkit (Amnesty International)",
     shortLabel: "MVT Forensics",
     category: "reverse_mobile",

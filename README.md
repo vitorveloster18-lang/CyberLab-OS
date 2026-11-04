@@ -200,7 +200,7 @@ Agora tem, sem abrir a interface:
 ```powershell
 bun run cyberlab lab slots                 # 48 slots: catálogo + personalizados + duplicatas
 bun run cyberlab lab slots --health        # só fantasmas/duplicados/sem binário
-bun run cyberlab lab slots --json          # saída completa p/ o agente
+bun run cyberlab lab slots --json          # saída completa p/ o agente (cada slot com .tool)
 
 bun run cyberlab lab tools                 # 12 ferramentas do catálogo: ✔ instalada / ✘ falta
 bun run cyberlab lab tools --missing       # só as que faltam, com a dica de instalação
@@ -208,8 +208,29 @@ bun run cyberlab lab tools --script > install-faltantes.sh
 bun run cyberlab lab tools --json
 ```
 
-- **`lab slots`** compara os slots por **nome normalizado** e lista as duplicatas reais
-  (`"ssti-advanced-payload-list" -> slot-a, slot-b`), mais o diagnóstico de higiene
+- **`lab slots`** agora responde **as duas perguntas numa só saída**. Cada linha mostra
+  o status do slot (`instalado` / `sem-binario`) **e** o status do binário do catálogo
+  que ele governa (`✔ <ferramenta>`, `✘ <binário esperado>` ou `—` quando o slot é
+  GUI/embed web/configuração, sem binário para checar):
+
+  ```
+  catalogo nmap         instalado   ✔ nmap             Nmap + NSE Vulnerability & Service Engine
+  catalogo ghidra       instalado   ✘ analyzeHeadless  NSA Ghidra (GUI + Decompilador C Headless)
+  catalogo cyberchef    instalado   —                  GCHQ CyberChef Oficial (300+ Operações)
+
+  Binarios governados: 12 · disponiveis 11 · faltando 1
+    ✘ ghidra -> ghidra-headless (esperado: analyzeHeadless / ghidra-analyzeHeadless)
+       WSL2 Kali: sudo apt update && sudo apt install -y ghidra
+  ```
+
+  A distinção importa: **slot `instalado` ≠ binário presente**. O slot diz apenas que o
+  caminho configurado existe (no caso do Ghidra, `/usr/bin/ghidra`, o launcher gráfico);
+  a coluna de binário diz se o executável que o **agente** invoca está no PATH.
+  O vínculo vem do campo `externalToolId` no catálogo de slots, e
+  `tests/cyberlab/arsenal/slot-tool-bindings-v67.test.ts` garante que ele não aponte
+  para uma ferramenta inexistente nem seja repetido em dois slots.
+- **`lab slots`** também compara os slots por **nome normalizado** e lista as duplicatas
+  reais (`"ssti-advanced-payload-list" -> slot-a, slot-b`), mais o diagnóstico de higiene
   (`ghost_custom_slot`, `duplicate_custom_slot`, `non_executable_target`,
   `unconfigured_custom_slot`). Num cofre limpo a resposta é
   `48 slots — 0 personalizados — nenhuma duplicata`: as duplicatas que a calibração
@@ -674,7 +695,7 @@ bun --cwd packages/cli typecheck
 bun --cwd packages/gui-plugins typecheck
 bun --cwd cyberlab typecheck
 
-# 3. Suíte automatizada de testes (110 testes / 1.516+ asserções)
+# 3. Suíte automatizada de testes (115 testes / 1.546+ asserções)
 bun --cwd cyberlab test
 ```
 
