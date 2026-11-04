@@ -141,6 +141,24 @@ describe("CyberLab OS v6.4 — Kit de Investigação do Laboratório (Fases B/D/
     expect(seed?.authorizedScope).toContain(`:${status.port}`)
   })
 
+  test("seed e model funcionam SEM o servidor no ar (usam a porta do kit/do catálogo)", () => {
+    const labsRoot = mkdtempSync(path.join(os.tmpdir(), "cyberlab-labs-offline-"))
+    tempDirs.push(labsRoot)
+    const manager = new TrainingLabManager(labsRoot)
+    // Nenhum startLab(): apenas o kit, exatamente como `lab seed`/`lab model` operam
+    const files = manager.ensureInvestigationKit("lab-owasp-api-bola")
+    expect(files).not.toBeNull()
+
+    const seed = manager.buildInvestigationMemorySeed("lab-owasp-api-bola")
+    expect(seed).not.toBeNull()
+    expect(seed!.authorizedScope).toContain("127.0.0.1:19081")
+    expect(seed!.hypotheses.length).toBe(4)
+
+    const status = manager.getLabStatus("lab-owasp-api-bola")
+    expect(status.running).toBe(false)
+    expect(status.provisioned).toBe(false) // kit não marca "provisionado" (isso é LAB_BRIEFING.md)
+  })
+
   test("labs sem kit retornam null sem quebrar (degradação graciosa)", () => {
     const other = BUILTIN_TRAINING_LABS.find((l) => !getSupportedKitLabIds().includes(l.labId))
     expect(other).toBeDefined()

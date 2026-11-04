@@ -1,4 +1,4 @@
-# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.4)
+# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.4.1)
 
 Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investigação Orientada por Hipóteses, Bug Bounty Autorizado, Engenharia Reversa, DFIR e Laboratórios de Treinamento**, construída sobre o **OpenCode V2 (`2.1.4`)** e projetada nativamente para **Windows 11 (PowerShell) + WSL2 (`kali-linux` 2026.x)** ou Linux nativo.
 
@@ -28,17 +28,20 @@ servidor do lab estava inativo e a memória investigativa estava vazia. Agora o 
 Fases B (Modelagem), D (Hipóteses) e F (Experimentação) já prontas**:
 
 ```powershell
-# 1) Sobe o lab e gera o Kit de Investigacao (porta real ja embutida nos arquivos)
-bun run cyberlab lab start lab-owasp-api-bola
-
-# 2) Em OUTRO terminal: grava missao, escopo, modelo e hipoteses na memoria investigativa
-bun run cyberlab lab seed lab-owasp-api-bola
-
-# 3) Outros comandos uteis
-bun run cyberlab lab list
-bun run cyberlab lab status lab-owasp-api-bola
+# TUDO EM 1 UNICO TERMINAL (--daemon deixa o servidor vivo em segundo plano)
+bun run cyberlab lab start lab-owasp-api-bola --daemon
+bun run cyberlab lab seed   lab-owasp-api-bola
 bun run cyberlab lab model  lab-owasp-api-bola
+bun run cyberlab lab status lab-owasp-api-bola
+
+# Para encerrar (funciona de qualquer terminal)
+bun run cyberlab lab stop   lab-owasp-api-bola
 ```
+
+> ⚠️ **Sem `--daemon` o servidor morre com o terminal.** O comando `start` sem a flag mantém o processo
+> em primeiro plano e exibe `Servidor ativo neste processo. Pressione Ctrl+C para encerrar.` — ao
+> pressionar `Ctrl+C` (ou fechar a janela) o lab é desligado. `seed` e `model` continuam funcionando
+> (eles só leem o Kit em disco), mas o alvo fica fora do ar para execução de experimentos.
 
 Também é possível subir junto da interface: `bun run cyberlab --rebuild --lab lab-owasp-api-bola`.
 
@@ -67,7 +70,7 @@ Também é possível subir junto da interface: `bun run cyberlab --rebuild --lab
 
 9. [Os 4 Parceiros Cognitivos CDI (`8788–8791`) & 5 Laboratórios de Treino](#8-os-4-parceiros-cognitivos-cdi-87888791--5-laboratórios-de-treino)
 10. [Governança de Escopo Bug Bounty, Custódia `SHA-256` & Segurança Anti-Prompt-Injection](#9-governança-de-escopo-bug-bounty-custódia-sha-256--segurança-anti-prompt-injection)
-11. [Histórico Completo de Versões (`v1.0` → `v6.4`), Verificação CI & Licenciamento MIT](#10-histórico-completo-de-versões-v10--v64-verificação-ci--licenciamento-mit)
+11. [Histórico Completo de Versões (`v1.0` → `v6.4.1`), Verificação CI & Licenciamento MIT](#11-histórico-completo-de-versões-v10--v641-verificação-ci--licenciamento-mit)
 
 ---
 
@@ -345,7 +348,7 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
 
 ---
 
-## 11. Histórico Completo de Versões (`v1.0` → `v6.4`), Verificação CI & Licenciamento MIT
+## 11. Histórico Completo de Versões (`v1.0` → `v6.4.1`), Verificação CI & Licenciamento MIT
 
 - **v1.0 – v4.0**: Base OpenCode V2 (`2.1.4`), governança anti-TOCTOU, cofre `SHA-256`, 4 CDIs (`8788–8791`), 5 Labs de Treino e 9 modelos gratuitos OpenCode Zen.
 - **v5.0 – v5.8**: Arquitetura **Real Arsenal Edition** (3 colunas Antigravity, motor `X11/noVNC` 110 DPI sem deslocamento de mouse no zoom, navegador proxy em 1 clique, Burp oficial, REA MCP, PentAGI TLS `:8443` e ferramentas Kali 2026.1).
@@ -374,6 +377,13 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
   `--lab <labId>` no launcher unificado. Observação: a porta citada em notas antigas (`4101`) estava
   **desatualizada** — a porta real é confirmada por `bun run cyberlab lab status`.
 
+- **v6.4.1**: **Modo daemon para os laboratórios** — corrige a armadilha de UX do v6.4: sem
+  `--daemon`, o servidor do lab vivia dentro do processo do terminal e morria no `Ctrl+C` (ou ao fechar a
+  janela), deixando o orquestrador sem alvo. Agora `bun run cyberlab lab start <labId> --daemon` sobe o
+  servidor em **segundo plano** (processo desanexado + arquivo de PID + log em disco), ele sobrevive ao
+  fechamento do terminal, e `lab stop <labId>` encerra o daemon **mesmo de outro terminal**. `lab status`
+  detecta o daemon por PID + sonda TCP e imprime a URL confirmada.
+
 ### Verificação Local Completa (Idêntica ao GitHub Actions Linux + Windows)
 
 ```bash
@@ -388,7 +398,7 @@ bun --cwd packages/cli typecheck
 bun --cwd packages/gui-plugins typecheck
 bun --cwd cyberlab typecheck
 
-# 3. Suíte automatizada de testes (73 testes / 1.156+ asserções)
+# 3. Suíte automatizada de testes (74 testes / 1.162+ asserções)
 bun --cwd cyberlab test
 ```
 
