@@ -15,6 +15,7 @@ import net from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { ensureKnowledgeLibrarySeeded } from "../cyberlab/knowledge/curated-library.js"
+import { BUILTIN_TRAINING_LABS, TrainingLabManager } from "../cyberlab/labs/training-labs.js"
 
 const UI_BUILD_STAMP = "cyberlab-unified-v6.2.0-investigative-orchestrator"
 
@@ -151,6 +152,8 @@ const rebuild = args.includes("--rebuild") || args.includes("--build")
 const requireAuth = args.includes("--require-auth")
 const noOpen = args.includes("--no-open") || Boolean(process.env.CI)
 const corsFlag = readFlag("--cors", "*")
+/** v6.4: sobe também um laboratório de treino já com o Kit de Investigação gerado. */
+const labIdFlag = readFlag("--lab", process.env.CYBERLAB_LAB || "").trim()
 
 let currentStamp = ""
 try {
@@ -304,6 +307,34 @@ const child = spawn(bunExecutable, cliArgs, {
   },
 })
 
+/**
+ * v6.4 — Sobe o laboratório solicitado via `--lab <labId>` dentro do MESMO processo,
+ * garantindo que o Kit de Investigação (Fases B/D/F) já exista quando a interface abrir.
+ */
+const BUILTIN_LAB_IDS = BUILTIN_TRAINING_LABS.map((l) => l.labId)
+
+let labManager: TrainingLabManager | null = null
+if (labIdFlag) {
+  labManager = new TrainingLabManager(
+    process.env.CYBERLAB_LABS_ROOT?.trim() || path.join(repoRoot, ".cyberlab", "labs"),
+  )
+  try {
+    const status = await labManager.startLab({ labId: labIdFlag })
+    console.log(`[CyberLab OS] Laboratório "${status.labId}" ativo em ${status.baseUrl ?? "(sem servidor)"}`)
+    if (labManager.hasInvestigationKit(labIdFlag)) {
+      console.log(
+        `[CyberLab OS] Kit de Investigação pronto em ${labManager.getLabWorkspacePath(labIdFlag)} ` +
+          `(LAB_SYSTEM_MODEL.md, HYPOTHESES.md, EXPERIMENTS.md)`,
+      )
+    }
+  } catch (err) {
+    console.error(
+      `[CyberLab OS] Falha ao subir o laboratório "${labIdFlag}": ${err instanceof Error ? err.message : String(err)}`,
+    )
+    console.error(`[CyberLab OS] Labs disponíveis: ${BUILTIN_LAB_IDS.join(", ")}`)
+  }
+}
+
 async function waitForServerAndOpenBrowser() {
   const deadline = Date.now() + 35_000
   const headers: Record<string, string> = {}
@@ -348,5 +379,8 @@ async function waitForServerAndOpenBrowser() {
 void waitForServerAndOpenBrowser()
 
 child.on("exit", (code) => {
+  if (labManager) {
+    void labManager.stopAll().catch(() => {})
+  }
   process.exit(code ?? 0)
 })

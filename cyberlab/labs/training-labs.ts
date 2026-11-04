@@ -3,6 +3,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import http from "node:http"
 import type { AddressInfo } from "node:net"
 import path from "node:path"
+import {
+  buildLabInvestigationKit,
+  buildMemorySeed,
+  labInvestigationKitExists,
+  writeLabInvestigationKit,
+} from "./investigation-kit.js"
 
 export type TrainingLabCategory =
   | "web_api_security"
@@ -1021,7 +1027,41 @@ detection:
       recentRequests,
     }
     this.runningServers.set(def.labId, stateObj)
+
+    // v6.4: gera imediatamente o Kit de Investigação (Fases B/D/F) já com a porta REAL
+    if (buildLabInvestigationKit(def.labId, bound.port)) {
+      writeLabInvestigationKit(def.labId, wsRoot, bound.port)
+    }
+
     return this.getLabStatus(def.labId)
+  }
+
+  /**
+   * v6.4 — Garante que o Kit de Investigação existe (mesmo sem subir o servidor).
+   * Usa a porta real se o lab já estiver rodando; caso contrário, o hint do catálogo.
+   */
+  ensureInvestigationKit(labId: string): string[] | null {
+    const def = BUILTIN_TRAINING_LABS.find((l) => l.labId === labId)
+    if (!def) throw new Error(`Unknown training lab "${labId}"`)
+    const wsRoot = this.getLabWorkspacePath(labId)
+    const running = this.runningServers.get(labId)
+    const port = running?.port ?? def.defaultPortHint ?? null
+    const files = writeLabInvestigationKit(labId, wsRoot, port)
+    return files ? Object.values(files) : null
+  }
+
+  hasInvestigationKit(labId: string): boolean {
+    return labInvestigationKitExists(this.getLabWorkspacePath(labId))
+  }
+
+  /** Patch pronto para `CyberLabKnowledgeEngine.updateInvestigationMemory()`. */
+  buildInvestigationMemorySeed(labId: string) {
+    const def = BUILTIN_TRAINING_LABS.find((l) => l.labId === labId)
+    if (!def) throw new Error(`Unknown training lab "${labId}"`)
+    const running = this.runningServers.get(labId)
+    const kit = buildLabInvestigationKit(labId, running?.port ?? def.defaultPortHint ?? null)
+    if (!kit) return null
+    return buildMemorySeed(kit)
   }
 
   async resetLab(labId: string): Promise<TrainingLabStatus> {
@@ -1031,6 +1071,10 @@ detection:
     }
     const wsRoot = this.getLabWorkspacePath(def.labId)
     this.writeLabFiles(def.labId, wsRoot)
+    const running = this.runningServers.get(def.labId)
+    if (buildLabInvestigationKit(def.labId, running?.port ?? def.defaultPortHint ?? null)) {
+      writeLabInvestigationKit(def.labId, wsRoot, running?.port ?? def.defaultPortHint ?? null)
+    }
     return this.getLabStatus(def.labId)
   }
 

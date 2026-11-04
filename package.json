@@ -34,6 +34,7 @@
     "cyberlab:cli": "bun run script/cyberlab-cli.ts",
     "cyberlab:app": "bun run script/start-cyberlab.ts",
     "cyberlab:studio": "bun run script/start-cyberlab.ts",
+    "cyberlab:lab": "bun run script/cyberlab-lab.ts",
     "cyberlab:typecheck": "bun --cwd cyberlab typecheck",
     "cyberlab:test": "bun --cwd cyberlab test",
     "cyberlab:check-licenses": "bun run script/check-cyberlab-licenses.ts",

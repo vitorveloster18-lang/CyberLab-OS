@@ -21,6 +21,9 @@ const CLI_SUBCOMMANDS = new Set([
 
 const APP_SUBCOMMANDS = new Set(["start", "app", "up", "serve", "studio"])
 
+/** Subcomandos de laboratório (v6.4) — tratados pelo script/start-cyberlab.ts / script/cyberlab-lab.ts. */
+const LAB_SUBCOMMANDS = new Set(["lab", "labs", "laboratorio"])
+
 const firstArg = args[0] ?? ""
 const isHelp = firstArg === "--help" || firstArg === "-h" || firstArg === "help"
 const shouldLaunchUnifiedApp =
@@ -29,7 +32,18 @@ const shouldLaunchUnifiedApp =
     APP_SUBCOMMANDS.has(firstArg) ||
     (!CLI_SUBCOMMANDS.has(firstArg) && firstArg.startsWith("-")))
 
-if (shouldLaunchUnifiedApp) {
+if (LAB_SUBCOMMANDS.has(firstArg)) {
+  const labArgs = args.slice(1)
+  const res = spawnSync(process.execPath, ["run", "script/cyberlab-lab.ts", ...labArgs], {
+    cwd: repoRoot,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      CYBERLAB_WORKSPACE_ROOT: process.env.CYBERLAB_WORKSPACE_ROOT || process.cwd(),
+    },
+  })
+  process.exit(res.status ?? 1)
+} else if (shouldLaunchUnifiedApp) {
   if (APP_SUBCOMMANDS.has(firstArg)) {
     process.argv = [process.argv[0]!, process.argv[1]!, ...args.slice(1)]
   }

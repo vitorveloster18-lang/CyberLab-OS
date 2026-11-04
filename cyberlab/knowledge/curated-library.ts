@@ -113,6 +113,101 @@ export interface InvestigationSessionMemory {
 
 export const CURATED_KNOWLEDGE_FILES: Array<{ relativePath: string; content: string }> = [
   {
+    relativePath: "CyberLab-Knowledge/tools/lab-owasp-api-bola.md",
+    content: `---
+id: tools/lab-owasp-api-bola
+title: Laboratório OWASP API Security (BOLA, JWT alg:none, SQL Error) — Modelo, Hipóteses e Remediação
+tier: curated
+category: tools
+version: "1.0.0"
+last_reviewed: "2026-11-03"
+status: validated
+sources:
+  - "OWASP API Security Top 10 2023 — API1:2023 BOLA, API5:2023 BFLA"
+  - "CWE-347 (Improper Verification of Cryptographic Signature) & CWE-209 (Error Message with Sensitive Info)"
+  - "OWASP Secure Headers Project"
+  - "CyberLab OS v6.4 — cyberlab/labs/investigation-kit.ts (kit gerado automaticamente)"
+limitations:
+  - "Ambiente de TREINO em loopback (127.0.0.1). Nunca exponha o servidor do lab em interface de rede."
+  - "A porta real é definida automaticamente; a nota de cofre Diario-Labs cita 4101, que está DESATUALIZADA — confirme sempre com \`bun run cyberlab lab status\`."
+related:
+  - "vulnerabilities/idor-bola-bfla"
+  - "fundamentals/jwt-oauth-oidc"
+  - "vulnerabilities/context-aware-injection"
+  - "methodologies/hypothesis-driven-testing"
+  - "methodologies/evidence-validation"
+---
+
+# Laboratório OWASP API Security — Modelo, Hipóteses e Remediação
+
+#lab #treino #bola #jwt #sqli #headers #tools
+
+## 1. Como subir (v6.4)
+
+\`\`\`powershell
+# 1) Sobe o lab e gera automaticamente o Kit de Investigacao (Fases B/D/F)
+bun run cyberlab lab start lab-owasp-api-bola
+
+# 2) Em OUTRO terminal: grava missao, escopo, modelo e hipoteses na memoria investigativa
+bun run cyberlab lab seed lab-owasp-api-bola
+
+# 3) Inspeciona o modelo do sistema (Fase B)
+bun run cyberlab lab model lab-owasp-api-bola
+\`\`\`
+
+Arquivos gerados em \`<labs>/lab-owasp-api-bola/\`:
+\`LAB_SYSTEM_MODEL.md\`, \`lab-system-model.json\`, \`HYPOTHESES.md\`, \`lab-hypotheses.json\`,
+\`EXPERIMENTS.md\`, \`lab-experiments.json\`, \`investigation-memory-seed.json\`.
+
+Também é possível subir junto da interface: \`bun run cyberlab --rebuild --lab lab-owasp-api-bola\`.
+
+## 2. Modelo do Sistema (Fase B)
+
+| Endpoint | Invariante esperado | Controle reparador |
+|---|---|---|
+| \`GET /api/v1/accounts/:id\` | só o titular lê a própria conta | \`enforceAccountOwnership\` |
+| \`GET /api/v1/admin/debug\` | exige assinatura JWT válida + \`role=admin\` | \`rejectAlgNoneJwt\` |
+| \`GET /api/v1/search?q=\` | erro genérico, sem ecoar a consulta | \`sanitizeSqlQuery\` |
+| qualquer resposta | CSP + HSTS + \`nosniff\` + \`X-Frame-Options\` | \`enableSecurityHeaders\` |
+
+Identidades de teste: **User A** (\`Bearer token-user-a-1001\`, conta 1001, \`alice@corp.lab\`) e
+**User B** (\`Bearer token-user-b-1002\`, conta 1002, \`bob@corp.lab\`). O servidor relê
+\`server-config.json\` a **cada requisição** — não é necessário reiniciar para testar remediação.
+
+## 3. Hipóteses prontas (Fase D)
+
+| ID | Hipótese | Comando PoC | Observável se vulnerável |
+|---|---|---|---|
+| H1 | BOLA entre contas | \`GET /api/v1/accounts/1002\` com token A | 200 + \`bob@corp.lab\` + \`bolaFlag\` |
+| H2 | JWT \`alg:none\` aceito | \`GET /api/v1/admin/debug\` com JWT forjado | 200 + \`flag: LAB{JWT_ALG_NONE_ACCEPTED}\` |
+| H3 | Vazamento de erro SQL | \`GET /api/v1/search?q=%27\` | 500 + \`SQLITE_ERROR\` com nomes de coluna |
+| H4 | Headers de segurança ausentes | \`curl -D -\` em qualquer rota | 0 headers de segurança |
+
+## 4. Matriz de Remediação (Fase G)
+
+| Hipótese | Antes (OFF) | Depois (ON) |
+|---|---|---|
+| H1 | 200 com dados de Bob | **403** |
+| H2 | 200 com flag | **401** |
+| H3 | 500 + SQLITE_ERROR | **200** sem erro SQL |
+| H4 | 0 headers | **CSP + HSTS + nosniff + XFO** |
+
+> Ligar o controle **não é** prova de correção por si só: o mesmo comando PoC deve ser repetido
+> e arquivado. A evidência de remediação é o par **antes/depois** com SHA-256.
+
+## 5. Armadilhas investigativas
+
+- **Porta desatualizada**: notas de cofre antigas citam \`4101\`. Confirme sempre com
+  \`bun run cyberlab lab status\` — a porta padrão do catálogo é \`19081\` e pode variar se ocupada.
+- **Falso positivo de BOLA**: confirme que o corpo traz dados do OUTRO titular; 200 sem dados
+  sensíveis é ruído.
+- **Falso negativo de \`alg:none\`**: bibliotecas modernas rejeitam por padrão; neste lab o handler
+  decodifica header/payload sem verificar assinatura, então o token precisa de \`role=admin\`.
+- **H3 não prova SQLi explorável**: vazamento de erro é CWE-209; injeção propriamente dita exige
+  experimento separado (UNION/time-based).
+`,
+  },
+  {
     relativePath: "CyberLab-Knowledge/fundamentals/jwt-oauth-oidc.md",
     content: `---
 id: fundamentals/jwt-oauth-oidc
@@ -889,7 +984,7 @@ Esta biblioteca organiza o conhecimento técnico do **Investigative Security Orc
 - **Vulnerabilidades (9)**: [[idor-bola-bfla]], [[context-aware-injection]], [[http-url-json-differentials]], [[state-race-invariants]], [[ssrf]], [[deserialization-xxe-upload]], [[graphql-websocket]], [[cache-poisoning-deception]], [[race-conditions-toctou]], além de [[mass-assignment-rate-limit]]
 - **Pesquisa Primária (3)**: [[cve-applicability-methodology]], [[patch-diff-methodology]], [[reproducible-writeup-standard]]
 - **Domínios (4)**: [[mobile-android-ios]], [[binary-reverse-engineering]], [[cloud-iam-containers]], [[logging-forensics-detection]]
-- **Ferramentas & Catálogo MCP (5)**: [[mcp-tool-catalog]], [[burp]], [[nuclei]], [[semgrep]], [[ai-assisted-pentest-workflows]]
+- **Ferramentas & Catálogo MCP (6)**: [[mcp-tool-catalog]], [[burp]], [[nuclei]], [[semgrep]], [[ai-assisted-pentest-workflows]], [[lab-owasp-api-bola]]
 
 ## Atualização v6.3 (lacunas apontadas na Fase A)
 Os 14 documentos abaixo foram adicionados para fechar domínios que limitavam a formulação de hipóteses testáveis:
