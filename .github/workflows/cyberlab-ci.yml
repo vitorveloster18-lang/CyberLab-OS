@@ -45,7 +45,7 @@ jobs:
           bun --cwd packages/schema test
           bun --cwd packages/util test
           if [ -f script/check-cyberlab-licenses.ts ]; then bun run script/check-cyberlab-licenses.ts; fi
-          if [ -f cyberlab/package.json ]; then bun --cwd cyberlab test; fi
+          if [ -f cyberlab/package.json ]; then bun test --cwd cyberlab --timeout 60000; fi
 
   verify-windows:
     runs-on: windows-latest
@@ -86,4 +86,4 @@ jobs:
         run: |
           bun run script/check-cyberlab-licenses.ts
           bun --cwd cyberlab typecheck
-          bun test --cwd cyberlab ../tests/cyberlab/partners ../tests/cyberlab/labs ../tests/cyberlab/safety ../tests/cyberlab/knowledge ../tests/cyberlab/arsenal
+          bun test --cwd cyberlab --timeout 60000 ../tests/cyberlab/partners ../tests/cyberlab/labs ../tests/cyberlab/safety ../tests/cyberlab/knowledge ../tests/cyberlab/arsenal

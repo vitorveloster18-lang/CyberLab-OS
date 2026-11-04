@@ -21,7 +21,9 @@ async function getFreePort(): Promise<number> {
   })
 }
 
-async function waitForHealth(port: number, timeoutMs = 6_000): Promise<void> {
+// 6s era pouco em runner carregado (o bridge Python sobe devagar no Windows).
+// Precisa ficar abaixo do timeout por teste (CI roda com --timeout 60000).
+async function waitForHealth(port: number, timeoutMs = 15_000): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
