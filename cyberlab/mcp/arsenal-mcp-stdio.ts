@@ -26,6 +26,12 @@ import os from "node:os"
 import path from "node:path"
 import { OFFICIAL_ARSENAL_SLOTS, type ArsenalSlotDefinition } from "../arsenal/catalog.js"
 import { redactSensitiveContent } from "../evidence/provenance.js"
+import {
+  CyberLabKnowledgeEngine,
+  type ExternalReferenceRecord,
+  type InvestigationExperimentRecord,
+  type InvestigationHypothesis,
+} from "../knowledge/curated-library.js"
 
 const argv = process.argv.slice(2)
 function readArg(flag: string, fallback = ""): string {
@@ -1309,6 +1315,245 @@ const JADX_MCP_TOOLS = [
   },
 ]
 
+const KNOWLEDGE_AND_MEMORY_MCP_TOOLS = [
+  {
+    name: "search_knowledge",
+    description:
+      "Pesquisa na biblioteca curada CyberLab-Knowledge/ (dentro do Cofre Obsidian do CyberLab OS) por conceito, vulnerabilidade, CVE, metodologia, ferramenta ou tecnologia — retornando título, versão, fontes, limitações e seções relevantes.",
+    inputSchema: {
+      type: "object",
+      required: ["query"],
+      properties: {
+        query: {
+          type: "string",
+          description: "Termo ou pergunta técnica (ex.: 'bola authorization', 'parser differential json', 'hypothesis', 'burp'); passe '' para listar todos os documentos curados.",
+        },
+        category: {
+          type: "string",
+          description: "Filtro opcional de categoria: fundamentals, methodologies, vulnerabilities, research, tools",
+        },
+        includeDrafts: {
+          type: "boolean",
+          description: "Se true, inclui também rascunhos (_drafts/) não curados nos resultados (padrão: false).",
+        },
+        limit: {
+          type: "number",
+          description: "Máximo de resultados (padrão: 10)",
+        },
+      },
+    },
+  },
+  {
+    name: "read_document",
+    description:
+      "Abre e lê um documento completo da biblioteca CyberLab-Knowledge/ (ou do Cofre) junto com seus metadados estruturados (fontes primárias, versão, data de revisão, status epistemológico e limitações).",
+    inputSchema: {
+      type: "object",
+      required: ["docPath"],
+      properties: {
+        docPath: {
+          type: "string",
+          description: "Caminho ou ID do documento (ex.: 'fundamentals/http', 'methodologies/hypothesis-driven-testing', 'tools/mcp-tool-catalog')",
+        },
+      },
+    },
+  },
+  {
+    name: "get_related_documents",
+    description:
+      "Navega relações entre documentos na biblioteca CyberLab-Knowledge/ (ex.: de uma classe de vulnerabilidade -> causa raiz -> metodologia de validação -> ferramenta MCP correspondente).",
+    inputSchema: {
+      type: "object",
+      required: ["docPath"],
+      properties: {
+        docPath: {
+          type: "string",
+          description: "Caminho ou ID do documento de origem",
+        },
+      },
+    },
+  },
+  {
+    name: "get_document_metadata",
+    description:
+      "Retorna apenas os metadados verificáveis de um documento (fontes, versão, data de revisão, tier curado/rascunho, limitações, seções e links relacionados) sem carregar o texto completo no contexto.",
+    inputSchema: {
+      type: "object",
+      required: ["docPath"],
+      properties: {
+        docPath: {
+          type: "string",
+          description: "Caminho ou ID do documento",
+        },
+      },
+    },
+  },
+  {
+    name: "create_draft_note",
+    description:
+      "Registra uma nova descoberta ou síntese técnica como rascunho em CyberLab-Knowledge/_drafts/ (tier: draft), separando explicitamente fatos observados, hipóteses, inferências e incertezas — NUNCA sobrescreve conhecimento curado validado.",
+    inputSchema: {
+      type: "object",
+      required: ["slug", "title", "factsObserved"],
+      properties: {
+        slug: { type: "string", description: "Identificador curto do arquivo (ex.: 'nginx-spring-path-matrix')" },
+        title: { type: "string", description: "Título descritivo do rascunho" },
+        category: { type: "string", description: "Categoria sugerida (ex.: research, vulnerabilities, tools)" },
+        factsObserved: {
+          type: "array",
+          items: { type: "string" },
+          description: "Fatos empiricamente verificados (com condições exatas)",
+        },
+        hypotheses: {
+          type: "array",
+          items: { type: "string" },
+          description: "Hipóteses ainda não comprovadas",
+        },
+        inferences: {
+          type: "array",
+          items: { type: "string" },
+          description: "Inferências técnicas derivadas dos fatos",
+        },
+        uncertainties: {
+          type: "array",
+          items: { type: "string" },
+          description: "Incertezas, lacunas e explicações alternativas pendentes",
+        },
+        sources: {
+          type: "array",
+          items: { type: "string" },
+          description: "Fontes primárias, advisories, RFCs ou commits consultados (com versão/data)",
+        },
+        limitations: {
+          type: "array",
+          items: { type: "string" },
+          description: "Condições de aplicabilidade e limitações conhecidas",
+        },
+        relatedDocs: {
+          type: "array",
+          items: { type: "string" },
+          description: "IDs de documentos curados relacionados (ex.: ['fundamentals/http'])",
+        },
+        tags: { type: "array", items: { type: "string" } },
+        additionalMarkdown: { type: "string", description: "Notas ou exemplos reproduzíveis adicionais em Markdown" },
+      },
+    },
+  },
+  {
+    name: "propose_document_update",
+    description:
+      "Cria uma proposta estruturada de revisão/atualização para um documento curado em CyberLab-Knowledge/_proposals/ (status: pending_human_review) exigindo justificativa e fontes primárias, mantendo o documento curado original 100% intacto até revisão do operador humano.",
+    inputSchema: {
+      type: "object",
+      required: ["targetDocPath", "targetSection", "rationale", "proposedContent", "primarySources"],
+      properties: {
+        targetDocPath: { type: "string", description: "Documento curado alvo (ex.: 'fundamentals/http')" },
+        targetSection: { type: "string", description: "Seção do documento que receberia o acréscimo/revisão" },
+        rationale: { type: "string", description: "Justificativa técnica objetiva para a atualização" },
+        proposedContent: { type: "string", description: "Texto proposto em Markdown" },
+        primarySources: {
+          type: "array",
+          items: { type: "string" },
+          description: "Fontes oficiais, RFCs, patches ou advisories que sustentam a proposta",
+        },
+        limitations: { type: "array", items: { type: "string" } },
+      },
+    },
+  },
+  {
+    name: "investigation_memory_read",
+    description:
+      "Lê o registro estruturado da memória investigativa da sessão atual (missão, escopo autorizado, modelo do sistema, hipóteses, experimentos realizados, resultados negativos e próximos passos) — isolado da biblioteca curada.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        investigationId: {
+          type: "string",
+          description: "ID opcional da investigação (padrão: 'sessao-atual')",
+        },
+      },
+    },
+  },
+  {
+    name: "investigation_memory_update",
+    description:
+      "Atualiza o registro estruturado da memória investigativa da sessão atual (modelo do sistema, hipóteses concorrentes, experimentos, resultados negativos para evitar repetição cega e próximos passos) e sincroniza espelho legível em vault/Investigacoes/.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        investigationId: { type: "string", description: "ID da investigação (padrão: 'sessao-atual')" },
+        mission: { type: "string" },
+        authorizedScope: { type: "string" },
+        systemModel: {
+          type: "object",
+          properties: {
+            components: { type: "array", items: { type: "string" } },
+            technologies: { type: "array", items: { type: "string" } },
+            dataFlows: { type: "array", items: { type: "string" } },
+            trustBoundaries: { type: "array", items: { type: "string" } },
+            identitiesAndPermissions: { type: "array", items: { type: "string" } },
+          },
+        },
+        hypotheses: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["id", "title", "expectedBehavior", "suspectedBehavior", "fragileAssumption", "evidenceNeeded", "status"],
+            properties: {
+              id: { type: "string" },
+              title: { type: "string" },
+              expectedBehavior: { type: "string" },
+              suspectedBehavior: { type: "string" },
+              fragileAssumption: { type: "string" },
+              technicalRationale: { type: "string" },
+              evidenceNeeded: { type: "string" },
+              alternativeExplanations: { type: "array", items: { type: "string" } },
+              status: { type: "string", enum: ["proposed", "testing", "supported", "refuted", "inconclusive"] },
+            },
+          },
+        },
+        experiments: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["id", "question", "toolUsed", "modifiedVariable", "expectedOutcome", "observedOutcome", "verdict"],
+            properties: {
+              id: { type: "string" },
+              hypothesisId: { type: "string" },
+              question: { type: "string" },
+              toolUsed: { type: "string" },
+              initialConditions: { type: "string" },
+              modifiedVariable: { type: "string" },
+              expectedOutcome: { type: "string" },
+              observedOutcome: { type: "string" },
+              verdict: {
+                type: "string",
+                enum: ["supports_hypothesis", "weakens_hypothesis", "negative_result", "inconclusive"],
+              },
+            },
+          },
+        },
+        negativeResults: { type: "array", items: { type: "string" } },
+        decisions: { type: "array", items: { type: "string" } },
+        externalReferences: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              sourceUrlOrRef: { type: "string" },
+              versionOrCommit: { type: "string" },
+              applicabilityNote: { type: "string" },
+            },
+          },
+        },
+        openQuestions: { type: "array", items: { type: "string" } },
+        nextSteps: { type: "array", items: { type: "string" } },
+      },
+    },
+  },
+]
+
 function buildHubToolsList() {
   const enabled = readEnabledHubSlotIds()
   const enabledSorted = Array.from(enabled).sort()
@@ -1316,6 +1561,7 @@ function buildHubToolsList() {
     enabledSorted.length > 0 ? enabledSorted.join(", ") : "nenhum slot habilitado no momento"
 
   const hubCoreTools = [
+    ...KNOWLEDGE_AND_MEMORY_MCP_TOOLS,
     {
       name: "arsenal_mcp_status",
       description: `Verifica instantaneamente o status real de TODAS as ${enabledSorted.length} ferramentas com botão 🟢 MCP ativo no CyberLab OS (${slotListPreview}) — incluindo servidores GUI em tempo real (Burp :9876, Ghidra :8080, JADX :8650), binários Windows (C:\\Program Files\\...), binários Kali WSL2 e aplicações Web Embed (CyberChef). SEMPRE chame esta tool primeiro quando o usuário pedir para testar/listar conexões MCP!`,
@@ -1819,6 +2065,280 @@ async function handleBurpToolCall(
   })
 }
 
+const KNOWLEDGE_TOOL_NAMES = new Set([
+  "search_knowledge",
+  "read_document",
+  "get_related_documents",
+  "get_document_metadata",
+  "create_draft_note",
+  "propose_document_update",
+  "investigation_memory_read",
+  "investigation_memory_update",
+])
+
+function handleKnowledgeAndMemoryToolCall(
+  id: string | number | null,
+  toolName: string,
+  callArgs: Record<string, unknown>,
+): void {
+  try {
+    const engine = new CyberLabKnowledgeEngine({ workspaceRoot })
+
+    if (toolName === "search_knowledge") {
+      const hits = engine.searchKnowledge({
+        query: typeof callArgs.query === "string" ? callArgs.query : "",
+        category: typeof callArgs.category === "string" ? callArgs.category : undefined,
+        includeDrafts: Boolean(callArgs.includeDrafts),
+        limit: typeof callArgs.limit === "number" ? callArgs.limit : 10,
+      })
+      const text =
+        hits.length === 0
+          ? "Nenhum documento encontrado para a busca informada na biblioteca CyberLab-Knowledge/."
+          : hits
+              .map(
+                (h, i) =>
+                  `${i + 1}. **${h.title}** (\`${h.docPath}\` | tier: \`${h.tier}\` | v${h.version} | rev: ${h.last_reviewed})\n   - Fontes: ${h.sources.join("; ") || "n/d"}\n   - Seções: ${h.matchedSections.join(", ") || "geral"}\n   - Resumo: ${h.excerpt}`,
+              )
+              .join("\n\n")
+      sendResponse({
+        jsonrpc: "2.0",
+        id,
+        result: { content: [{ type: "text", text }] },
+      })
+      return
+    }
+
+    if (toolName === "read_document") {
+      const doc = engine.readDocument(String(callArgs.docPath ?? ""))
+      const m = doc.metadata
+      const header = [
+        `# Metadados de Origem (\`${m.docPath}\`)`,
+        `- **Título**: ${m.title}`,
+        `- **Camada Epistemológica**: \`${m.tier}\` (status: \`${m.status}\`)`,
+        `- **Versão / Última Revisão**: \`${m.version}\` / \`${m.last_reviewed}\``,
+        `- **Fontes Primárias**: ${m.sources.join(" | ") || "n/d"}`,
+        `- **Limitações**: ${m.limitations.join(" | ") || "nenhuma declarada"}`,
+        `- **Documentos Relacionados**: ${m.related.join(", ") || "nenhum"}`,
+        "",
+        "---",
+        "",
+        doc.body,
+      ].join("\n")
+      sendResponse({
+        jsonrpc: "2.0",
+        id,
+        result: { content: [{ type: "text", text: redactSensitiveContent(header).text }] },
+      })
+      return
+    }
+
+    if (toolName === "get_document_metadata") {
+      const meta = engine.getDocumentMetadata(String(callArgs.docPath ?? ""))
+      sendResponse({
+        jsonrpc: "2.0",
+        id,
+        result: { content: [{ type: "text", text: JSON.stringify(meta, null, 2) }] },
+      })
+      return
+    }
+
+    if (toolName === "get_related_documents") {
+      const rel = engine.getRelatedDocuments(String(callArgs.docPath ?? ""))
+      const lines =
+        rel.related.length === 0
+          ? `Nenhum documento relacionado encontrado para \`${rel.sourceDocPath}\`.`
+          : [
+              `# Relações a partir de \`${rel.sourceDocPath}\``,
+              ...rel.related.map(
+                (r) => `- **${r.title}** (\`${r.docPath}\` | \`${r.tier}\` | ${r.relationType}): ${r.detail}`,
+              ),
+            ].join("\n")
+      sendResponse({
+        jsonrpc: "2.0",
+        id,
+        result: { content: [{ type: "text", text: lines }] },
+      })
+      return
+    }
+
+    if (toolName === "create_draft_note") {
+      const toStrArr = (v: unknown) =>
+        Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : undefined
+      const out = engine.createDraftNote({
+        slug: String(callArgs.slug ?? ""),
+        title: String(callArgs.title ?? "Rascunho Técnico"),
+        category: typeof callArgs.category === "string" ? callArgs.category : undefined,
+        factsObserved: toStrArr(callArgs.factsObserved) ?? [],
+        hypotheses: toStrArr(callArgs.hypotheses),
+        inferences: toStrArr(callArgs.inferences),
+        uncertainties: toStrArr(callArgs.uncertainties),
+        sources: toStrArr(callArgs.sources),
+        limitations: toStrArr(callArgs.limitations),
+        relatedDocs: toStrArr(callArgs.relatedDocs),
+        tags: toStrArr(callArgs.tags),
+        additionalMarkdown:
+          typeof callArgs.additionalMarkdown === "string" ? callArgs.additionalMarkdown : undefined,
+      })
+      sendResponse({
+        jsonrpc: "2.0",
+        id,
+        result: { content: [{ type: "text", text: out.message }] },
+      })
+      return
+    }
+
+    if (toolName === "propose_document_update") {
+      const toStrArr = (v: unknown) =>
+        Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []
+      const out = engine.proposeDocumentUpdate({
+        targetDocPath: String(callArgs.targetDocPath ?? ""),
+        targetSection: String(callArgs.targetSection ?? "Geral"),
+        rationale: String(callArgs.rationale ?? ""),
+        proposedContent: String(callArgs.proposedContent ?? ""),
+        primarySources: toStrArr(callArgs.primarySources),
+        limitations: toStrArr(callArgs.limitations),
+      })
+      sendResponse({
+        jsonrpc: "2.0",
+        id,
+        result: { content: [{ type: "text", text: out.message }] },
+      })
+      return
+    }
+
+    if (toolName === "investigation_memory_read") {
+      const mem = engine.readInvestigationMemory(
+        typeof callArgs.investigationId === "string" ? callArgs.investigationId : "sessao-atual",
+      )
+      sendResponse({
+        jsonrpc: "2.0",
+        id,
+        result: {
+          content: [{ type: "text", text: redactSensitiveContent(JSON.stringify(mem, null, 2)).text }],
+        },
+      })
+      return
+    }
+
+    if (toolName === "investigation_memory_update") {
+      const nowIso = new Date().toISOString()
+      const hypotheses = Array.isArray(callArgs.hypotheses)
+        ? (callArgs.hypotheses as Array<Record<string, unknown>>).map(
+            (h): InvestigationHypothesis => ({
+              id: String(h.id ?? "H1"),
+              title: String(h.title ?? ""),
+              expectedBehavior: String(h.expectedBehavior ?? ""),
+              suspectedBehavior: String(h.suspectedBehavior ?? ""),
+              fragileAssumption: String(h.fragileAssumption ?? ""),
+              technicalRationale: String(h.technicalRationale ?? ""),
+              evidenceNeeded: String(h.evidenceNeeded ?? ""),
+              alternativeExplanations: Array.isArray(h.alternativeExplanations)
+                ? h.alternativeExplanations.map(String)
+                : [],
+              status:
+                h.status === "testing" ||
+                h.status === "supported" ||
+                h.status === "refuted" ||
+                h.status === "inconclusive"
+                  ? h.status
+                  : "proposed",
+              updatedAt: nowIso,
+            }),
+          )
+        : undefined
+
+      const experiments = Array.isArray(callArgs.experiments)
+        ? (callArgs.experiments as Array<Record<string, unknown>>).map(
+            (e): InvestigationExperimentRecord => ({
+              id: String(e.id ?? "EXP-1"),
+              hypothesisId: typeof e.hypothesisId === "string" ? e.hypothesisId : undefined,
+              question: String(e.question ?? ""),
+              toolUsed: String(e.toolUsed ?? ""),
+              initialConditions: String(e.initialConditions ?? ""),
+              modifiedVariable: String(e.modifiedVariable ?? ""),
+              expectedOutcome: String(e.expectedOutcome ?? ""),
+              observedOutcome: String(e.observedOutcome ?? ""),
+              verdict:
+                e.verdict === "supports_hypothesis" ||
+                e.verdict === "weakens_hypothesis" ||
+                e.verdict === "negative_result"
+                  ? e.verdict
+                  : "inconclusive",
+              recordedAt: nowIso,
+            }),
+          )
+        : undefined
+
+      const externalReferences = Array.isArray(callArgs.externalReferences)
+        ? (callArgs.externalReferences as Array<Record<string, unknown>>).map(
+            (r): ExternalReferenceRecord => ({
+              title: String(r.title ?? ""),
+              sourceUrlOrRef: String(r.sourceUrlOrRef ?? ""),
+              versionOrCommit: typeof r.versionOrCommit === "string" ? r.versionOrCommit : undefined,
+              accessedAt: nowIso,
+              applicabilityNote: String(r.applicabilityNote ?? ""),
+            }),
+          )
+        : undefined
+
+      const toStrArr = (v: unknown) =>
+        Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : undefined
+
+      const sysObj =
+        callArgs.systemModel && typeof callArgs.systemModel === "object"
+          ? (callArgs.systemModel as Record<string, unknown>)
+          : undefined
+
+      const out = engine.updateInvestigationMemory({
+        investigationId:
+          typeof callArgs.investigationId === "string" ? callArgs.investigationId : "sessao-atual",
+        mission: typeof callArgs.mission === "string" ? callArgs.mission : undefined,
+        authorizedScope:
+          typeof callArgs.authorizedScope === "string" ? callArgs.authorizedScope : undefined,
+        systemModel: sysObj
+          ? {
+              components: toStrArr(sysObj.components) ?? [],
+              technologies: toStrArr(sysObj.technologies) ?? [],
+              dataFlows: toStrArr(sysObj.dataFlows) ?? [],
+              trustBoundaries: toStrArr(sysObj.trustBoundaries) ?? [],
+              identitiesAndPermissions: toStrArr(sysObj.identitiesAndPermissions) ?? [],
+            }
+          : undefined,
+        hypotheses,
+        experiments,
+        negativeResults: toStrArr(callArgs.negativeResults),
+        decisions: toStrArr(callArgs.decisions),
+        externalReferences,
+        openQuestions: toStrArr(callArgs.openQuestions),
+        nextSteps: toStrArr(callArgs.nextSteps),
+      })
+
+      sendResponse({
+        jsonrpc: "2.0",
+        id,
+        result: {
+          content: [
+            {
+              type: "text",
+              text: `Memória investigativa atualizada (${out.memory.investigationId}) e sincronizada em vault/${out.vaultMirrorPath}.`,
+            },
+          ],
+        },
+      })
+      return
+    }
+  } catch (err) {
+    sendResponse({
+      jsonrpc: "2.0",
+      id,
+      result: {
+        isError: true,
+        content: [{ type: "text", text: err instanceof Error ? err.message : String(err) }],
+      },
+    })
+  }
+}
+
 async function handleRpc(msg: JsonRpcRequest): Promise<void> {
   if (msg.method === "notifications/initialized" || msg.id === undefined) {
     if (msg.method === "notifications/initialized") initializedClient = true
@@ -1837,7 +2357,7 @@ async function handleRpc(msg: JsonRpcRequest): Promise<void> {
         },
         serverInfo: {
           name: isHubMode ? "cyberlab-arsenal" : `cyberlab-mcp-${slotId}`,
-          version: "6.1.0",
+          version: "6.2.0",
         },
       },
     })
@@ -1921,6 +2441,11 @@ async function handleRpc(msg: JsonRpcRequest): Promise<void> {
     const params = (msg.params ?? {}) as { name?: string; arguments?: Record<string, unknown> }
     const toolName = params.name ?? ""
     const callArgs = params.arguments ?? {}
+
+    if (KNOWLEDGE_TOOL_NAMES.has(toolName)) {
+      handleKnowledgeAndMemoryToolCall(msg.id ?? null, toolName, callArgs)
+      return
+    }
 
     if (toolName.startsWith("burp_suite_")) {
       await handleBurpToolCall(msg.id ?? null, toolName, callArgs)

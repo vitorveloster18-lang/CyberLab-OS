@@ -42,6 +42,7 @@ tsconfig.tsbuildinfo
 # CyberLab OS local runtime state & forensic evidence artifacts
 .cyberlab/
 .cyberlab-data/
+/vault/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm

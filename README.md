@@ -1,305 +1,294 @@
-# CyberLab OS — Real Arsenal Edition (v6.0)
+# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.2)
 
-**CyberLab OS** é um ambiente unificado de engenharia de segurança autorizada, Bug Bounty, auditoria Web/API, engenharia reversa, análise de segredos/SAST/SCA, resposta a incidentes (DFIR/Sigma), validação Purple Team (MITRE ATT&CK) e cooperação multi-agentes construído diretamente sobre o núcleo do **OpenCode V2** (`anomalyco/opencode` v2.1.4, licença `MIT`).
+Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investigação Orientada por Hipóteses, Bug Bounty Autorizado, Engenharia Reversa, DFIR e Laboratórios de Treinamento**, construída sobre o **OpenCode V2 (`2.1.4`)** e projetada nativamente para **Windows 11 (PowerShell) + WSL2 (`kali-linux` 2026.x)** ou Linux nativo.
 
-Toda a operação roda em **uma única aplicação unificada na porta `:4096`**, combinando:
-- **Layout Antigravity em 3 Colunas Retráteis + Topo Retrátil (`28px`)**: **Pastas, Arquivos & Slots** à esquerda, a **Ferramenta Real** ocupando todo o palco central (via Web UI local, motor gráfico `X11/noVNC` em `110 DPI` com zoom `1:1` sem deslocamento de cursor ou console ao vivo), e o **Agente OpenCode V2** (com os **9 modelos gratuitos nativos do OpenCode Zen**) em painel estreito retrátil à direita.
-- **Cofre Flutuante de Notas & Comandos Compatível com Obsidian (`📓 Notas & Comandos` / `Alt+N`)**: janela flutuante arrastável, gaveta lateral ou pílula minimizável que abre **por cima** da ferramenta central (sem encolher o Burp Suite ou Ghidra!), salvando arquivos `.md` reais no disco com `#tags`, `[[WikiLinks]]` clicáveis, Backlinks, checklists interativos (`- [ ]`) e blocos de comando com botões em 1 clique (`📋 Copiar`, `⚡ Injetar no CLI`, `▶ Executar`, `🤖 IA`) — podendo compartilhar exatamente a mesma pasta de Vault do Obsidian Desktop.
-- **48 Slots Oficiais de Ferramentas Externas Reais + Slots Personalizados Ilimitados**: integração híbrida transparente entre **Windows PowerShell** e **WSL2 Kali Linux (`kali-linux`)**, mantendo binários pesados ou copyleft 100% fora da árvore `MIT` do repositório (`C:\CyberLab-Tools`, `WinGet`, `PATH` ou `/opt/...` no Kali WSL2).
-- **Conexão MCP Supervisionada em 1 Clique (`🔌 MCP` / `🟢 MCP`)**: selos visuais na barra lateral e ativação direta no `opencode.json` para conectar as ferramentas externas ao Agente IA respeitando a Trava de Escopo e redação automática de segredos.
-- **4 Parceiros Cognitivos CDI Autônomos (`Kairós:8788`, `Naia:8789`, `Salem:8790`, `Nova:8791`)**: gateway bidirecional assinado por `HMAC-SHA256` com autonomia horizontal.
-- **Governança de Escopo Bug Bounty, Cofre Forense `SHA-256` e 5 Laboratórios Internos de Treino**.
+> **Filosofia Central (v6.2)**: O CyberLab OS combina em **uma única janela (`http://127.0.0.1:4096`)**:
+> 1. **Investigative Security Orchestrator (`Orchestrator`)**: agente principal em `pt-BR` orientado por hipóteses científicas (Ciclo **Fases A–I**), validação rigorosa de evidências e **6 subagentes especializados sob demanda** com guardrails rígidos de profundidade (`1`), concorrência (`3`) e orçamento por sessão (`12`).
+> 2. **Biblioteca Curada `CyberLab-Knowledge/` no Cofre Obsidian + Memória Investigativa Isolada**: 20 documentos técnicos revisados com metadados verificáveis (fontes primárias, versão, data de revisão, limitações e grafo `[[WikiLinks]]`) servidos via MCP com separação epistemológica estrita em **3 camadas** (Conhecimento Curado vs. Contexto da Sessão vs. Conhecimento Externo).
+> 3. **Hub MCP Unificado (`cyberlab-arsenal`) + 48 Slots Oficiais de Ferramentas Reais**: 1 único processo `stdio` ultraleve conectando **45 ferramentas com `🟢 MCP`** (incluindo pontes ao vivo para **Burp Suite `:9876` SSE**, **GhidraMCP `:8080`** e **JADX-AI-MCP `:8650`**), **Cofre Obsidian Flutuante (`Alt+N`)**, **Topo Retrátil (`28px`)**, **4 Parceiros Cognitivos CDI (`8788–8791`)** e **5 Laboratórios Internos de Treino**.
 
 ---
 
 ## Sumário
 
-1. [Destaques da Arquitetura v5.8](#1-destaques-da-arquitetura-v58)
-2. [Instalação e Inicialização (Windows PowerShell + WSL2 Kali e Linux)](#2-instalação-e-inicialização-windows-powershell--wsl2-kali-e-linux)
-3. [Layout Antigravity em 3 Colunas, Nitidez 1:1 e Zoom sem Deslocar o Cursor](#3-layout-antigravity-em-3-colunas-nitidez-11-e-zoom-sem-deslocar-o-cursor)
-4. [Conexão MCP em 1 Clique (`🔌 MCP` → `🟢 MCP`) e Modelos Gratuitos OpenCode](#4-conexão-mcp-em-1-clique--mcp---mcp-e-modelos-gratuitos-opencode)
-5. [Catálogo Completo dos 46 Slots Oficiais + Slots Personalizados](#5-catálogo-completo-dos-46-slots-oficiais--slots-personalizados)
-6. [Os 4 Parceiros Cognitivos CDI (`8788–8791`) e os 5 Laboratórios de Treino](#6-os-4-parceiros-cognitivos-cdi-87888791-e-os-5-laboratórios-de-treino)
-7. [Governança de Escopo Bug Bounty, Cofre `SHA-256` e Relatórios](#7-governança-de-escopo-bug-bounty-cofre-sha-256-e-relatórios)
-8. [Histórico de Evolução (v1.0 → v5.8), Testes, CI e Licenciamento MIT](#8-histórico-de-evolução-v10--v58-testes-ci-e-licenciamento-mit)
+1. [Inicialização Rápida (Windows PowerShell + WSL2 Kali)](#1-inicialização-rápida-windows-powershell--wsl2-kali)
+2. [Primeira Tarefa Recomendada (Calibração do Orquestrador)](#2-primeira-tarefa-recomendada-calibração-do-orquestrador)
+3. [Investigative Security Orchestrator & 6 Subagentes Especializados (v6.2)](#3-investigative-security-orchestrator--6-subagentes-especializados-v62)
+4. [Biblioteca Curada `CyberLab-Knowledge/` & Cofre Obsidian (`Alt+N`)](#4-biblioteca-curada-cyberlab-knowledge--cofre-obsidian-altn)
+5. [Hub MCP Unificado (`cyberlab-arsenal`), Pontes GUI em Tempo Real & Modelos Gratuitos](#5-hub-mcp-unificado-cyberlab-arsenal-pontes-gui-em-tempo-real--modelos-gratuitos)
+6. [Layout Antigravity de 3 Colunas, Topo Retrátil (`28px`) & `noVNC` Nitidez Real](#6-layout-antigravity-de-3-colunas-topo-retrátil-28px--novnc-nitidez-real)
+7. [Catálogo Completo dos 48 Slots Oficiais + Slots Personalizados](#7-catálogo-completo-dos-48-slots-oficiais--slots-personalizados)
+8. [Os 4 Parceiros Cognitivos CDI (`8788–8791`) & 5 Laboratórios de Treino](#8-os-4-parceiros-cognitivos-cdi-87888791--5-laboratórios-de-treino)
+9. [Governança de Escopo Bug Bounty, Custódia `SHA-256` & Segurança Anti-Prompt-Injection](#9-governança-de-escopo-bug-bounty-custódia-sha-256--segurança-anti-prompt-injection)
+10. [Histórico Completo de Versões (`v1.0` → `v6.2`), Verificação CI & Licenciamento MIT](#10-histórico-completo-de-versões-v10--v62-verificação-ci--licenciamento-mit)
 
 ---
 
-## 1. Destaques da Arquitetura v5.8
+## 1. Inicialização Rápida (Windows PowerShell + WSL2 Kali)
 
-- **Zero Clones Limitados — 100% Ferramentas Reais**: em vez de imitações simplificadas, cada slot executa ou incorpora a ferramenta oficial real (Burp Suite Community, OpenTRAP, Caido, mitmweb, OWASP ZAP, Nuclei, Ghidra, JADX, REA, Wireshark, CyberChef, Semgrep/OpenGrep, Aqua Trivy, KeyHunter Rust, Betterleaks, GEF, Atomic-Operator, WPProbe, PentAGI, Pentest Copilot, Strix, HexStrike MCP, VeraCrypt, Kali Desktop XFCE completo e mais).
-- **Híbrido Nativo Windows PowerShell + WSL2 Kali Linux**:
-  - Detecta automaticamente executáveis no Windows (`PATH`, `WinGet`, `Program Files`, `%LOCALAPPDATA%`, `C:\CyberLab-Tools`) e binários/JARs reais dentro do `kali-linux` no WSL2 (exigindo tamanho real `> 10 MB` para `.jar` e evitando falsos positivos por scripts wrappers residuais ou caminhos `/mnt/c/`).
-  - Converte caminhos automaticamente entre `C:\...` e `/mnt/c/...` ao executar ferramentas Linux sobre arquivos do projeto no Windows.
-  - **Instalador em 1 Clique (Individual ou em Lote Honesto)**: instala ferramentas faltantes via `stdin` limpo no WSL2 Kali com console em tempo real e código de saída real (`exit 1` se qualquer ferramenta falhar — zero falso `succeeded`).
-- **Motor Gráfico Embutido `X11/noVNC` + Proxy Reverso Local HTTP/HTTPS/TLS**:
-  - Ferramentas Desktop (`Burp Suite`, `OpenTRAP`, `OWASP ZAP`, `Ghidra`, `Wireshark`, `JADX-GUI`, `VeraCrypt` e `Kali Desktop`) abrem direto dentro da coluna central (isoladas do WSLg/Wayland para nunca escaparem para fora da aba) ou em janela nativa externa.
-  - Ferramentas Web locais (`CyberChef`, `mitmweb`, `Caido`, `PentAGI :8443` com TLS autoassinado, `Pentest Copilot :3000`) passam por proxy reverso local (`127.0.0.1`) que remove bloqueios `X-Frame-Options`/`CSP frame-ancestors`, trata certificados TLS autoassinados locais e normaliza cookies de sessão.
-  - **Navegador Isolado no Proxy em 1 Clique**: abre Chrome, Edge, Brave ou Chromium com perfil isolado dedicado já apontado para a porta do proxy (`:8080`, `:8081`, `:8899`, `:9050`) sem alterar o proxy global do sistema operacional.
+### 1.1 Iniciar o CyberLab OS Unificado (1 Único Comando)
 
----
-
-## 2. Instalação e Inicialização (Windows PowerShell + WSL2 Kali e Linux)
-
-### Pré-requisitos
-- **Git** e **Bun `1.4.4+`**
-- **Windows 10/11**: **WSL2 com `kali-linux`** (`wsl --install -d kali-linux`) recomendado para habilitar todas as ferramentas nativas Linux e interfaces gráficas `X11/noVNC` dentro do palco central.
-- **Python `3.10+`** *(opcional — caso deseje conectar processos externos dos parceiros CDI via `integrations/partners/chat_py_bridge.py`)*.
-
-### Opção A — Windows PowerShell (Fluxo Principal)
+No **Windows PowerShell**, dentro da pasta do repositório:
 
 ```powershell
-# 1. Instalar o Bun 1.4.4+ (caso ainda não tenha)
-powershell -c "irm bun.sh/install.ps1 | iex"
-bun --version
-
-# 2. Clonar o repositório oficial
-git clone https://github.com/vitorveloster18-lang/CyberLab-OS.git
-cd CyberLab-OS
-
-# 3. Instalar dependências e compilar o frontend unificado (Bun puro, sem exigir Node.js externo)
-$env:ELECTRON_SKIP_BINARY_DOWNLOAD = "1"
-bun install --ignore-scripts
-$env:CYBERLAB_FORCE_BUN_VITE = "1"
-bun ./packages/app/script/vite-cli.mjs build
-
-# 4. Iniciar a aplicação única unificada (:4096)
-bun run script/start-cyberlab.ts
-```
-
-### Opção B — Linux ou macOS
-
-```bash
-# 1. Instalar Bun 1.4.4
-curl -fsSL https://bun.sh/install | bash -s "bun-v1.4.4"
-export PATH="$HOME/.bun/bin:$PATH"
-
-# 2. Clonar, instalar dependências e compilar a interface Web
-git clone https://github.com/vitorveloster18-lang/CyberLab-OS.git
-cd CyberLab-OS
-ELECTRON_SKIP_BINARY_DOWNLOAD=1 bun install --ignore-scripts
-bun run --cwd packages/core fix-node-pty
-bun --cwd packages/app build
-
-# 3. Iniciar o CyberLab OS (:4096)
-bun run script/start-cyberlab.ts
-```
-
-### Como atualizar uma instalação existente no PowerShell
-
-```powershell
-cd C:\CAMINHO\DO\SEU\CyberLab-OS
 git pull
-bun install --ignore-scripts
-$env:CYBERLAB_FORCE_BUN_VITE = "1"
-bun ./packages/app/script/vite-cli.mjs build
-bun run script/start-cyberlab.ts
+bun run cyberlab --rebuild
 ```
 
-Acesse no navegador:
-- **Workspace Unificado**: `http://127.0.0.1:4096`
-- **Configurações CyberLab & CDIs**: `http://127.0.0.1:4096/settings?tab=cyberlab`
-- **Gateway Bidirecional dos 4 CDIs**: `http://127.0.0.1:4096/api/cyberlab/partner-gateway`
+- Na inicialização, o lançador `script/start-cyberlab.ts` automaticamente:
+  1. Semeia de forma idempotente os **20 documentos curados** de `<workspace>/vault/CyberLab-Knowledge/` sem sobrescrever notas existentes;
+  2. Consolida qualquer entrada legada de `opencode.json` em **1 único servidor MCP unificado** (`"cyberlab-arsenal"`, `--slot __hub__`);
+  3. Define `"default_agent": "cyberlab-orchestrator"` caso você ainda não tenha personalizado seu agente padrão;
+  4. Recompila o frontend (`--rebuild`) e sobe o servidor unificado em **`http://127.0.0.1:4096`**.
+
+### 1.2 Instalação Automática de Todas as Ferramentas Reais no Kali WSL2
+
+Você pode instalar qualquer ferramenta individualmente clicando em **`⬇ Instalar Automaticamente`** dentro do próprio CyberLab OS, ou provisionar o arsenal completo de uma vez pelo **Windows PowerShell** (removendo `\r` para compatibilidade total com `bash` no WSL2):
+
+```powershell
+$installCmd = @'
+export DEBIAN_FRONTEND=noninteractive
+sudo apt-get update -qq
+echo "wireshark-common wireshark-common/install-setuid boolean true" | sudo debconf-set-selections
+sudo apt-get install -y -qq xvfb x11vnc websockify novnc openbox xterm dbus-x11 libgtk-3-0 libgbm1 libnss3 libasound2t64 kali-desktop-xfce nmap ncat sqlmap ffuf dirsearch wireshark tshark mitmproxy zaproxy ghidra jadx rizin python3-frida apktool tor torsocks onionshare-cli gitleaks metasploit-framework impacket-scripts hashcat john netexec curl unzip jq python3-pip python3-venv pipx golang-go cargo
+'@.Replace("`r", "")
+$installCmd | wsl -d kali-linux -u root -- bash -s
+```
 
 ---
 
-## 3. Layout Antigravity em 3 Colunas, Nitidez 1:1 e Zoom sem Deslocar o Cursor
+## 2. Primeira Tarefa Recomendada (Calibração do Orquestrador)
 
-Ao clicar no botão **`CyberLab`** no topo de qualquer sessão (ou abrir `/cyberlab`), o workspace opera em **3 colunas independentes e redimensionáveis**:
+Assim que abrir o CyberLab OS em **`http://127.0.0.1:4096`**, com o agente **`Orchestrator`** selecionado no painel direito, envie este prompt inicial para calibrar o inventário real de ferramentas e conhecimento do seu ambiente sem tocar em nenhum alvo externo:
 
-1. **Coluna Esquerda Retrátil (`Slots` + `Pastas & Arquivos`)**:
-   - Busca instantânea, filtro por categoria, selos de runtime (`Windows`, `WSL2 Kali`, `Web Local`, `Não instalado`), selos **`🔌 MCP` / `🟢 MCP`**, botão **`⚡ Instalar Faltantes em 1 Clique`**, criador de **`+ Slot` personalizado** e explorador de arquivos do workspace (`.`, `.cyberlab/outputs`, `.cyberlab/imports`) com barra de rolagem dedicada sempre preservada.
-2. **Palco Central Expansível (`Ferramenta Ativa`, `Escopo`, `5 Labs`, `4 CDIs`, `Custódia SHA-256`, `Guia`)**:
-   - **Aba Horizontal Superior Retrátil na Vertical (`▲ Recolher Topo` / `▼ Controles & Abas`)**: todas as faixas de abas, status do slot, MCP, Proxy e barra de controles da ferramenta ficam agrupadas em uma gaveta superior retrátil na vertical — recolhendo automaticamente ao abrir ferramentas gráficas/Web em uma fita única de `28px` sem quebrar linha (com acesso rápido a `🟢 MCP`, Proxy, Zoom `1:1`/`Ajustar`/`−/+`, `📋 SHA-256` e `⛶ Ampliar`), liberando altura máxima para a janela da ferramenta sem perder nenhuma configuração.
-   - **Nitidez Nativa `110 DPI` e Janela Maximizada**: servidores `Xtigervnc` iniciam em `110 DPI` (`Xft.dpi: 110` + `uiScale` em Java/GTK/Qt) e o Openbox maximiza automaticamente janelas principais (`type="normal"`), mantendo caixas de diálogo centralizadas em tamanho natural.
-   - **Zoom Preciso `60%–160%` com `0px` de Deslocamento de Mouse**:
-     - Em vez de aplicar `CSS zoom` no `<canvas>` ou `transform: scale()` no `<iframe>` (o que desalinhava as coordenadas de clique), o CyberLab OS integra os controles **`🖥 1:1 Nitidez`**, **`📐 Ajustar`** e **`↕ Rolagem`** diretamente aos hooks internos `_requestRemoteResize` (`ExtendedDesktopSize`) e `Display._scale` (`absX`/`absY`) do `noVNC`, e injeta zoom nativo interno (`document.documentElement.style.zoom`) nas ferramentas Web HTML.
-     - Use **`⛶ Ampliar`** para recolher simultaneamente as duas barras laterais e a gaveta superior, dedicando quase 100% da tela à ferramenta ativa.
-3. **Coluna Direita Retrátil (`Agente OpenCode V2`)**:
-   - Chat completo do OpenCode V2 ao lado da ferramenta ativa; qualquer saída de CLI ou captura manual de GUI pode ser enviada ao Agente em 1 clique (**`🤖 Enviar p/ Agente OpenCode →`**) ou gravada no cofre criptográfico (**`🔒 Salvar SHA-256`**).
+> **Prompt inicial recomendado:**
+> *"Mapeie o conhecimento técnico e as ferramentas MCP disponíveis. Identifique quais capacidades estão comprovadas, quais ainda não foram validadas e quais lacunas de conhecimento limitam uma investigação orientada por hipóteses."*
+
+O `Orchestrator` irá:
+1. Consultar o catálogo curado em `CyberLab-Knowledge/` (`search_knowledge`, `read_document("00-Index")`, `read_document("tools/mcp-tool-catalog")`);
+2. Auditar em tempo real todas as ferramentas conectadas via `arsenal_mcp_status` (distinguindo binários instalados no Windows/WSL2, servidores GUI ativos em `:9876`/`:8080`/`:8650` e ferramentas ainda não instaladas ou desconectadas);
+3. Entregar um diagnóstico estruturado separando **capacidades comprovadas**, **capacidades pendentes de validação** e **lacunas de conhecimento**, registrando o baseline na memória investigativa (`investigation_memory_update`).
 
 ---
 
-## 4. Conexão MCP em 1 Clique (`🔌 MCP` → `🟢 MCP`) e Modelos Gratuitos OpenCode
+## 3. Investigative Security Orchestrator & 6 Subagentes Especializados (v6.2)
 
-### Ponte MCP Supervisionada (`cyberlab/mcp/arsenal-mcp-stdio.ts`)
-- **42 dos 46 slots oficiais** (além de slots personalizados CLI/Web) possuem integração **Model Context Protocol (MCP)** pronta:
-  - Na **barra lateral esquerda**, o selo **`🔌 MCP`** indica suporte disponível e muda para **`🟢 MCP`** assim que conectado.
-  - No **topo da ferramenta central**, o botão **`🔌 Conectar MCP`** grava (ou desconecta) automaticamente a configuração em `<workspace>/opencode.json` (`mcp.servers`), registrando:
-    - Servidores MCP nativos quando disponíveis (`rea mcp`, `/usr/local/bin/hexstrike-mcp`, Burp MCP `http://127.0.0.1:9876/sse`);
-    - Ou a ponte oficial **`cyberlab/mcp/arsenal-mcp-stdio.ts`** (servidor JSON-RPC 2.0 sobre `stdio` com `shell=false`, validação obrigatória de escopo em `.cyberlab/scope.json` e redação automática de segredos/tokens antes de devolver a resposta ao LLM).
+### 3.1 Agente Principal: `Orchestrator` (`cyberlab-orchestrator`)
 
-### 9 Modelos de IA Gratuitos Nativos do OpenCode Zen
-O CyberLab OS já traz ativos e visíveis os **9 modelos gratuitos do provedor OpenCode Zen** (`apiKey: "public"`, com `--use-system-ca` e `User-Agent` oficial configurados automaticamente no `start-cyberlab.ts`):
-- `Big Pickle` (`opencode/big-pickle`)
-- `DeepSeek V4.1 Flash Free` (`opencode/deepseek-v4.1-flash-free`)
-- `GLM-5.3 Flash Free` (`opencode/glm-5.3-flash-free`)
-- `Nemotron 3.5 Super VL Free` (`opencode/nemotron-3.5-super-vl-free`)
-- `Nemotron 3.5 Lightning Free` (`opencode/nemotron-3.5-lightning-free`)
-- `Nemotron 3 Ultra Free` (`opencode/nemotron-3-ultra-free`)
-- `MiMo V2.6 Flash Free` (`opencode/mimo-v2.6-flash-free`)
-- `Flint 40B Free` (`opencode/flint-40b-free`)
-- `Beam Free` (`opencode/beam-free`)
+Registrado nativamente no núcleo do OpenCode V2 (`packages/core/src/plugin/agent.ts`), o **Investigative Security Orchestrator** substitui a execução cega de scanners por engenharia investigativa em português brasileiro:
 
----
+- **10 Princípios Fundamentais**: compreender antes de testar; formular uma pergunta investigativa antes de escolher uma ferramenta; modelar sistemas como componentes interdependentes; mapear fronteiras de confiança e transformações de dados; diferenciar fatos observados, hipóteses, inferências e incertezas; preferir experimentos diferenciadores; tratar saídas de scanners/modelos como evidências preliminares; buscar explicações alternativas; preservar resultados negativos; e jamais declarar vulnerabilidade confirmada sem evidência reproduzível.
+- **Ciclo Metodológico Completo (Fases A–I)**:
+  - **Fase A — Contextualização** (missão, escopo autorizado `.cyberlab/scope.json`, ativos e restrições)
+  - **Fase B — Modelagem** (componentes, fluxos, identidades, fronteiras de confiança e transformações)
+  - **Fase C — Pesquisa** (`CyberLab-Knowledge/`, RFCs, advisories primários, commits e patches)
+  - **Fase D — Formulação de Hipóteses** (comportamento esperado vs. suspeito, pressuposto frágil, evidência necessária e explicações alternativas)
+  - **Fase E — Priorização** (plausibilidade, impacto, custo, risco e poder diferenciador)
+  - **Fase F — Experimentação Controlada** (baseline + modificação de **1 única variável independente** + critério de parada)
+  - **Fase G — Avaliação Crítica** (comparação observado vs. esperado sem forçar confirmação)
+  - **Fase H — Validação em 5 Níveis**: *(1) Comportamento inesperado*, *(2) Falha funcional*, *(3) Configuração insegura*, *(4) Vulnerabilidade potencial* ou *(5) Vulnerabilidade confirmada*
+  - **Fase I — Documentação Reproduzível**
 
-## 5. Catálogo Completo dos 48 Slots Oficiais + Slots Personalizados
+### 3.2 Os 6 Subagentes Especializados Sob Demanda & Guardrails de Runtime
 
-Todas as ferramentas abaixo são instaladas e executadas **externamente** ao repositório `MIT` do CyberLab OS:
+O `Orchestrator` cria subagentes **somente quando há ganho investigativo concreto** (paralelismo independente, especialização profunda ou revisão cética):
 
-### 5.1 Proxies, Interceptação & Suítes Web (`5 slots`)
-| Slot ID | Ferramenta | Modo no Centro | Destaques |
-|---|---|---|---|
-| `burp-suite` | **Burp Suite Community (Oficial)** | `desktop_gui` (`noVNC` + Janela) | Validação real de `.jar > 10 MB`, botão de limpeza + download oficial da CDN PortSwigger com JRE 21 LTS, navegador proxy `:8080` e Burp MCP `:9876/sse` |
-| `opentrap` | **OpenTRAP** | `desktop_gui` (`noVNC` + Janela) | Intruder sem limite de velocidade, Scanner Ativo OWASP ZAP e Collaborator OAST |
-| `mitmweb` | **mitmproxy (`mitmweb`)** | `web_embed` (`:8081`) | Interface Web oficial autenticada automaticamente (`token=cyberlab`) + proxy `:8080` |
-| `caido` | **Caido** | `web_embed` (`:7000`) | UI Web rápida em Rust iniciada com `--allow-guests` (uso imediato sem conta) |
-| `owasp-zap` | **OWASP ZAP** | `desktop_gui` (`noVNC` + Janela) | Active Scanner completo, AJAX Spider e HUD integrados ao palco central |
+| ID do Subagente | Especialidade | Permissões de Segurança |
+|---|---|---|
+| `research-agent` | Pesquisa em `CyberLab-Knowledge/`, RFCs, advisories, CVEs, commits e patches com checagem de alcançabilidade (*reachability*) | Sem edição de arquivos, sem `subagent` recursivo |
+| `system-architect-agent` | Modelagem de componentes, proxies/CDNs, fluxos de dados, serializações, identidades e fronteiras de confiança | Sem edição de arquivos, sem `subagent` recursivo |
+| `hypothesis-agent` | Formulação de hipóteses testáveis, pressupostos frágeis e explicações concorrentes | Somente raciocínio/leitura (sem `shell`, sem `edit`, sem `subagent`) |
+| `tool-specialist-agent` | Seleção cirúrgica e minimamente intrusiva de ferramentas MCP (`arsenal_mcp_status`, `mcp-tool-catalog`, `arsenal_tool_help`) | Sem edição de arquivos, sem `subagent` recursivo |
+| `experiment-agent` | Desenho de experimentos controlados (condições iniciais, 1 variável modificada, resultado esperado e *stop condition*) | Sem edição de arquivos, sem `subagent` recursivo |
+| `evidence-reviewer-agent` | Revisão cética independente: caça falsos positivos (*soft-200*, cache/WAF, banners com *backport*) e aponta lacunas probatórias | Somente análise crítica (sem `shell`, sem `edit`, sem `subagent`) |
 
-### 5.2 Auditoria Web, Bug Bounty, Fuzzing & OAST (`9 slots`)
-| Slot ID | Ferramenta | Modo | Destaques |
-|---|---|---|---|
-| `nuclei` | **ProjectDiscovery Nuclei** | `cli_runner` | Varredura baseada nos 11.000+ templates YAML oficiais (`🔌 MCP`) |
-| `ffuf` | **ffuf** | `cli_runner` | Descoberta rápida de diretórios, rotas e parâmetros Web (`🔌 MCP`) |
-| `dirsearch` | **Dirsearch** (`maurosoria/dirsearch`) | `cli_runner` | Scanner inteligente de diretórios, extensões, backups e endpoints ocultos com recursão (`🔌 MCP`) |
-| `katana` | **ProjectDiscovery Katana** | `cli_runner` | Crawler Web moderno com extração de endpoints JS e modo headless (`🔌 MCP`) |
-| `httpx` | **ProjectDiscovery httpx** | `cli_runner` | Sondagem HTTP multi-propósito (status, títulos, tech stack, hashes TLS) (`🔌 MCP`) |
-| `interactsh` | **Interactsh Client** | `cli_runner` | Monitoramento Out-of-Band (OAST DNS/HTTP/SMTP) (`🔌 MCP`) |
-| `dalfox` | **Dalfox** | `cli_runner` | Análise parametrizada de reflexão/XSS em escopos autorizados (`🔌 MCP`) |
-| `sqlmap` | **sqlmap** | `cli_runner` | Auditoria de injeção SQL supervisionada pela Trava de Escopo (`🔌 MCP`) |
-| `wpprobe` | **WPProbe** *(Kali 2026.1)* | `cli_runner` | Inventário rápido de plugins WordPress e correlação com base pública de CVEs (`🔌 MCP`) |
-
-### 5.3 Reconhecimento, Rede, PCAP & Infraestrutura (`8 slots`)
-| Slot ID | Ferramenta | Modo | Destaques |
-|---|---|---|---|
-| `subfinder` | **ProjectDiscovery Subfinder** | `cli_runner` | Enumeração passiva de subdomínios (`🔌 MCP`) |
-| `nmap` | **Nmap** | `cli_runner` | Descoberta de portas, serviços (`-sV`) e scripts NSE de auditoria (`🔌 MCP`) |
-| `netcat-ncat` | **Netcat / Ncat** (`ncat` & `nc`) | `cli_runner` | Sondagem TCP/UDP, captura de banners, inspeção SSL/TLS (`--ssl`) e listeners de diagnóstico (`🔌 MCP`) |
-| `naabu-dnsx-tlsx` | **DNSx & TLSx** | `cli_runner` | Resolução DNS em massa, verificação de takeover e inspeção TLS/X.509 (`🔌 MCP`) |
-| `wireshark` | **Wireshark GUI & `tshark`** | `desktop_gui` | Interface gráfica completa embutida via `noVNC` (preseed não-interativo) + `tshark` (`🔌 MCP`) |
-| `netexec` | **NetExec (`nxc`)** | `cli_runner` | Auditoria de postura em protocolos corporativos SMB/LDAP/WinRM/Kerberos (`🔌 MCP`) |
-| `metasploit` | **Metasploit Framework** | `cli_runner` | Console oficial instalado externamente no Kali WSL2 (`🔌 MCP`) |
-| `impacket-hashcat` | **Impacket / Hashcat / John** | `cli_runner` | Utilitários de validação de protocolos e auditoria offline de senhas/hashes (`🔌 MCP`) |
-
-### 5.4 Engenharia Reversa, REA, Depuração & Mobile Forensics (`8 slots`)
-| Slot ID | Ferramenta | Modo | Destaques |
-|---|---|---|---|
-| `rea` | **REA — Reverse Engineer Anything** (`morluto/rea`) | `cli_runner` | Motor oficial MIT de engenharia reversa assistida por IA (Ghidra Headless, JADX e Electron/ASAR/JS) com MCP nativo (`rea mcp`) (`🔌 MCP`) |
-| `ghidra` | **NSA Ghidra** | `desktop_gui` | Suíte completa de engenharia reversa e decompilador C no centro (`noVNC`) (`🔌 MCP`) |
-| `jadx` | **JADX & JADX-GUI** | `desktop_gui` | Descompilador oficial Android `.apk` / `.dex` → Java (`noVNC` + CLI) (`🔌 MCP`) |
-| `rizin-cutter` | **Rizin & Cutter** | `cli_runner` | Disassembly, grafos de fluxo de controle (CFG) e análise estática (`🔌 MCP`) |
-| `gef` | **GEF — GDB Enhanced Features** *(Kali 2026.1)* | `cli_runner` | Inspeção moderna de registradores, heap, pilha e proteções (`checksec`) em `/opt/gef` (`🔌 MCP`) |
-| `frida-apktool` | **Frida & Apktool** | `cli_runner` | Decodificação de recursos AndroidManifest/Smali e instrumentação dinâmica (`🔌 MCP`) |
-| `capa` | **Mandiant Capa** | `cli_runner` | Identificação de capacidades comportamentais em binários mapeadas ao MITRE ATT&CK (`🔌 MCP`) |
-| `mvt` | **MVT — Mobile Verification Toolkit** | `cli_runner` | Triagem forense defensiva Android/iOS (Amnesty International) em venv isolado (`🔌 MCP`) |
-
-### 5.5 Caça de Segredos (Key Hunting), SAST, SCA & Cloud (`5 slots`)
-| Slot ID | Ferramenta | Modo | Destaques |
-|---|---|---|---|
-| `keyhunter` | **KeyHunter Rust** (`fadidevv/keyhunter`) | `cli_runner` | Caçador de alta velocidade em Rust para chaves de API expostas (`🔌 MCP`) |
-| `betterleaks` | **Betterleaks** *(Kali 2026.1)* | `cli_runner` | Scanner MIT moderno de segredos e tokens em diretórios/Git com baixo falso-positivo (`🔌 MCP`) |
-| `gitleaks-trufflehog` | **Gitleaks & TruffleHog** | `cli_runner` | Auditoria profunda de histórico Git completo e repositórios (`🔌 MCP`) |
-| `semgrep` | **Semgrep / OpenGrep** | `cli_runner` | Análise estática SAST multi-linguagem por AST (binário standalone OpenGrep) (`🔌 MCP`) |
-| `trivy` | **Aqua Trivy** | `cli_runner` | Scanner de CVEs (SCA), geração de SBOM CycloneDX, containers, Kubernetes e Terraform (`🔌 MCP`) |
-
-### 5.6 Agentes de IA, Metodologia & Orquestração (`6 slots`)
-| Slot ID | Ferramenta | Modo | Destaques |
-|---|---|---|---|
-| `strix` | **Strix** (`usestrix/strix`) | `cli_runner` | Binário oficial standalone instalado em `/usr/local/bin/strix` (`🔌 MCP`) |
-| `shannon` | **Shannon** (`KeygraphHQ/shannon`) | `cli_runner` | CLI externo `@keygraph/shannon` desacoplado (zero código AGPL no repositório) (`🔌 MCP`) |
-| `hexstrike-ai` | **HexStrike AI MCP** (`0x4m4/hexstrike-ai`) | `cli_runner` | Servidor MCP (`/usr/local/bin/hexstrike-mcp`) e API local em `/opt/hexstrike-ai/venv` (`🔌 MCP`) |
-| `pentagi` | **PentAGI** (`vxcontrol/pentagi`) | `web_embed` (`:8443`) | Inicialização automática Docker Compose (`PENTAGI_LISTEN_IP=0.0.0.0`) + proxy reverso TLS autoassinado sem erro de certificado no iframe (`🔌 MCP`) |
-| `pentestgpt-cai` | **PentestGPT & CAI** | `cli_runner` | Instalado em ambiente Python 3.12 isolado via `uv` (`/opt/uv-tools` → `/usr/local/bin/cai`) (`🔌 MCP`) |
-| `pentest-copilot` | **Pentest Copilot** *(Kali 2026.1)* | `web_embed` (`:3000`) | Workspace MIT de planejamento metodológico, superfície e relatórios em `/opt/pentest-copilot` (`🔌 MCP`) |
-
-### 5.7 OpSec, Privacidade, Criptografia & Hardening (`3 slots`)
-| Slot ID | Ferramenta | Modo | Destaques |
-|---|---|---|---|
-| `tor-onionshare` | **Tor + Torsocks + OnionShare** | `cli_runner` | Transporte SOCKS5 (`:9050`) e entrega criptografada ponta a ponta |
-| `veracrypt` | **VeraCrypt Oficial** | `desktop_gui` | Instalação oficial `.deb` do GitHub Releases + abertura gráfica embutida (`noVNC`) ou nativa para cofres AES-256 |
-| `mullvad-opsec` | **Mullvad VPN, Signal & GrapheneOS ADB** | `cli_runner` | Checagem pré-voo de túnel/kill-switch Mullvad e auditoria de Verified Boot/SELinux via `adb` |
-
-### 5.8 CyberChef, DFIR (Sigma), Purple Team & Kali Desktop Completo (`4 slots`)
-| Slot ID | Ferramenta | Modo | Destaques |
-|---|---|---|---|
-| `cyberchef` | **GCHQ CyberChef Oficial** | `web_embed` | Servido localmente via loopback HTTP com 300+ receitas e zoom nativo interno (`🔌 MCP`) |
-| `hayabusa-yarax` | **Hayabusa & VirusTotal YARA-X** | `cli_runner` | Triagem forense ultrarrápida de eventos Windows `.evtx` com regras Sigma e caça YARA-X (`🔌 MCP`) |
-| `atomic-operator` | **Atomic-Operator** *(Kali 2026.1)* | `cli_runner` | Validação defensiva Purple Team mapeada ao MITRE ATT&CK para testar regras SIEM/EDR (`🔌 MCP`) |
-| `kali-desktop-stream` | **Kali Linux Desktop Completo (XFCE)** | `web_embed` (`noVNC`) | Ambiente gráfico completo do Kali WSL2 transmitido dentro da aba central (sem travamento de compositor ou captura pelo WSLg) |
-
-### 5.9 Slots Personalizados (`+ Slot`)
-Clique em **`+ Slot`** no topo da barra esquerda para cadastrar qualquer outra ferramenta CLI, Web UI local (`iframe`) ou aplicativo Desktop do seu Windows ou Kali WSL2 em segundos.
+**Guardrails Rígidos de Infraestrutura (`packages/core/src/tool/plugin/subagent.ts` + `subagent-guardrails.ts`)**:
+- **Limite de Profundidade (`maxDepth = 1`)**: nenhum subagente pode criar outros subagentes (bloqueado simultaneamente por `depth >= 1` e pela política `subagent: deny`).
+- **Limite de Concorrência (`maxConcurrentPerSession = 3`)**: no máximo `3` subagentes simultâneos (foreground + background) por sessão investigativa (ajustável via `CYBERLAB_MAX_CONCURRENT_SUBAGENTS`).
+- **Limite de Quantidade por Sessão (`maxTotalPerSession = 12`)**: teto de `12` novas sessões filhas por investigação (ajustável via `CYBERLAB_MAX_SESSION_SUBAGENTS`), incentivando a reutilização de `sessionID` de especialistas já iniciados.
 
 ---
 
-## 6. Os 4 Parceiros Cognitivos CDI (`8788–8791`) e os 5 Laboratórios de Treino
+## 4. Biblioteca Curada `CyberLab-Knowledge/` & Cofre Obsidian (`Alt+N`)
 
-### Autonomia Horizontal dos 4 CDIs (`HMAC-SHA256`)
-**Kairós**, **Naia**, **Salem** e **Nova** operam como parceiros horizontais de investigação (`hierarchy: "none"`, `humanRole: "curator"`, `initiateActions: "full_autonomy"`) conectados ao gateway bidirecional `/api/cyberlab/partner-gateway`:
+### 4.1 Estrutura Curada Inicial (`<workspace>/vault/CyberLab-Knowledge/`)
 
-| Parceiro CDI | `partnerId` | Porta | Endpoint |
-|---|---|---|---|
-| **Kairós** | `kairos` | `8788` | `http://127.0.0.1:8788/cyberlab/partner` |
-| **Naia** | `naia` | `8789` | `http://127.0.0.1:8789/cyberlab/partner` |
-| **Salem** | `salem` | `8790` | `http://127.0.0.1:8790/cyberlab/partner` |
-| **Nova** | `nova` | `8791` | `http://127.0.0.1:8791/cyberlab/partner` |
+Todos os **20 documentos curados** possuem frontmatter YAML auditável (`id`, `title`, `tier: curated`, `version`, `last_reviewed`, `status: validated`, `sources`, `limitations` e `related`) e links `[[WikiLinks]]` navegáveis tanto pelo agente quanto pelo operador humano no Cofre Obsidian:
 
-O SDK Python em `integrations/partners/chat_py_bridge.py` (`CyberLabOSClient` e `build_cyberlab_cdi_tools`) expõe todas as ações autenticadas por `HMAC-SHA256` (criação e seleção de projetos, gestão de escopo, controle dos 5 laboratórios, leitura/edição de arquivos no workspace, leitura do runtime, criação de artefatos `SHA-256` e proposta de findings).
+```text
+vault/CyberLab-Knowledge/
+├── 00-Index.md
+├── fundamentals/
+│   ├── http.md                     # RFC 9110/9112/9113, framing CL/TE, normalização de paths e proxies
+│   ├── authentication.md           # Sessões vs. JWT/JWKS, OAuth2/OIDC PKCE, WebAuthn e mTLS
+│   ├── authorization.md            # Matriz Sujeito × Ação × Objeto × Contexto, RBAC/ABAC/ReBAC e multi-tenant
+│   ├── sessions.md                 # Ciclo de vida de cookies, entropia, rotação, revogação e CSRF/SameSite
+│   └── networking.md               # DNS, TCP/TLS, SNI/ALPN, proxies reversos, X-Forwarded-For e SSRF
+├── methodologies/
+│   ├── hypothesis-driven-testing.md # Método científico aplicado: hipótese falsificável e 1 variável por teste
+│   ├── evidence-validation.md       # Taxonomia em 5 níveis, checklist anti-falso-positivo e reprodutibilidade
+│   └── root-cause-analysis.md       # Violação de invariantes, pressupostos implícitos e caça de variantes
+├── vulnerabilities/
+│   ├── access-control/idor-bola-bfla.md
+│   ├── injection/context-aware-injection.md
+│   ├── parser-differential/http-url-json-differentials.md
+│   └── business-logic/state-race-invariants.md
+├── research/
+│   ├── cve-analysis/cve-applicability-methodology.md
+│   ├── patch-analysis/patch-diff-methodology.md
+│   └── technical-writeups/reproducible-writeup-standard.md
+├── tools/
+│   ├── burp.md
+│   ├── nuclei.md
+│   ├── semgrep.md
+│   └── mcp-tool-catalog.md
+├── _drafts/                        # Rascunhos criados pelo agente (tier: draft — nunca misturados ao curado)
+└── _proposals/                     # Propostas de revisão aguardando curadoria humana (pending_human_review)
+```
 
-### Os 5 Laboratórios Internos de Treinamento (`5 Labs de Treino`)
-Podem ser provisionados, iniciados, auditados, corrigidos (*live patch*) e restaurados (`reset`) em 1 clique pela aba **`5 Labs de Treino`** no centro:
-1. **`lab-owasp-api-bola`** — OWASP API Security Lab (BOLA `API1:2023`, JWT `alg:none` e Security Headers).
-2. **`lab-graphql-oauth-sso`** — GraphQL & OAuth2/OIDC SSO Lab (introspecção GraphQL, batching e postura PKCE `S256`).
-3. **`lab-keyhunter-supply-chain`** — Key Hunter, Supply Chain SCA & IaC Lab (chaves sintéticas de treino + manifests `Dockerfile`/Terraform/`package.json`).
-4. **`lab-dfir-soc-incident`** — DFIR & SOC Incident Lab (logs `JSONL`/`CEF` e correlação com regras Sigma YAML).
-5. **`lab-reversing-crypto-mobile`** — Reverse Engineering, ELF64, PCAP & Mobile APK Lab (artefatos benignos de estudo `ELF64`, `.pcap` e `.apk`).
+### 4.2 Separação Epistemológica em 3 Camadas & Tools MCP de Conhecimento
+
+O Hub MCP expõe **8 ferramentas dedicadas de Conhecimento e Memória Investigativa** (sempre ativas, mesmo quando nenhum scanner externo está habilitado):
+
+| Tool MCP | Camada | Função |
+|---|---|---|
+| `search_knowledge` | 1. Conhecimento Curado | Pesquisa por conceito, falha, CVE, metodologia ou ferramenta (exclui `_drafts/` por padrão) |
+| `read_document` | 1. Conhecimento Curado | Lê documento completo com cabeçalho de proveniência (fontes primárias, versão, revisão e limitações) |
+| `get_document_metadata` | 1. Conhecimento Curado | Inspeciona metadados e seções sem consumir contexto com o texto completo |
+| `get_related_documents` | 1. Conhecimento Curado | Navega o grafo `related` / `[[WikiLinks]]` / backlinks (falha → causa raiz → validação → ferramenta) |
+| `create_draft_note` | Rascunho Isolado (`_drafts/`) | Registra descobertas separando **fatos observados**, **hipóteses**, **inferências** e **incertezas** |
+| `propose_document_update` | Proposta (`_proposals/`) | Sugere atualização com fontes primárias obrigatórias **sem jamais alterar o documento curado original** |
+| `investigation_memory_read` | 2. Contexto da Sessão | Lê missão, escopo, modelo arquitetural, hipóteses, testes e **resultados negativos** da investigação atual |
+| `investigation_memory_update` | 2. Contexto da Sessão | Atualiza `.cyberlab/investigations/<id>.json` e sincroniza espelho legível em `vault/Investigacoes/<id>.md` |
+
+### 4.3 Cofre Nativo Flutuante & Acoplável Compatível com Obsidian (`📓 Notas & Comandos` / `Alt+N`)
+
+- Pressione **`Alt+N`** ou clique em **`📓 Notas & Comandos`** na barra superior para abrir o Cofre sobreposto (com fundo sólido opaco de alto contraste `#090d16`, redimensionável, arrastável ou acoplável à direita/rodapé **sem encolher nem deslocar a ferramenta do palco central**).
+- Totalmente compatível com **Obsidian Desktop**: aponte o mesmo diretório `<workspace>/vault/` (ou qualquer pasta externa do Windows) e edite simultaneamente notas `.md`, `#tags`, `[[WikiLinks]]`, Backlinks, checklists interativos e blocos de comandos copiáveis/executáveis em 1 clique.
 
 ---
 
-## 7. Governança de Escopo Bug Bounty, Cofre `SHA-256` e Relatórios
+## 5. Hub MCP Unificado (`cyberlab-arsenal`), Pontes GUI em Tempo Real & Modelos Gratuitos
 
-- **Aba `Escopo Bug Bounty`**:
-  - Importa escopos reais de programas **HackerOne / Bugcrowd** (`*.alvo-autorizado.com`, exclusões `!fora-de-escopo.alvo.com`), configura cabeçalho de identificação do pesquisador e trava automaticamente execuções CLI/MCP contra destinos fora do escopo quando `enforceScopeOnCliRuns` está ativo.
-  - Bloqueio anti-SSRF permanente contra endpoints de metadados de nuvem (`169.254.169.254`), esquemas inseguros e *path traversal*.
-- **Aba `Custódia SHA-256` & Relatórios Markdown**:
-  - Toda saída de ferramenta ou captura manual salva no cofre recebe hash criptográfico **`SHA-256`** verificável em disco (`.cyberlab/artifacts/`) com **redação automática** de tokens sensíveis (`Bearer`, `Cookie`, `Set-Cookie`, chaves AWS/GitHub, JWTs e chaves privadas `PEM`).
-  - Registre **Findings** vinculados às evidências `SHA-256` e exporte o **Relatório Técnico Reproduzível em Markdown (`.md`)** em 1 clique.
+### 5.1 Arquitetura Hub MCP de Processo Único (`v6.1`–`v6.2`)
+
+Em vez de iniciar dezenas de processos `bun.exe` separados no Windows (que causavam timeouts de inicialização e consumo elevado de RAM), o CyberLab OS consolida **todas as 45 ferramentas compatíveis com MCP** em **1 único servidor multiplexado ultrarrápido** (`cyberlab/mcp/arsenal-mcp-stdio.ts --slot __hub__`):
+
+- **Hot-Reload Instantâneo**: clicar em **`🔌 MCP` / `🟢 MCP`** na barra lateral atualiza `.cyberlab/mcp-enabled-slots.json` e emite `notifications/tools/list_changed` imediatamente para o OpenCode sem reiniciar processos.
+- **Resolução Automática Windows + WSL2 Kali**: localiza executáveis automaticamente em `C:\Program Files\...`, `WinGet`, `Scoop`, `PATH` do Windows ou dentro da distro `kali-linux` no WSL2, sempre com `shell=false`, Trava de Escopo Bug Bounty e redação `SHA-256` de segredos.
+- **Tools Centrais do Arsenal**: `arsenal_mcp_status`, `arsenal_tool_help` e `arsenal_run_tool`.
+
+### 5.2 Pontes MCP Nativas em Tempo Real para Suítes Gráficas (GUI)
+
+Quando os slots abaixo estão com **`🟢 MCP`** ativo, o Hub expõe ferramentas dedicadas conectadas diretamente às instâncias gráficas abertas:
+
+1. **Burp Suite (`127.0.0.1:9876` — Ponte Nativa HTTP+SSE `PortSwigger/mcp-server`)**:
+   - Botão de **1 clique** no painel do Burp baixa `burp-mcp-all.jar` em `/opt/cyberlab-burp/` (fora do repositório MIT).
+   - Tools expostas: `burp_suite_status`, `burp_suite_get_proxy_history`, `burp_suite_get_proxy_http_history_regex`, `burp_suite_send_http1_request`, `burp_suite_send_http2_request`, `burp_suite_create_repeater_tab`, `burp_suite_send_to_intruder`, `burp_suite_set_intercept`, `burp_suite_url_encode`, `burp_suite_base64_encode` e `burp_suite_call_tool` (com fallback automático Windows ↔ WSL2).
+2. **NSA Ghidra (`127.0.0.1:8080` — `LaurieWired/GhidraMCP` v2.0)**:
+   - Botão **`🔌 Instalar GhidraMCP (:8080)`** instala automaticamente a release oficial `Apache-2.0`.
+   - Tools expostas: `ghidra_mcp_status`, `ghidra_mcp_decompile` e `ghidra_mcp_call` (funções, strings, imports/exports, xrefs, renomeação de símbolos e modo headless).
+3. **JADX-GUI (`127.0.0.1:8650` — `zinja-coder/jadx-ai-mcp`)**:
+   - Botão **`🔌 Instalar JADX-AI-MCP (:8650)`** instala o plugin oficial via `jadx plugins --install "github:zinja-coder:jadx-ai-mcp"`.
+   - Tools expostas: `jadx_mcp_status`, `jadx_mcp_get_class_source` e `jadx_mcp_call` (`AndroidManifest.xml`, busca de métodos, recursos e xrefs).
+
+### 5.3 9 Modelos de IA Gratuitos Nativos do OpenCode Zen
+
+Prontos para uso imediato sem chave paga (`apiKey: "public"`, configurados automaticamente com `--use-system-ca`):
+`Big Pickle`, `DeepSeek V4.1 Flash Free`, `GLM-5.3 Flash Free`, `Nemotron 3.5 Super VL Free`, `Nemotron 3.5 Lightning Free`, `Nemotron 3 Ultra Free`, `MiMo V2.6 Flash Free`, `Flint 40B Free` e `Beam Free` — além de suporte total a qualquer provedor Anthropic, OpenAI, Gemini, OpenRouter, Ollama ou LM Studio local.
 
 ---
 
-## 8. Histórico de Evolução (v1.0 → v6.0), Testes, CI e Licenciamento MIT
+## 6. Layout Antigravity de 3 Colunas, Topo Retrátil (`28px`) & `noVNC` Nitidez Real
 
-### Resumo das Versões Recentes
-- **v1.0 – v4.0**: Fundação sobre OpenCode V2 (`2.1.4`), governança anti-TOCTOU, cofre `SHA-256`, 4 CDIs autônomos (`8788–8791`), 5 Laboratórios de Treino e ativação dos 9 Modelos Gratuitos do OpenCode Zen.
-- **v5.0 – v5.4**: Arquitetura **Real Arsenal Edition** — layout Antigravity em 3 colunas retráteis, substituição de clones internos por ferramentas reais externas (Windows PowerShell + WSL2 Kali), navegador isolado no proxy em 1 clique, motor gráfico `X11/noVNC` embutido, limpeza/download oficial do Burp Suite Community e Kali XFCE Desktop na aba.
-- **v5.5 – v5.6**: Integração oficial do **REA (`morluto/rea`)** com MCP para Ghidra/JADX/JS, agentes autônomos externos (`Strix`, `Shannon`, `HexStrike MCP`, `PentAGI`, `PentestGPT/CAI`), forense mobile (`MVT`) e suíte de OpSec/Criptografia (`Tor/OnionShare`, `VeraCrypt`, `Mullvad/GrapheneOS`).
-- **v5.7**: Correção cirúrgica dos instaladores WSL2 (`Strix` standalone, `HexStrike` wheels puros, `PentAGI`, `CAI` via `uv` Python 3.12, `VeraCrypt` `.deb` oficial), validação real `> 10 MB` do `burpsuite.jar` (eliminando falso positivo na barra lateral) e status honesto (`exit 1`) no instalador em lote.
-- **v5.8**: Nitidez nativa `110 DPI` + eliminação total de deslocamento do cursor no zoom (`60%–160%`) via hooks internos `Display._scale` / `ExtendedDesktopSize` do `noVNC` e zoom interno de documento HTML; selos **`🔌 MCP` / `🟢 MCP`** e ponte **`cyberlab/mcp/arsenal-mcp-stdio.ts`** em 1 clique; suporte a TLS autoassinado local para abertura do **`PentAGI (:8443)`**; e assimilação de 5 ferramentas MIT do Kali 2026.1 (**`Betterleaks`**, **`GEF`**, **`Atomic-Operator`**, **`WPProbe`** e **`Pentest Copilot`**), totalizando **46 slots oficiais**.
-- **v5.9**: **Aba Horizontal Superior Retrátil na Vertical (`▲ Recolher Topo` / `▼ Controles & Abas`)** que recolhe todas as faixas de abas, status, MCP, Proxy e barra de controles em uma fita única de `28px` (recolhimento automático ao abrir ferramentas gráficas/Web + sincronização imediata de resolução `noVNC`), além de aumento de timeout e re-tentativa automática no boot frio do WSL2 `kali-linux`.
-- **v6.0**: **Cofre Flutuante & Acoplável Compatível com Obsidian (`📓 Notas & Comandos` / `Alt+N`)** salvando notas `.md` reais em disco (`<workspace>/vault/` ou pasta compartilhada com o Obsidian Desktop) com `#tags`, `[[WikiLinks]]`, Backlinks, checklists interativos e execução/injeção de comandos em 1 clique sem deslocar nem encolher a ferramenta do palco central, além dos slots oficiais **`netcat-ncat`** e **`dirsearch`** (**48 slots oficiais**).
+```text
+┌───────────────────┬──────────────────────────────────────────────────────┬────────────────────┐
+│ COLUNA ESQUERDA   │                PALCO CENTRAL (100% REAL)             │  COLUNA DIREITA    │
+│ (Retrátil ~230px) │  [▲ Recolher Topo -> fita compacta de 28px (v5.9)]   │ (Retrátil ~330px)  │
+│                   │                                                      │                    │
+│ 📁 Arquivos       │  • GUI Linux Real via Xvfb + noVNC 110 DPI           │ 🤖 Orchestrator    │
+│ 🛠 48 Slots       │    (Burp, OpenTRAP, ZAP, Wireshark, Ghidra, JADX,    │    (v6.2 Hipóteses │
+│    + Custom       │     VeraCrypt, Kali XFCE Desktop Completo)           │     + Subagentes   │
+│    [🔌/🟢 MCP]    │  • Web UIs Reais (Caido, mitmweb, CyberChef,         │     + Knowledge)   │
+│                   │     PentAGI TLS :8443, Pentest Copilot)              │                    │
+│ [📓 Alt+N Cofre]  │  • Scanners CLI Reais + Escopo + Custódia SHA-256    │                    │
+└───────────────────┴──────────────────────────────────────────────────────┴────────────────────┘
+```
 
-### Comandos de Verificação Local e CI (Linux + Windows PowerShell)
+- **Topo Horizontal Retrátil na Vertical (`v5.9`)**: recolhe automaticamente todas as barras superiores em uma fita enxuta de **`28px`** ao abrir ferramentas gráficas ou Web, entregando quase 100% da altura vertical da tela para a ferramenta e redimensionando o desktop X11 instantaneamente.
+- **Zoom `60%–160%` com Zero Deslocamento do Mouse (`v5.8`)**: usa `Display._scale` + `ExtendedDesktopSize` nativos do `noVNC` (`110 DPI`), mantendo clique cirúrgico em cada botão/menu de Burp, Ghidra, Wireshark e JADX.
+- **Navegador Isolado Pré-Configurado no Proxy em 1 Clique**: abre Microsoft Edge ou Chrome com perfil temporário apontando automaticamente para `127.0.0.1:8080` (ou porta ativa do proxy).
+
+---
+
+## 7. Catálogo Completo dos 48 Slots Oficiais + Slots Personalizados
+
+Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab OS (instaladas no sistema do operador):
+
+1. **Proxies, Interceptação & Suítes Web (`5 slots`)**: `burp-suite` (Burp Suite Community + MCP `:9876`), `opentrap`, `mitmweb` (`:8081`), `caido` (`:7000`), `owasp-zap`.
+2. **Auditoria Web, Bug Bounty, Fuzzing & OAST (`9 slots`)**: `nuclei`, `ffuf`, `dirsearch`, `katana`, `httpx`, `interactsh`, `dalfox`, `sqlmap`, `wpprobe`.
+3. **Reconhecimento, Rede, PCAP & Infraestrutura (`8 slots`)**: `subfinder`, `nmap`, `netcat-ncat`, `naabu-dnsx-tlsx`, `wireshark` (GUI + `tshark`), `netexec`, `metasploit`, `impacket-hashcat`.
+4. **Engenharia Reversa, REA, Depuração & Mobile Forensics (`8 slots`)**: `rea` (`morluto/rea` MCP), `ghidra` (+ `GhidraMCP :8080`), `jadx` (+ `JADX-AI-MCP :8650`), `rizin-cutter`, `gef`, `frida-apktool`, `capa`, `mvt`.
+5. **Caça de Segredos, SAST, SCA & Cloud (`5 slots`)**: `keyhunter`, `betterleaks`, `gitleaks-trufflehog`, `semgrep` (OpenGrep), `trivy`.
+6. **Agentes de IA Externos & Metodologia (`6 slots`)**: `strix`, `shannon`, `hexstrike-ai`, `pentagi` (proxy TLS `:8443`), `pentestgpt-cai`, `pentest-copilot`.
+7. **OpSec, Privacidade & Criptografia (`3 slots`)**: `tor-onionshare`, `veracrypt` (GUI/CLI), `mullvad-opsec` *(isolados sem MCP por segurança operacional)*.
+8. **CyberChef, DFIR (Sigma), Purple Team & Kali Desktop (`4 slots`)**: `cyberchef`, `hayabusa-yarax`, `atomic-operator`, `kali-desktop-stream`.
+9. **Slots Personalizados (`+ Slot`)**: adicione qualquer binário CLI, aplicação Web (`iframe`) ou ferramenta Desktop do Windows/WSL2.
+
+---
+
+## 8. Os 4 Parceiros Cognitivos CDI (`8788–8791`) & 5 Laboratórios de Treino
+
+### 8.1 Gateway Bidirecional `HMAC-SHA256` dos 4 CDIs
+**Kairós (`:8788`)**, **Naia (`:8789`)**, **Salem (`:8790`)** e **Nova (`:8791`)** operam em autonomia horizontal (`hierarchy: "none"`, `humanRole: "curator"`) via `/api/cyberlab/partner-gateway` e SDK Python `integrations/partners/chat_py_bridge.py`.
+
+### 8.2 Os 5 Laboratórios Internos Seguros (`5 Labs de Treino`)
+1. `lab-owasp-api-bola` (BOLA `API1:2023`, JWT `alg:none` e headers)
+2. `lab-graphql-oauth-sso` (Introspecção GraphQL, batching e OAuth2 PKCE `S256`)
+3. `lab-keyhunter-supply-chain` (Segredos sintéticos, SCA e IaC Terraform/Docker)
+4. `lab-dfir-soc-incident` (Triagem de logs `JSONL`/`CEF` com regras Sigma)
+5. `lab-reversing-crypto-mobile` (Artefatos benignos `ELF64`, `.pcap` e `.apk`)
+
+---
+
+## 9. Governança de Escopo Bug Bounty, Custódia `SHA-256` & Segurança Anti-Prompt-Injection
+
+- **Trava de Escopo Bug Bounty (`.cyberlab/scope.json`)**: importa escopos HackerOne/Bugcrowd, injeta cabeçalhos de identificação do pesquisador, bloqueia alvos fora de escopo antes da criação do processo (`shell=false`) e mantém bloqueio anti-SSRF permanente contra metadados de nuvem (`169.254.169.254`).
+- **Defesa contra Conteúdo Não Confiável (*Prompt Injection*)**: respostas HTTP, páginas analisadas, artefatos de engenharia reversa e saídas de ferramentas são tratados pelo `Orchestrator` e pelos 6 subagentes estritamente como **dados não confiáveis**, incapazes de alterar escopo, permissões ou instruções da missão.
+- **Cofre Criptográfico `SHA-256` & Redação Automática**: todas as evidências salvas passam por redação automática de tokens/chaves sensíveis (`Bearer`, `Cookie`, AWS, GitHub, JWT, `PEM`) com verificação de integridade `SHA-256` e exportação de relatório Markdown reproduzível.
+
+---
+
+## 10. Histórico Completo de Versões (`v1.0` → `v6.2`), Verificação CI & Licenciamento MIT
+
+- **v1.0 – v4.0**: Base OpenCode V2 (`2.1.4`), governança anti-TOCTOU, cofre `SHA-256`, 4 CDIs (`8788–8791`), 5 Labs de Treino e 9 modelos gratuitos OpenCode Zen.
+- **v5.0 – v5.8**: Arquitetura **Real Arsenal Edition** (3 colunas Antigravity, motor `X11/noVNC` 110 DPI sem deslocamento de mouse no zoom, navegador proxy em 1 clique, Burp oficial, REA MCP, PentAGI TLS `:8443` e ferramentas Kali 2026.1).
+- **v5.9**: Topo horizontal retrátil na vertical (`28px`) + resiliência a boot frio do WSL2 `kali-linux`.
+- **v6.0 – v6.0.2**: Cofre nativo flutuante/acoplável compatível com Obsidian (`Alt+N`) com fundo sólido opaco, slots `netcat-ncat` e `dirsearch` (**48 slots oficiais**) e ponte nativa `stdio <-> SSE` para o **Burp Suite MCP (`:9876`)**.
+- **v6.1**: **Hub MCP Unificado (`cyberlab-arsenal` `--slot __hub__`)** consolidando todos os slots em 1 único processo (~3,5 GB de RAM economizados no Windows), resolução completa de caminhos Windows (`Program Files`/WinGet/Scoop) + WSL2 e instaladores/pontes de 1 clique para **`GhidraMCP (:8080)`** e **`JADX-AI-MCP (:8650)`**.
+- **v6.2**: **Investigative Security Orchestrator** em `pt-BR` (Ciclo Fases A–I + validação em 5 níveis), **6 Subagentes Especializados sob demanda** com limites rígidos de profundidade (`1`), concorrência (`3`) e quantidade por sessão (`12`), biblioteca curada **`CyberLab-Knowledge/`** integrada ao Cofre Obsidian com **8 tools MCP de Conhecimento e Memória Investigativa** (preservando resultados negativos e imutabilidade dos documentos curados) e atualização integral da documentação.
+
+### Verificação Local Completa (Idêntica ao GitHub Actions Linux + Windows)
 
 ```bash
-# Auditoria automática de conformidade de licenças MIT (0 componentes GPL/AGPL embutidos)
+# 1. Auditoria automática de licenças MIT (0 código GPL/AGPL embutido no repositório)
 bun run script/check-cyberlab-licenses.ts
 
-# Typecheck por pacote (conforme .github/workflows/cyberlab-ci.yml)
+# 2. Typecheck completo por pacote
 bun --cwd packages/schema typecheck
 bun --cwd packages/core typecheck
 bun --cwd packages/server typecheck
 bun --cwd packages/cli typecheck
 bun --cwd packages/gui-plugins typecheck
 bun --cwd cyberlab typecheck
-bun --cwd packages/app typecheck
 
-# Suíte de testes automatizados do CyberLab OS (41 testes / 482 asserções)
+# 3. Suíte automatizada de testes (47 testes / 727+ asserções)
 bun --cwd cyberlab test
 ```
 
 ### Documentação Complementar
-- [`docs/PLAYBOOK_POWERSHELL_WSL2_ARSENAL.md`](docs/PLAYBOOK_POWERSHELL_WSL2_ARSENAL.md) — Guia prático de operação híbrida Windows PowerShell + WSL2 Kali Linux.
+- [`docs/PLAYBOOK_POWERSHELL_WSL2_ARSENAL.md`](docs/PLAYBOOK_POWERSHELL_WSL2_ARSENAL.md) — Operação híbrida Windows PowerShell + WSL2 Kali Linux.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Arquitetura de governança, execução e custódia criptográfica.
 - [`docs/SECURITY_MODEL.md`](docs/SECURITY_MODEL.md) — Modelo de ameaças, anti-TOCTOU, redação e protocolo `HMAC-SHA256`.
-- [`docs/LICENSE_POLICY.md`](docs/LICENSE_POLICY.md) — Política de conformidade jurídica (`MIT` no repositório, ferramentas externas desacopladas).
+- [`docs/LICENSE_POLICY.md`](docs/LICENSE_POLICY.md) — Política de conformidade `MIT` e isolamento de ferramentas externas.
 - [`docs/UPSTREAM_AUDIT.md`](docs/UPSTREAM_AUDIT.md) — Auditoria técnica da base OpenCode V2 (`2.1.4`).

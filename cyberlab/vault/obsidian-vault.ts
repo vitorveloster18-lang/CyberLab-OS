@@ -11,6 +11,7 @@ import {
 } from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { ensureKnowledgeLibrarySeeded, stripYamlFrontmatter } from "../knowledge/curated-library.js"
 import { isPathInsideRoot } from "../policy/scope.js"
 
 export interface VaultNoteSummary {
@@ -103,7 +104,8 @@ function deriveNoteTitle(relativePath: string, content: string): string {
 }
 
 function buildSnippet(content: string): string {
-  const plain = content
+  const { body } = stripYamlFrontmatter(content)
+  const plain = body
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/^#+\s+/gm, "")
     .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_all, a, b) => String(b || a))
@@ -115,8 +117,9 @@ function buildSnippet(content: string): string {
 function wikiTargetMatchesNote(wikiTarget: string, noteRelPath: string): boolean {
   const normTarget = wikiTarget.replace(/\\/g, "/").trim().replace(/\.md$/i, "").toLowerCase()
   const normRelNoExt = noteRelPath.replace(/\.md$/i, "").toLowerCase()
+  const normShortKnowledge = normRelNoExt.replace(/^cyberlab-knowledge\//, "")
   const normBase = path.posix.basename(normRelNoExt)
-  return normTarget === normRelNoExt || normTarget === normBase
+  return normTarget === normRelNoExt || normTarget === normShortKnowledge || normTarget === normBase
 }
 
 const STARTER_VAULT_NOTES: Array<{ relativePath: string; content: string }> = [
@@ -130,6 +133,7 @@ Bem-vindo ao seu **Cofre de Notas & Comandos** integrado ao **CyberLab OS**!
 Todas as notas são arquivos \`.md\` reais compatíveis 100% com o **Obsidian** — você pode usar \`[[WikiLinks]]\`, \`#tags\`, listas \`- [ ]\` clicáveis e blocos de comando com **injeção em 1 clique** direto no Slot CLI ativo sem sair da ferramenta aberta no centro.
 
 ## Atalhos Principais do Cofre
+- [[00-Index|Biblioteca Curada CyberLab-Knowledge]] — Fundamentos, metodologias orientadas por hipóteses, classes de vulnerabilidade, análise de patches e catálogo MCP do **Investigative Security Orchestrator**
 - [[Comandos-Rapidos]] — Biblioteca de comandos prontos (\`ncat\`, \`dirsearch\`, \`nuclei\`, \`ffuf\`, \`nmap\`, \`sqlmap\`)
 - [[Checklist-Bug-Bounty]] — Metodologia prática de recon, API/BOLA, OAuth e custódia \`SHA-256\`
 - [[Diario-Labs]] — Registro de portas, tokens de treino e anotações dos 5 Laboratórios Internos
@@ -322,6 +326,9 @@ export class CyberLabObsidianVault {
         writeFileSync(dest, seed.content, "utf8")
       }
     }
+
+    // Always ensure missing curated CyberLab-Knowledge/ documents are seeded without overwriting edits
+    ensureKnowledgeLibrarySeeded(vaultRootDir)
 
     return vaultRootDir
   }

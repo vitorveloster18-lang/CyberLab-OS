@@ -995,13 +995,12 @@ export class ArsenalSlotManager {
     if (currentlyActive) {
       enabledHubSlots.delete(slot.slotId)
       this.writeEnabledHubSlotsToDisk(enabledHubSlots)
-      if (enabledHubSlots.size === 0) {
-        delete mcpObj.servers["cyberlab-arsenal"]
-        writeFileSync(cfgPath, `${JSON.stringify(doc, null, 2)}\n`, "utf8")
-      }
+      // Keep cyberlab-arsenal Hub online so CyberLab-Knowledge/ and investigation_memory MCP tools remain available
+      mcpObj.servers["cyberlab-arsenal"] = this.buildHubServerEntry()
+      writeFileSync(cfgPath, `${JSON.stringify(doc, null, 2)}\n`, "utf8")
       return {
         connected: false,
-        message: `Conexão MCP de "${slot.shortLabel}" desativada no Hub CyberLab Arsenal.`,
+        message: `Conexão MCP de "${slot.shortLabel}" desativada no Hub CyberLab Arsenal (biblioteca CyberLab-Knowledge permanece online).`,
       }
     }
 

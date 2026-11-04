@@ -14,12 +14,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import net from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { ensureKnowledgeLibrarySeeded } from "../cyberlab/knowledge/curated-library.js"
 
-const UI_BUILD_STAMP = "cyberlab-unified-v6.1.0-mcp-hub"
+const UI_BUILD_STAMP = "cyberlab-unified-v6.2.0-investigative-orchestrator"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const distDir = path.join(repoRoot, "packages", "app", "dist")
-const distIndex = path.join(distDir, "index.html")
+const distIndex = path.join(repoRoot, "packages", "app", "dist", "index.html")
 const distStampFile = path.join(distDir, ".cyberlab-ui-build")
 
 const args = process.argv.slice(2)
@@ -27,15 +28,48 @@ const bunExecutable = process.execPath || "bun"
 
 function prebootConsolidateOpenCodeMcpHub(wsDir: string): void {
   const cfgPath = path.join(wsDir, "opencode.json")
-  if (!existsSync(cfgPath)) return
-  try {
-    const parsed = JSON.parse(readFileSync(cfgPath, "utf-8")) as {
-      mcp?: { servers?: Record<string, { type?: string; disabled?: boolean; command?: string[] }> }
-    }
-    const servers = parsed?.mcp?.servers
-    if (!servers || typeof servers !== "object") return
+  const enabledFilePath = path.join(wsDir, ".cyberlab", "mcp-enabled-slots.json")
+  const hubCommand = [
+    bunExecutable,
+    "run",
+    path.join(repoRoot, "cyberlab", "mcp", "arsenal-mcp-stdio.ts"),
+    "--slot",
+    "__hub__",
+    "--workspace",
+    wsDir,
+    "--wsl-distro",
+    "kali-linux",
+  ]
 
-    const enabledFilePath = path.join(wsDir, ".cyberlab", "mcp-enabled-slots.json")
+  try {
+    ensureKnowledgeLibrarySeeded(path.join(wsDir, "vault"))
+
+    let parsed: {
+      default_agent?: string
+      mcp?: { servers?: Record<string, { type?: string; disabled?: boolean; command?: string[] }> }
+      [key: string]: unknown
+    } = {}
+
+    if (existsSync(cfgPath)) {
+      parsed = JSON.parse(readFileSync(cfgPath, "utf-8"))
+    }
+
+    let dirty = false
+    if (!parsed.default_agent) {
+      parsed.default_agent = "cyberlab-orchestrator"
+      dirty = true
+    }
+
+    if (!parsed.mcp || typeof parsed.mcp !== "object") {
+      parsed.mcp = { servers: {} }
+      dirty = true
+    }
+    if (!parsed.mcp.servers || typeof parsed.mcp.servers !== "object") {
+      parsed.mcp.servers = {}
+      dirty = true
+    }
+    const servers = parsed.mcp.servers
+
     const enabledSlots = new Set<string>()
     if (existsSync(enabledFilePath)) {
       try {
@@ -61,9 +95,10 @@ function prebootConsolidateOpenCodeMcpHub(wsDir: string): void {
       if (v && !v.disabled) enabledSlots.add(sId)
       delete servers[k]
       migratedCount++
+      dirty = true
     }
 
-    if (migratedCount > 0) {
+    if (!existsSync(enabledFilePath) || migratedCount > 0) {
       mkdirSync(path.join(wsDir, ".cyberlab"), { recursive: true })
       writeFileSync(
         enabledFilePath,
@@ -74,26 +109,23 @@ function prebootConsolidateOpenCodeMcpHub(wsDir: string): void {
         )}\n`,
         "utf-8",
       )
-      if (enabledSlots.size > 0) {
-        servers["cyberlab-arsenal"] = {
-          type: "local",
-          command: [
-            bunExecutable,
-            "run",
-            path.join(repoRoot, "cyberlab", "mcp", "arsenal-mcp-stdio.ts"),
-            "--slot",
-            "__hub__",
-            "--workspace",
-            wsDir,
-            "--wsl-distro",
-            "kali-linux",
-          ],
-        }
+    }
+
+    if (!servers["cyberlab-arsenal"]) {
+      servers["cyberlab-arsenal"] = {
+        type: "local",
+        command: hubCommand,
       }
+      dirty = true
+    }
+
+    if (dirty) {
       writeFileSync(cfgPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf-8")
-      console.log(
-        `⚡ Hub MCP CyberLab v6.1: consolidados ${migratedCount} processos MCP individuais em 1 único servidor unificado (${enabledSlots.size} ferramentas ativas)!`,
-      )
+      if (migratedCount > 0) {
+        console.log(
+          `⚡ Hub MCP CyberLab v6.2: consolidados ${migratedCount} processos MCP individuais em 1 único servidor unificado (${enabledSlots.size} ferramentas ativas + biblioteca CyberLab-Knowledge)!`,
+        )
+      }
     }
   } catch {
     // Non-fatal if opencode.json is malformed
