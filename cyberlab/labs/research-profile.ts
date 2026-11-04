@@ -93,10 +93,34 @@ export interface PrimarySource {
  * vazia e o relatório diz que a avaliação é manual — inventar um marcador para
  * "ausência" produziria veredito falso.
  */
+/**
+ * Declaração de impacto POR HIPÓTESE, usada pela Fase H (Validação).
+ *
+ * Por que declarar em vez de deduzir do texto: a Fase H precisa separar
+ * "vulnerabilidade confirmada" de "configuração insegura" — e a diferença é o impacto,
+ * não o sintoma. Inferir isso de `severityIfConfirmed` com casamento de palavras
+ * produziria classificação que muda quando alguém reescreve uma frase. Aqui o impacto
+ * é declarado uma vez, por hipótese, e a Fase H só aplica a regra em cima dele.
+ */
+export interface ImpactDeclaration {
+  /** Dimensão primária afetada caso a hipótese se confirme. */
+  dimension: "confidentiality" | "integrity" | "availability" | "none"
+  /**
+   * `direct`               — vetor explorável contra C/I/A.
+   * `information-disclosure` — prova o diferencial, mas o dano é exposição de informação.
+   * `none`                 — mecanismo de proteção ausente/desligado, sem vetor direto.
+   */
+  vector: "direct" | "information-disclosure" | "none"
+  /** Por quê — vai para o relatório da Fase H. */
+  rationale: string
+}
+
 export interface LabResearchProfile {
   labId: string
   /** Marcador(es) por hipótese: `H1 -> ["LAB{BOLA_...}"]`. */
   observationMarkers: Record<string, string[]>
+  /** Impacto por hipótese, consumido pela Fase H. */
+  impactByHypothesis: Record<string, ImpactDeclaration>
   /** Termos para buscar na biblioteca curada `CyberLab-Knowledge/` (Fase C, parte 1). */
   knowledgeQueries: string[]
   /** Pacotes a consultar na GitHub Advisory Database (Fase C, parte 2). */
@@ -118,6 +142,32 @@ const LAB_RESEARCH_PROFILES: Record<string, LabResearchProfile> = {
       H3: ["SQLITE_ERROR"],
       // H4 é AUSÊNCIA de headers: não há marcador de presença possível.
       H4: [],
+    },
+    impactByHypothesis: {
+      H1: {
+        dimension: "confidentiality",
+        vector: "direct",
+        rationale:
+          "Leitura de conta alheia (saldo e dados do titular) autenticando-se apenas com o próprio token — acesso direto a dados de outro usuário.",
+      },
+      H2: {
+        dimension: "confidentiality",
+        vector: "direct",
+        rationale:
+          "Forja de identidade administrativa sem segredo: o endpoint administrativo responde com `adminAccess: true` a um token sem assinatura.",
+      },
+      H3: {
+        dimension: "confidentiality",
+        vector: "information-disclosure",
+        rationale:
+          "A resposta de erro revela estrutura interna (nome de tabela e colunas). O diferencial é provado, mas o dano é exposição de informação, não leitura direta de dados.",
+      },
+      H4: {
+        dimension: "none",
+        vector: "none",
+        rationale:
+          "CSP/HSTS/X-Frame-Options ausentes: mecanismos de proteção disponíveis e desligados, sem vetor de exploração direto — é achado de hardening.",
+      },
     },
     knowledgeQueries: ["BOLA", "IDOR", "JWT", "OAuth 2.0", "SQL Injection", "API Security"],
     advisoryTargets: [
@@ -277,6 +327,9 @@ export function deriveProfile(labId: string, model?: LabSystemModel | null): Lab
   return {
     labId,
     observationMarkers: {},
+    // Sem curadoria não há impacto declarado: a Fase H cai em `nao_classificado`
+    // em vez de presumir um vetor.
+    impactByHypothesis: {},
     knowledgeQueries: Array.from(terms).slice(0, 12),
     advisoryTargets: [],
     weaknesses: [],

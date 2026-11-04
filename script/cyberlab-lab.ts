@@ -23,6 +23,7 @@
  *   bun run cyberlab lab scope portswigger-wsa
  */
 
+import { createHash } from "node:crypto"
 import { spawn } from "node:child_process"
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import net from "node:net"
@@ -41,6 +42,9 @@ import { ScopeController } from "../cyberlab/policy/scope.js"
 import { runLabResearch } from "../cyberlab/labs/research-phase.js"
 import { runHypothesisPhase } from "../cyberlab/labs/hypothesis-phase.js"
 import { runExperimentPhase } from "../cyberlab/labs/experiment-phase.js"
+import { runEvaluationPhase, EXPERIMENT_VERDICT_LABEL } from "../cyberlab/labs/evaluation-phase.js"
+import { runValidationPhase, VALIDATION_CLASS_LABEL } from "../cyberlab/labs/validation-phase.js"
+import { runDocumentationPhase } from "../cyberlab/labs/documentation-phase.js"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const args = process.argv.slice(2)
@@ -75,6 +79,9 @@ function usage(): void {
       "  research <labId>         FASE C: pesquisa CyberLab-Knowledge + advisories (CVE/GHSA)",
       "  hypothesize <labId>     FASE D: hipóteses ancoradas na Fase C + priorização (Fase E)",
       "  experiment <labId>      FASE F: plano (padrão) ou execução (--run) dos experimentos",
+      "  evaluate <labId>        FASE G: avaliação crítica (observado vs. esperado, confiança)",
+      "  validate <labId>        FASE H: classificação na taxonomia obrigatória de 5 níveis",
+      "  report <labId>          FASE I: relatório técnico reproduzível (6 seções, segredos redigidos)",
       "  targets                  Lista alvos externos com AUTORIZAÇÃO declarada",
       "  scope <perfil>           Grava SCOPE.md + RULES-OF-ENGAGEMENT.md do alvo",
       "",
@@ -152,6 +159,78 @@ function readFlag(name: string): string | null {
 // ---------------------------------------------------------------------------
 
 const labsRootForPid = resolveLabsRoot()
+
+/**
+ * Le os artefatos de uma fase do disco para registro no EvidenceStore.
+ * As Fases G/H/I expõem `files: string[]`; o formato do store espera
+ * `{ name, sha256, byteLength }` — calculado aqui, na hora de registrar.
+ */
+function readArtifactFiles(
+  dir: string,
+  names: string[],
+): Array<{ name: string; sha256: string; byteLength: number }> {
+  return names.map((name) => {
+    const buf = readFileSync(path.join(dir, name))
+    return {
+      name,
+      sha256: createHash("sha256").update(buf).digest("hex"),
+      byteLength: buf.byteLength,
+    }
+  })
+}
+
+/**
+ * Registra os artefatos de uma fase no EvidenceStore.
+ * Devolve a quantidade de evidências gravadas.
+ */
+function registerPhaseArtifacts(params: {
+  workspaceRoot: string
+  labId: string
+  toolId: string
+  phase: string
+  outputDir: string
+  files: string[]
+  generatedAt: string
+}): number {
+  const cfg = createDefaultCyberLabConfig(params.workspaceRoot)
+  const store = new EvidenceStore({
+    databasePath: cfg.databaseFilename,
+    artifactsDir: cfg.artifactsDirectory,
+  })
+  try {
+    const executionId = `lab-${params.phase}-${Date.now()}`
+    let n = 0
+    for (const f of readArtifactFiles(params.outputDir, params.files)) {
+      const isJson = f.name.endsWith(".json")
+      store.storeEvidence(
+        params.labId,
+        {
+          kind: isJson ? "json" : "file",
+          title: `Fase ${params.phase} — ${params.labId} — ${f.name}`,
+          source: {
+            toolId: params.toolId,
+            toolVersion: "6.7.0",
+            executorId: "operator",
+            executionId,
+          },
+          content: {
+            mediaType: isJson ? "application/json" : "text/markdown",
+            inlineText: readFileSync(path.join(params.outputDir, f.name), "utf8"),
+            sha256: f.sha256,
+            byteLength: f.byteLength,
+          },
+          observedAt: params.generatedAt,
+          labels: ["lab", params.labId, `fase-${params.phase.toLowerCase()}`],
+        },
+        { applyRedactionBeforeStore: false },
+      )
+      n += 1
+    }
+    return n
+  } finally {
+    store.close()
+  }
+}
 
 function pidFilePath(labId: string): string {
   return path.join(labsRootForPid, `.lab-${labId}.pid`)
@@ -1099,6 +1178,205 @@ switch (command) {
       } finally {
         store.close()
       }
+    }
+    process.exit(0)
+  }
+
+  case "evaluate": {
+    if (!labIdArg) {
+      console.error(`${RED}Informe o labId. Ex.: bun run cyberlab lab evaluate lab-owasp-api-bola${RESET}`)
+      process.exit(1)
+    }
+    const asJson = args.includes("--json")
+    const onlyFlag = readFlag("--only")
+    const outFlag = readFlag("--out")
+    const wsRoot = resolveWorkspaceRoot()
+
+    let board
+    try {
+      board = runEvaluationPhase({
+        labId: labIdArg,
+        workspaceRoot: wsRoot,
+        ...(onlyFlag ? { only: onlyFlag.split(",").map((x) => x.trim()).filter(Boolean) } : {}),
+        ...(outFlag ? { outDir: outFlag } : {}),
+      })
+    } catch (err) {
+      console.error(`${RED}${err instanceof Error ? err.message : String(err)}${RESET}`)
+      process.exit(1)
+    }
+
+    if (asJson) {
+      console.log(JSON.stringify(board, null, 2))
+      process.exit(0)
+    }
+
+    console.log(`${BOLD}Fase G — Avaliação Crítica${RESET} ${CYAN}${board.labId}${RESET}`)
+    console.log(`  Fase D: ${board.sources.faseD ?? "—"}`)
+    console.log(`  Fase F: ${board.sources.faseF ?? `${YELLOW}NÃO ENCONTRADA — rode 'lab experiment' antes${RESET}`}`)
+    console.log("")
+    for (const h of board.hypotheses) {
+      const tag =
+        h.verdict === "sustenta"
+          ? `${GREEN}SUSTENTA${RESET}`
+          : h.verdict === "sustenta_com_ressalva"
+            ? `${YELLOW}SUSTENTA (RESSALVA)${RESET}`
+            : h.verdict === "refuta"
+              ? `${RED}REFUTA${RESET}`
+              : h.verdict === "nao_testada"
+                ? `${DIM}nao testada${RESET}`
+                : `${DIM}indeterminado${RESET}`
+      console.log(
+        `  ${h.hypothesisId.padEnd(4)} ${tag}  confiança ${h.priorConfidence.toFixed(2)} → ${h.confidence.toFixed(2)}  (sust ${h.supporting} / contr ${h.contradicting} / n.test. ${h.untested})`,
+      )
+      console.log(`       ${h.title}`)
+      for (const e of h.experiments) {
+        const diff =
+          e.differential.state === "confirmado"
+            ? `${e.differential.baselineStatuses.join("/")} → ${e.differential.pocStatuses.join("/")}`
+            : e.differential.state === "ausente"
+              ? `${YELLOW}idênticos${RESET}`
+              : `incompleto (${e.differential.baselineCount} base / ${e.differential.pocCount} poc)`
+        console.log(`         ${e.experimentId} ${diff}  ${DIM}${EXPERIMENT_VERDICT_LABEL[e.verdict]}${RESET}`)
+      }
+      for (const f of h.falsePositiveFlags) console.log(`         ${YELLOW}! ${f}${RESET}`)
+      for (const alt of h.alternativeExplanations) {
+        console.log(`         ${YELLOW}? alternativa não descartada:${RESET} ${alt.text.slice(0, 110)}`)
+      }
+    }
+    console.log("")
+    console.log(`  ${DIM}A Fase G decide sustenta/refuta. A classificação final é da Fase H.${RESET}`)
+    console.log(`  ${GREEN}Relatório:${RESET} ${path.join(board.outputDir, "EVALUATION.md")}`)
+    console.log(`  ${DIM}Lacre: ${board.seal}${RESET}`)
+
+    if (args.includes("--register")) {
+      const n = registerPhaseArtifacts({
+        workspaceRoot: wsRoot,
+        labId: labIdArg,
+        toolId: "cyberlab-lab-evaluate",
+        phase: "G",
+        outputDir: board.outputDir,
+        files: board.files,
+        generatedAt: board.generatedAt,
+      })
+      console.log(`${GREEN}✔ ${n} evidência(s) da Fase G registradas no EvidenceStore${RESET} (projeto: ${labIdArg})`)
+    }
+    process.exit(0)
+  }
+
+  case "validate": {
+    if (!labIdArg) {
+      console.error(`${RED}Informe o labId. Ex.: bun run cyberlab lab validate lab-owasp-api-bola${RESET}`)
+      process.exit(1)
+    }
+    const asJson = args.includes("--json")
+    const outFlag = readFlag("--out")
+    const wsRoot = resolveWorkspaceRoot()
+
+    let board
+    try {
+      board = runValidationPhase({
+        labId: labIdArg,
+        workspaceRoot: wsRoot,
+        ...(outFlag ? { outDir: outFlag } : {}),
+      })
+    } catch (err) {
+      console.error(`${RED}${err instanceof Error ? err.message : String(err)}${RESET}`)
+      process.exit(1)
+    }
+
+    if (asJson) {
+      console.log(JSON.stringify(board, null, 2))
+      process.exit(0)
+    }
+
+    console.log(`${BOLD}Fase H — Validação${RESET} ${CYAN}${board.labId}${RESET}`)
+    console.log(`  Fase G: ${board.source ?? "—"}`)
+    console.log("")
+    for (const f of board.findings) {
+      const color =
+        f.classification === "vulnerabilidade_confirmada"
+          ? RED
+          : f.classification === "vulnerabilidade_potencial"
+            ? YELLOW
+            : DIM
+      console.log(
+        `  ${f.hypothesisId.padEnd(4)} ${color}${VALIDATION_CLASS_LABEL[f.classification]}${RESET}  confiança ${f.confidence.toFixed(2)}`,
+      )
+      console.log(`       ${f.title}`)
+      console.log(`       ${DIM}regra: ${f.rule}${RESET}`)
+      for (const s of f.falsePositiveFlags) console.log(`       ${YELLOW}! ${s}${RESET}`)
+    }
+    console.log("")
+    console.log(`  ${DIM}Viés conservador: na dúvida, a classificação cai na categoria mais fraca.${RESET}`)
+    console.log(`  ${GREEN}Relatório:${RESET} ${path.join(board.outputDir, "VALIDATION.md")}`)
+    console.log(`  ${DIM}Lacre: ${board.seal}${RESET}`)
+
+    if (args.includes("--register")) {
+      const n = registerPhaseArtifacts({
+        workspaceRoot: wsRoot,
+        labId: labIdArg,
+        toolId: "cyberlab-lab-validate",
+        phase: "H",
+        outputDir: board.outputDir,
+        files: board.files,
+        generatedAt: board.generatedAt,
+      })
+      console.log(`${GREEN}✔ ${n} evidência(s) da Fase H registradas no EvidenceStore${RESET} (projeto: ${labIdArg})`)
+    }
+    process.exit(0)
+  }
+
+  case "report": {
+    if (!labIdArg) {
+      console.error(`${RED}Informe o labId. Ex.: bun run cyberlab lab report lab-owasp-api-bola${RESET}`)
+      process.exit(1)
+    }
+    const asJson = args.includes("--json")
+    const outFlag = readFlag("--out")
+    const wsRoot = resolveWorkspaceRoot()
+
+    let board
+    try {
+      board = runDocumentationPhase({
+        labId: labIdArg,
+        workspaceRoot: wsRoot,
+        ...(outFlag ? { outDir: outFlag } : {}),
+      })
+    } catch (err) {
+      console.error(`${RED}${err instanceof Error ? err.message : String(err)}${RESET}`)
+      process.exit(1)
+    }
+
+    if (asJson) {
+      console.log(JSON.stringify(board, null, 2))
+      process.exit(0)
+    }
+
+    console.log(`${BOLD}Fase I — Relatório Técnico Reproduzível${RESET} ${CYAN}${board.labId}${RESET}`)
+    console.log(`  Alvo: ${board.conditions.baseUrl ?? "—"}`)
+    console.log("")
+    for (const f of board.findings) {
+      console.log(`  ${f.hypothesisId.padEnd(4)} ${f.classificationLabel}  ${DIM}confiança ${f.confidence.toFixed(2)}${RESET}`)
+      console.log(
+        `       ${f.steps.length} passo(s) de reprodução · ${f.redactedEvidence.length} evidência(s) custodiada(s) · ${f.openAlternatives.length} alternativa(s) em aberto`,
+      )
+    }
+    console.log("")
+    console.log(`  ${DIM}Segredos redigidos antes da publicação.${RESET}`)
+    console.log(`  ${GREEN}Relatório:${RESET} ${path.join(board.outputDir, "WRITEUP.md")}`)
+    console.log(`  ${DIM}Lacre: ${board.seal}${RESET}`)
+
+    if (args.includes("--register")) {
+      const n = registerPhaseArtifacts({
+        workspaceRoot: wsRoot,
+        labId: labIdArg,
+        toolId: "cyberlab-lab-report",
+        phase: "I",
+        outputDir: board.outputDir,
+        files: board.files,
+        generatedAt: board.generatedAt,
+      })
+      console.log(`${GREEN}✔ ${n} evidência(s) da Fase I registradas no EvidenceStore${RESET} (projeto: ${labIdArg})`)
     }
     process.exit(0)
   }

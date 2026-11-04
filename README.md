@@ -23,6 +23,7 @@ Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investiga
    - [8.10 Fase C — Pesquisa: `lab research`](#810-fase-c--pesquisa-lab-research-v67)
    - [8.11 Fase D — Hipóteses ancoradas + priorização (Fase E)](#811-fase-d--hipóteses-ancoradas-na-fase-c--priorização-fase-e)
   - [8.12 Fase F — Experimentação controlada: `lab experiment`](#812-fase-f--experimentação-controlada-lab-experiment-v67)
+  - [8.13 Fases G/H/I — Avaliação, Validação e Relatório](#813-fases-ghi--avaliação-validação-e-relatório-reproduzível-v67)
 ---
 
 ## 8. Laboratórios de Treino Prontos para Investigação (v6.4–v6.5)
@@ -450,6 +451,85 @@ Resultado real no `lab-owasp-api-bola` (target no ar, `--run`):
 Saídas em `research/<labId>/fase-f/<data-hora>/`: `EXPERIMENTS.md`, `experiments-f.json`,
 `experiments-manifest.json` e `raw/`. O lacre SHA-256 (`experiments-f.json` sem
 `files`/`seal`/`outputDir`) é o mesmo critério das Fases C e D.
+
+### 8.13 Fases G/H/I — Avaliação, Validação e Relatório Reproduzível (v6.7)
+
+A Fase F entrega um **indicador** ("o marcador apareceu"). Indicador não é decisão.
+Estas três fases fecham o ciclo A–I:
+
+```powershell
+bun run cyberlab lab evaluate lab-owasp-api-bola   # FASE G: observado vs. esperado
+bun run cyberlab lab validate lab-owasp-api-bola   # FASE H: taxonomia de 5 níveis
+bun run cyberlab lab report lab-owasp-api-bola     # FASE I: writeup reproduzível
+```
+
+Cada uma consome o artefato da anterior (`fase-d` → `fase-f` → `fase-g` → `fase-h` →
+`fase-i`) e **falha com o comando que falta** se você pular uma etapa. Todas aceitam
+`--json`, `--out <dir>` e `--register`; `evaluate` também aceita `--only H1,H2`.
+
+**Fase G — o diferencial é o que elimina o falso positivo.** A metodologia exige
+experimento *diferenciador*: muda-se uma variável entre uma requisição de controle
+(`# BASELINE`) e a experimental (`# PoC`). Se as duas voltam **idênticas** — mesmo
+status e mesmo corpo — não há diferencial, e um marcador que aparece nos dois lados
+não prova nada:
+
+| Situação | Veredito |
+|---|---|
+| Marcador + diferencial confirmado | `sustenta` |
+| Marcador sem par baseline/PoC verificável | `sustenta_com_ressalva` |
+| **Baseline e PoC idênticos** | `indeterminado` (falha o achado, não o promove) |
+| Nada executado | `nao_testada` |
+
+A confiança parte de uma priori **neutra (0,50)** e cresce com **retorno decrescente**:
+o 2º experimento vale metade do 1º. Dois experimentos da mesma hipótese medem quase
+sempre a mesma coisa por caminhos diferentes — somá-los linearmente fingiria
+independência que não existe.
+
+> Erro que os testes pegaram: eu estava usando o **score de prioridade da Fase E** como
+> probabilidade a priori. Ele responde *"vale a pena investigar?"*, não *"chance de ser
+> verdade?"* — o resultado era toda hipótese saturando em 0,95 antes de qualquer
+> evidência.
+
+Nenhuma **explicação alternativa** é descartada automaticamente: elas são listadas como
+pendências, porque "se a evidência contradisser a hipótese, não force a interpretação".
+
+**Fase H — taxonomia obrigatória** (`methodologies/evidence-validation.md`), com viés
+conservador: na dúvida, cai na categoria mais fraca. Cada linha cita a regra que disparou.
+
+| Categoria | Quando |
+|---|---|
+| **Vulnerabilidade confirmada** | `sustenta` + par baseline↔PoC verificado + impacto em C/I/A |
+| **Vulnerabilidade potencial** | Há indício forte, mas sem par verificável |
+| **Configuração insegura** | Mecanismo de proteção ausente/desligado, sem vetor direto |
+| **Falha funcional** | 5xx sem impacto em C/I/A (bug de produto) |
+| **Comportamento inesperado** | Resposta atípica com diferencial, sem violação demonstrada |
+| **Não classificado** | Sem evidência suficiente — o relatório diz isso, não inventa |
+
+O impacto por hipótese é **declarado** no perfil de pesquisa (`impactByHypothesis`),
+não deduzido do texto: inferir "é vulnerabilidade ou é hardening" por casamento de
+palavras faria a classificação mudar quando alguém reescreve uma frase.
+
+**Fase I — writeup com as 6 seções do padrão**, preenchido só com o que as fases
+anteriores registraram. E com redação obrigatória: tokens e segredos são redigidos
+antes da publicação.
+
+> **Vazamento real encontrado por teste:** o padrão de redação exigia `Authorization:`
+> com dois-pontos limpos, mas dentro de um corpo JSON o header vem como
+> `"authorization":"Bearer …"` — as aspas quebravam o casamento e **o token vazava
+> inteiro no relatório**. Corrigido em `cyberlab/evidence/provenance.ts`, com padrão
+> novo para token solto no corpo. O writeup agora sai com 0 tokens e 5 redações.
+
+Resultado real encadeado no `lab-owasp-api-bola` (target no ar):
+
+| Hip. | G — veredito | Confiança | H — classificação |
+|---|---|---|---|
+| H1 BOLA | sustenta | 0,95 | **Vulnerabilidade confirmada** |
+| H2 JWT `alg:none` | sustenta | 0,80 | **Vulnerabilidade confirmada** |
+| H3 Erro SQL | sustenta | 0,80 | **Vulnerabilidade confirmada** |
+| H4 Headers | nao_testada | 0,50 | Configuração insegura (hardening) |
+
+**As fases do ciclo não aparecem na interface web**: o workbench cobre labs, arsenal,
+escopo e evidências, e o ciclo C→I é todo via CLI. Não é ponta solta — nunca esteve lá.
 
 ### 8.5 `cyberlab up` — 1 comando, **1 processo**, alvo embutido (v6.6)
 
@@ -888,7 +968,7 @@ bun --cwd packages/cli typecheck
 bun --cwd packages/gui-plugins typecheck
 bun --cwd cyberlab typecheck
 
-# 3. Suíte automatizada de testes (175 testes / 1.868+ asserções)
+# 3. Suíte automatizada de testes (211 testes / 1.954+ asserções)
 bun --cwd cyberlab test
 ```
 
