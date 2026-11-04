@@ -92,7 +92,14 @@ function usage(): void {
 function resolveLabsRoot(): string {
   const explicit = process.env.CYBERLAB_LABS_ROOT?.trim()
   if (explicit) return path.resolve(explicit)
-  return path.join(repoRoot, ".cyberlab", "labs")
+  // v6.6: a interface (servidor) usa `.cyberlab/training-labs`. O CLI passa a preferir
+  // essa raiz quando ela já existe, para que `lab status` / `lab evidence` enxerguem o
+  // mesmo laboratório que aparece "rodando" na UI. Raiz legada continua funcionando.
+  const serverRoot = path.join(repoRoot, ".cyberlab", "training-labs")
+  const legacyRoot = path.join(repoRoot, ".cyberlab", "labs")
+  if (existsSync(serverRoot)) return serverRoot
+  if (existsSync(legacyRoot)) return legacyRoot
+  return serverRoot
 }
 
 function resolveWorkspaceRoot(): string {
@@ -180,6 +187,29 @@ function resolveKnownPort(labId: string, inProcessPort?: number): number | null 
   }
   const def = BUILTIN_TRAINING_LABS.find((l) => l.labId === labId)
   return def?.defaultPortHint ?? null
+}
+
+/**
+ * v6.6 — Detecta um lab rodando FORA deste processo (o caso normal quando ele foi
+ * iniciado pela interface do CyberLab OS, que hospeda o alvo no mesmo processo da UI).
+ * Antes o CLI dizia apenas "PROVISIONADO" e parecia que nada estava no ar.
+ */
+async function probeExternalLab(labId: string): Promise<{ baseUrl: string; pid: string } | null> {
+  const port = resolveKnownPort(labId)
+  if (!port) return null
+  if (!(await isPortListening(port))) return null
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 1500)
+    const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: ctrl.signal })
+    clearTimeout(timer)
+    if (!res.ok) return null
+    const body = (await res.json()) as { labId?: string }
+    if (body.labId !== labId) return null
+    return { baseUrl: `http://127.0.0.1:${port}`, pid: "interface do CyberLab OS" }
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -477,9 +507,19 @@ switch (command) {
         console.log(`  ${YELLOW}Servidor PARADO.${RESET} Para subir em segundo plano:`)
         console.log(`    ${BOLD}bun run cyberlab lab start ${id} --daemon${RESET}`)
       } else if (!st.running) {
-        console.log(`  ${YELLOW}Servidor PARADO.${RESET} Para subir em segundo plano:`)
-        console.log(`    ${BOLD}bun run cyberlab lab start ${id} --daemon${RESET}`)
-        console.log(`  ${DIM}(sem --daemon o servidor morre quando você fecha o terminal/Ctrl+C)${RESET}`)
+        // Pode estar rodando dentro da interface (processo único da v6.6).
+        const external = await probeExternalLab(id)
+        if (external) {
+          console.log(`  ${GREEN}RODANDO em OUTRO processo${RESET} (${external.pid}) — este CLI não gerencia esse servidor.`)
+          console.log(`  Painel do alvo : ${CYAN}${external.baseUrl}/${RESET}`)
+          console.log(`  ${DIM}Para gerenciar daqui, pare na interface (ou feche-a) e use:${RESET}`)
+          console.log(`    ${BOLD}bun run cyberlab lab start ${id} --daemon${RESET}`)
+        } else {
+          console.log(`  ${YELLOW}Servidor PARADO.${RESET} Para subir em segundo plano:`)
+          console.log(`    ${BOLD}bun run cyberlab lab start ${id} --daemon${RESET}`)
+          console.log(`  ${DIM}(sem --daemon o servidor morre quando você fecha o terminal/Ctrl+C)${RESET}`)
+          console.log(`  ${DIM}Ou abra a interface com o alvo embutido: bun run cyberlab up ${id}${RESET}`)
+        }
       }
       console.log("")
     }

@@ -1,4 +1,4 @@
-# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.5)
+# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.6)
 
 Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investigação Orientada por Hipóteses, Bug Bounty Autorizado, Engenharia Reversa, DFIR e Laboratórios de Treinamento**, construída sobre o **OpenCode V2 (`2.1.4`)** e projetada nativamente para **Windows 11 (PowerShell) + WSL2 (`kali-linux` 2026.x)** ou Linux nativo.
 
@@ -79,7 +79,7 @@ Também é possível subir junto da interface: `bun run cyberlab --rebuild --lab
 
 9. [Os 4 Parceiros Cognitivos CDI (`8788–8791`) & 5 Laboratórios de Treino](#8-os-4-parceiros-cognitivos-cdi-87888791--5-laboratórios-de-treino)
 10. [Governança de Escopo Bug Bounty, Custódia `SHA-256` & Segurança Anti-Prompt-Injection](#9-governança-de-escopo-bug-bounty-custódia-sha-256--segurança-anti-prompt-injection)
-11. [Histórico Completo de Versões (`v1.0` → `v6.5`), Verificação CI & Licenciamento MIT](#11-histórico-completo-de-versões-v10--v65-verificação-ci--licenciamento-mit)
+11. [Histórico Completo de Versões (`v1.0` → `v6.6`), Verificação CI & Licenciamento MIT](#11-histórico-completo-de-versões-v10--v66-verificação-ci--licenciamento-mit)
 
 ---
 
@@ -135,7 +135,7 @@ DoS/força bruta volumosa. E uma limitação honesta: laboratórios que dependem
 banda exigem Burp Collaborator (Burp Pro) e o firewall de saída do laboratório bloqueia servidores
 externos arbitrários — sem licença, marque `FORA DE ESCOPO` em vez de tentar um substituto.
 
-### 8.5 `cyberlab up` — atualizar e subir tudo com 1 comando
+### 8.5 `cyberlab up` — 1 comando, **1 processo**, alvo embutido (v6.6)
 
 ```powershell
 bun run cyberlab up
@@ -143,11 +143,31 @@ bun run cyberlab up
 
 1. `git pull --ff-only` (pule com `--no-pull`; não roda se houver alterações locais)
 2. `bun install` se `node_modules` estiver ausente (`--install` força, `--no-install` nunca roda)
-3. sobe o **laboratório em segundo plano** (`--daemon` — sobrevive ao fechar o terminal)
-4. sobe a **interface** em primeiro plano em `http://127.0.0.1:4096`
+3. sobe a **interface com o alvo dentro dela** — como o Burp Suite, que embute o próprio
+   Chromium em vez de exigir um segundo programa
 
-Opções: `--lab <labId>`, `--port <n>` (interface), `--lab-port <n>` (alvo), `--no-open`.
-`Ctrl+C` derruba **só a interface**; o laboratório continua no ar até `lab stop`.
+Opções: `--lab <labId>`, `--port <n>` (interface), `--no-open`, e `--daemon` para o modo
+antigo (alvo em processo separado, que sobrevive ao fechar a interface).
+
+**Navegador do alvo embutido.** Na interface, vá em **`5 Labs de Treino`** e clique em
+**`▶ Abrir o alvo aqui dentro`**: o painel mostra `http://127.0.0.1:19081/` num iframe, com
+botões de recarregar e de abrir no navegador do sistema. É o mesmo papel do Chromium do Burp —
+você navega no alvo dentro da ferramenta.
+
+> Se o painel ficar em branco, é porque o lab está com `enableSecurityHeaders: true` — aí ele
+> **se recusa a ser embutido** (`X-Frame-Options: DENY` + `frame-ancestors 'none'`). Isso é o
+> header funcionando, não um bug: use `↗ Abrir no navegador do sistema`.
+
+| Modo | Processos | Alvo sobrevive ao fechar a interface? | Quando usar |
+| --- | --- | --- | --- |
+| `bun run cyberlab up` (padrão) | **1** | Não | Investigar pela interface (recomendado) |
+| `bun run cyberlab up --daemon` | 2 | Sim | Apontar Burp/curl/scan de fora, sem a UI aberta |
+
+Consistência de raiz: interface e CLI agora usam a **mesma** pasta
+(`.cyberlab/training-labs/`), então `bun run cyberlab lab status` enxerga o laboratório que
+está rodando dentro da interface — e avisa `RODANDO em OUTRO processo` em vez de dizer
+"parado".
+
 
 ## 1. Inicialização Rápida (Windows PowerShell + WSL2 Kali)
 
@@ -431,7 +451,7 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
 
 ---
 
-## 11. Histórico Completo de Versões (`v1.0` → `v6.5`), Verificação CI & Licenciamento MIT
+## 11. Histórico Completo de Versões (`v1.0` → `v6.6`), Verificação CI & Licenciamento MIT
 
 - **v1.0 – v4.0**: Base OpenCode V2 (`2.1.4`), governança anti-TOCTOU, cofre `SHA-256`, 4 CDIs (`8788–8791`), 5 Labs de Treino e 9 modelos gratuitos OpenCode Zen.
 - **v5.0 – v5.8**: Arquitetura **Real Arsenal Edition** (3 colunas Antigravity, motor `X11/noVNC` 110 DPI sem deslocamento de mouse no zoom, navegador proxy em 1 clique, Burp oficial, REA MCP, PentAGI TLS `:8443` e ferramentas Kali 2026.1).
@@ -495,6 +515,18 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
     preciso, subir o laboratório em segundo plano e abrir a interface. `Ctrl+C` derruba só
     a interface — o laboratório continua no ar.
   - Biblioteca curada: **36 documentos** (novo `targets/portswigger-web-security-academy.md`).
+
+- **v6.6**: **Processo único + navegador do alvo embutido (estilo Burp Suite).**
+  - O laboratório passa a ser hospedado pelo **próprio servidor da interface**, não pelo
+    processo lançador. Antes eram dois `TrainingLabManager` distintos e a UI nem mostrava
+    o lab como "rodando". `bun run cyberlab up` agora sobe **um único processo**.
+  - Visão `5 Labs de Treino` ganha o **🌐 Navegador do alvo (embutido)**: iframe do alvo com
+    recarregar, fechar e `↗ Abrir no navegador do sistema` — o equivalente ao Chromium do
+    Burp. Avisa explicitamente quando `enableSecurityHeaders` bloqueia o iframe.
+  - Interface e CLI passam a usar a **mesma raiz** (`.cyberlab/training-labs/`, respeitando
+    `CYBERLAB_LABS_ROOT`), e `lab status` detecta o lab rodando na interface via sonda
+    `/health`, reportando `RODANDO em OUTRO processo` em vez de "parado".
+  - `cyberlab up --daemon` mantém o modo antigo (alvo em processo separado).
 
 ### Verificação Local Completa (Idêntica ao GitHub Actions Linux + Windows)
 

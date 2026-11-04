@@ -642,6 +642,8 @@ export function CyberLabCenterStage() {
   const [customUrlInput, setCustomUrlInput] = createSignal("")
   const [toolsRootInput, setToolsRootInput] = createSignal("")
   const [burpQuickPath, setBurpQuickPath] = createSignal("")
+  // v6.6 — navegador do alvo embutido (estilo Burp): { labId: nonce de recarga }
+  const [labBrowser, setLabBrowser] = createSignal<Record<string, number>>({})
   const [framingBySlot, setFramingBySlot] = createStore<Record<string, "fit" | "scroll" | "native">>({})
   const [zoomBySlot, setZoomBySlot] = createStore<Record<string, number>>({})
   let activeToolIframeRef: HTMLIFrameElement | undefined
@@ -2316,6 +2318,89 @@ export function CyberLabCenterStage() {
                     >
                       Copiar URL p/ Burp/OpenTRAP/Nuclei
                     </button>
+                  </div>
+                </Show>
+
+                {/* v6.6 — NAVEGADOR DO ALVO EMBUTIDO (como o Chromium do Burp Suite) */}
+                <Show when={lab.running && lab.baseUrl}>
+                  <div class="mt-2 rounded-lg border border-emerald-600/30 bg-black/40">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-600/20 px-3 py-2">
+                      <span class="text-[11px] font-semibold text-emerald-400">
+                        🌐 Navegador do alvo (embutido)
+                      </span>
+                      <div class="flex items-center gap-1.5">
+                        <Show when={labBrowser()[lab.labId]}>
+                          <button
+                            type="button"
+                            class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10px] text-v2-text-text-base hover:border-emerald-500 cursor-pointer"
+                            onClick={() =>
+                              setLabBrowser((prev) => ({ ...prev, [lab.labId]: (prev[lab.labId] ?? 0) + 1 }))
+                            }
+                          >
+                            🔄 Recarregar
+                          </button>
+                          <button
+                            type="button"
+                            class="rounded border border-v2-border-border-base px-2 py-0.5 text-[10px] text-v2-text-text-muted hover:text-red-400 cursor-pointer"
+                            onClick={() =>
+                              setLabBrowser((prev) => {
+                                const next = { ...prev }
+                                delete next[lab.labId]
+                                return next
+                              })
+                            }
+                          >
+                            Fechar
+                          </button>
+                        </Show>
+                        <a
+                          href={`${lab.baseUrl}/`}
+                          target="_blank"
+                          rel="noreferrer"
+                          class="rounded border border-emerald-600/40 px-2 py-0.5 text-[10px] text-emerald-400 hover:bg-emerald-600/20"
+                        >
+                          ↗ Abrir no navegador do sistema
+                        </a>
+                      </div>
+                    </div>
+
+                    <Show
+                      when={labBrowser()[lab.labId]}
+                      fallback={
+                        <div class="px-3 py-3">
+                          <button
+                            type="button"
+                            class="rounded bg-emerald-600 px-3 py-1 text-[11px] font-medium text-white hover:bg-emerald-500 cursor-pointer"
+                            onClick={() => setLabBrowser((prev) => ({ ...prev, [lab.labId]: 1 }))}
+                          >
+                            ▶ Abrir o alvo aqui dentro
+                          </button>
+                          <p class="mt-1.5 text-[10.5px] text-v2-text-text-muted">
+                            Abre <code class="text-emerald-400">{lab.baseUrl}/</code> neste painel, do mesmo
+                            jeito que o Burp Suite embute o Chromium para navegar no alvo.
+                          </p>
+                        </div>
+                      }
+                    >
+                      {(nonce) => (
+                        <iframe
+                          data-slot="cyberlab-lab-target-browser"
+                          src={`${lab.baseUrl}/?_cb=${nonce()}`}
+                          title={`Alvo: ${lab.title}`}
+                          class="h-[520px] w-full border-0 bg-zinc-950"
+                          allow="clipboard-read; clipboard-write; fullscreen"
+                          allowfullscreen
+                        />
+                      )}
+                    </Show>
+
+                    <p class="border-t border-emerald-600/20 px-3 py-1.5 text-[10px] leading-snug text-v2-text-text-muted">
+                      Dica: se o painel ficar em branco, é porque o lab está com{" "}
+                      <code class="text-amber-400">enableSecurityHeaders: true</code> — aí ele mesmo
+                      proíbe ser embutido (<code>X-Frame-Options: DENY</code> +
+                      <code> frame-ancestors &#39;none&#39;</code>). Isso é o header funcionando, não um
+                      bug: use <span class="text-emerald-400">↗ Abrir no navegador do sistema</span>.
+                    </p>
                   </div>
                 </Show>
               </div>

@@ -15,7 +15,6 @@ import net from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { ensureKnowledgeLibrarySeeded } from "../cyberlab/knowledge/curated-library.js"
-import { BUILTIN_TRAINING_LABS, TrainingLabManager } from "../cyberlab/labs/training-labs.js"
 
 const UI_BUILD_STAMP = "cyberlab-unified-v6.2.0-investigative-orchestrator"
 
@@ -152,7 +151,7 @@ const rebuild = args.includes("--rebuild") || args.includes("--build")
 const requireAuth = args.includes("--require-auth")
 const noOpen = args.includes("--no-open") || Boolean(process.env.CI)
 const corsFlag = readFlag("--cors", "*")
-/** v6.4: sobe também um laboratório de treino já com o Kit de Investigação gerado. */
+/** v6.6: sobe também um laboratório de treino — agora DENTRO do processo do servidor. */
 const labIdFlag = readFlag("--lab", process.env.CYBERLAB_LAB || "").trim()
 
 let currentStamp = ""
@@ -304,34 +303,51 @@ const child = spawn(bunExecutable, cliArgs, {
     CYBERLAB_DEFAULT_WORKSPACE_DIR: process.env.CYBERLAB_DEFAULT_WORKSPACE_DIR || repoRoot,
     CYBERLAB_CALLBACK_URL:
       process.env.CYBERLAB_CALLBACK_URL || `http://127.0.0.1:${port}/api/cyberlab/partner-gateway`,
+    // v6.6: garante que o servidor use a MESMA raiz de labs do CLI (`lab status` etc.)
+    ...(process.env.CYBERLAB_LABS_ROOT?.trim()
+      ? { CYBERLAB_LABS_ROOT: process.env.CYBERLAB_LABS_ROOT.trim() }
+      : {}),
   },
 })
 
 /**
- * v6.4 — Sobe o laboratório solicitado via `--lab <labId>` dentro do MESMO processo,
- * garantindo que o Kit de Investigação (Fases B/D/F) já exista quando a interface abrir.
+ * v6.6 — Pede ao próprio servidor (não ao lançador) para subir o laboratório.
+ * Assim tudo roda em UM ÚNICO processo: interface + API + alvo de treino.
+ * Antes o lab era iniciado aqui no lançador, e por isso a interface nem o
+ * enxergava como "rodando" (eram dois `TrainingLabManager` diferentes).
  */
-const BUILTIN_LAB_IDS = BUILTIN_TRAINING_LABS.map((l) => l.labId)
-
-let labManager: TrainingLabManager | null = null
-if (labIdFlag) {
-  labManager = new TrainingLabManager(
-    process.env.CYBERLAB_LABS_ROOT?.trim() || path.join(repoRoot, ".cyberlab", "labs"),
-  )
+async function startRequestedLab(headers: Record<string, string>): Promise<void> {
+  if (!labIdFlag) return
   try {
-    const status = await labManager.startLab({ labId: labIdFlag })
-    console.log(`[CyberLab OS] Laboratório "${status.labId}" ativo em ${status.baseUrl ?? "(sem servidor)"}`)
-    if (labManager.hasInvestigationKit(labIdFlag)) {
-      console.log(
-        `[CyberLab OS] Kit de Investigação pronto em ${labManager.getLabWorkspacePath(labIdFlag)} ` +
-          `(LAB_SYSTEM_MODEL.md, HYPOTHESES.md, EXPERIMENTS.md)`,
+    const res = await fetch(`${primaryUrl}/api/cyberlab/labs/control`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ action: "start", labId: labIdFlag, setActive: true }),
+    })
+    if (!res.ok) {
+      console.error(
+        `[CyberLab OS] O servidor recusou subir o laboratório "${labIdFlag}" (HTTP ${res.status}): ` +
+          (await res.text().catch(() => "")).slice(0, 300),
       )
+      return
+    }
+    // A API responde no envelope `{ location, data }` — o status do lab vem em `data`.
+    const body = (await res.json()) as { data?: { baseUrl?: string; workspaceRoot?: string } }
+    const started = body.data ?? {}
+    console.log(
+      `[CyberLab OS] Laboratório "${labIdFlag}" ativo em ${started.baseUrl ?? "(sem servidor)"} ` +
+        `(mesmo processo da interface)`,
+    )
+    if (started.workspaceRoot) {
+      console.log(`[CyberLab OS] Kit de Investigação: ${started.workspaceRoot}`)
+    }
+    if (started.baseUrl) {
+      console.log(`[CyberLab OS] Navegue no alvo: ${started.baseUrl}/  (visão "5 Labs de Treino")`)
     }
   } catch (err) {
     console.error(
       `[CyberLab OS] Falha ao subir o laboratório "${labIdFlag}": ${err instanceof Error ? err.message : String(err)}`,
     )
-    console.error(`[CyberLab OS] Labs disponíveis: ${BUILTIN_LAB_IDS.join(", ")}`)
   }
 }
 
@@ -353,6 +369,7 @@ async function waitForServerAndOpenBrowser() {
       if (rootRes.ok && infoRes.ok && gwRes.ok) {
         console.log(`\n[CyberLab OS] Interface pronta em ${primaryUrl} (e ${localhostUrl})`)
         console.log(`[CyberLab OS] Partner Gateway ativo (GET/POST): http://127.0.0.1:${port}/api/cyberlab/partner-gateway`)
+        await startRequestedLab(headers)
         if (!noOpen) {
           try {
             const opener =
@@ -379,8 +396,7 @@ async function waitForServerAndOpenBrowser() {
 void waitForServerAndOpenBrowser()
 
 child.on("exit", (code) => {
-  if (labManager) {
-    void labManager.stopAll().catch(() => {})
-  }
+  // v6.6: o laboratório vive DENTRO do processo do servidor (um processo só),
+  // então morre junto com ele — nada a encerrar aqui.
   process.exit(code ?? 0)
 })

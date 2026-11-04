@@ -215,7 +215,11 @@ export class CyberLabWorkspace {
     if (!envBridge) {
       this.ownedManager = new CyberLabWorkspaceManager({
         projectsRootDir: path.join(this.workspaceRoot, ".cyberlab", "projects"),
-        labsRootDir: path.join(this.workspaceRoot, ".cyberlab", "training-labs"),
+        // v6.6: permite alinhar o servidor (UI) com o CLI — antes cada um usava
+        // uma raiz diferente e um não enxergava o laboratório do outro.
+        labsRootDir:
+          process.env.CYBERLAB_LABS_ROOT?.trim() ||
+          path.join(this.workspaceRoot, ".cyberlab", "training-labs"),
         inMemoryChildren: Boolean(options.inMemoryDb),
       })
       this.ownedManager.registerExistingWorkspace(this, {

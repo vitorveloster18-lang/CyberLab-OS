@@ -6,12 +6,16 @@
  *
  *   1. `git pull --ff-only` (pule com `--no-pull`)
  *   2. `bun install` se `node_modules` estiver ausente (force com `--install`)
- *   3. sobe o laboratório em SEGUNDO PLANO (`lab start <labId> --daemon`)
- *   4. sobe a interface do CyberLab OS em PRIMEIRO PLANO (Ctrl+C derruba só a interface)
+ *   3. sobe a interface do CyberLab OS com `--lab <labId>`
  *
- * Resultado: a interface fica em http://127.0.0.1:4096 e o alvo de treino em
- * http://127.0.0.1:19081. Fechar o terminal derruba a interface; o laboratório
- * CONTINUA no ar (é um daemon) até `bun run cyberlab lab stop <labId>`.
+ * Resultado: **UM ÚNICO PROCESSO** — interface, API e alvo de treino juntos, como o
+ * Burp Suite (que embute o próprio Chromium). A interface fica em
+ * http://127.0.0.1:4096 e o alvo em http://127.0.0.1:19081; você navega no alvo pelo
+ * painel "🌐 Navegador do alvo (embutido)" na visão "5 Labs de Treino".
+ *
+ * Use `--daemon` se quiser o comportamento antigo: laboratório em processo separado,
+ * que CONTINUA no ar depois de fechar a interface (útil para apontar Burp/curl de
+ * fora sem a interface aberta).
  */
 
 import { spawn, spawnSync } from "node:child_process"
@@ -47,6 +51,7 @@ const noPull = args.includes("--no-pull")
 const noInstall = args.includes("--no-install")
 const forceInstall = args.includes("--install")
 const noOpen = args.includes("--no-open")
+const daemonLab = args.includes("--daemon") || args.includes("-d")
 
 if (args.includes("--help") || args.includes("-h")) {
   console.log(
@@ -62,6 +67,9 @@ if (args.includes("--help") || args.includes("-h")) {
       `  --no-pull                Não roda git pull`,
       `  --install / --no-install Força / nunca roda bun install`,
       `  --no-open                Não abre o navegador`,
+      `  --daemon, -d             Sobe o laboratório em processo SEPARADO (sobrevive ao fechar a interface)`,
+      "",
+      `Padrão: UM ÚNICO processo (interface + API + alvo), como o Burp Suite.`,
       "",
       "Exemplos:",
       "  bun run cyberlab up",
@@ -117,32 +125,47 @@ if (noInstall) {
   console.log(`${DIM}2/4  node_modules presente — nada a instalar (use --install para forçar).${RESET}`)
 }
 
-// ---------------------------------------------------------------- 3) laboratório (daemon)
-const labArgs = ["run", "script/cyberlab-lab.ts", "start", labId, "--daemon"]
-if (labPort) labArgs.push("--port", labPort)
-console.log(`${DIM}3/4  Subindo o laboratório "${labId}" em segundo plano...${RESET}`)
-const lab = spawn(process.execPath, labArgs, {
-  cwd: repoRoot,
-  stdio: "inherit",
-  env: { ...process.env, CYBERLAB_LABS_ROOT: process.env.CYBERLAB_LABS_ROOT || path.join(repoRoot, ".cyberlab", "labs") },
-})
-const labCode = await new Promise<number>((resolve) => lab.on("close", (c) => resolve(c ?? 1)))
-if (labCode !== 0) {
-  console.log(`${YELLOW}     O laboratório não subiu (código ${labCode}). A interface abrirá mesmo assim.${RESET}`)
-  console.log(`${DIM}     Diagnóstico: bun run cyberlab lab status ${labId}${RESET}`)
+// ---------------------------------------------------------------- 3) laboratório + interface (1 processo)
+const labsRoot = process.env.CYBERLAB_LABS_ROOT?.trim() || path.join(repoRoot, ".cyberlab", "labs")
+
+if (daemonLab) {
+  console.log(`${DIM}3/4  Subindo o laboratório "${labId}" em processo SEPARADO (--daemon)...${RESET}`)
+  const labArgs = ["run", "script/cyberlab-lab.ts", "start", labId, "--daemon"]
+  if (labPort) labArgs.push("--port", labPort)
+  const lab = spawn(process.execPath, labArgs, { cwd: repoRoot, stdio: "inherit", env: { ...process.env, CYBERLAB_LABS_ROOT: labsRoot } })
+  const labCode = await new Promise<number>((resolve) => lab.on("close", (c) => resolve(c ?? 1)))
+  if (labCode !== 0) {
+    console.log(`${YELLOW}     O laboratório não subiu (código ${labCode}). A interface abrirá mesmo assim.${RESET}`)
+  }
+} else {
+  console.log(`${DIM}3/4  Laboratório "${labId}" sobe DENTRO da interface (processo único).${RESET}`)
+  if (labPort) {
+    console.log(`${YELLOW}     --lab-port só vale com --daemon; na interface a porta vem do catálogo.${RESET}`)
+  }
 }
 
-// ---------------------------------------------------------------- 4) interface (primeiro plano)
 console.log("")
 console.log(`${BOLD}4/4  Subindo a interface do CyberLab OS em ${CYAN}http://127.0.0.1:${uiPort}${RESET}`)
-console.log(`${DIM}     Ctrl+C encerra a INTERFACE. O laboratório continua no ar; para derrubá-lo:${RESET}`)
-console.log(`${DIM}       bun run cyberlab lab stop ${labId}${RESET}`)
+if (daemonLab) {
+  console.log(`${DIM}     Ctrl+C encerra a INTERFACE. O laboratório continua no ar; para derrubá-lo:${RESET}`)
+  console.log(`${DIM}       bun run cyberlab lab stop ${labId}${RESET}`)
+} else {
+  console.log(`${DIM}     Ctrl+C encerra tudo (interface + laboratório), pois é um só processo.${RESET}`)
+  console.log(`${DIM}     Para deixar o alvo no ar sem a interface: bun run cyberlab up ${labId} --daemon${RESET}`)
+}
+console.log(`${DIM}     Navegue no alvo pela visão "5 Labs de Treino" → "🌐 Navegador do alvo (embutido)".${RESET}`)
 console.log("")
 
-// NÃO passamos `--lab` aqui: a interface abriria um SEGUNDO servidor do laboratório
-// dentro do próprio processo, conflitando com o daemon que já subiu no passo 3.
+// Sem `--daemon`, o próprio servidor sobe o laboratório: interface + API + alvo
+// no MESMO processo. Com `--daemon`, não passamos `--lab` para não abrir um segundo
+// servidor do laboratório conflitando com o daemon do passo 3.
 const uiArgs = ["run", "script/start-cyberlab.ts", "--port", uiPort]
 if (noOpen) uiArgs.push("--no-open")
+if (!daemonLab) uiArgs.push("--lab", labId)
 
-const ui = spawn(process.execPath, uiArgs, { cwd: repoRoot, stdio: "inherit" })
+const ui = spawn(process.execPath, uiArgs, {
+  cwd: repoRoot,
+  stdio: "inherit",
+  env: { ...process.env, CYBERLAB_LABS_ROOT: labsRoot },
+})
 ui.on("close", (code) => process.exit(code ?? 0))
