@@ -18,6 +18,11 @@ const SHELL_COMMAND_RE = /^(sudo|apt|apt-get|pipx|pip3?|go|cargo|gem|curl|wget|n
 
 const CANONICAL_TOOLS = BUILTIN_EXTERNAL_TOOL_CATALOG.filter((t) => !t.toolId.startsWith("external:"))
 
+/** `installKaliWsl` é opcional no tipo; o CLI trata ausência como "não instalável por script". */
+function kaliHint(tool: (typeof BUILTIN_EXTERNAL_TOOL_CATALOG)[number]): string {
+  return tool.installKaliWsl ?? ""
+}
+
 describe("Catálogo de ferramentas externas — dicas de instalação (v6.7)", () => {
   it("expõe um catálogo canônico não vazio e sem ids duplicados", () => {
     expect(CANONICAL_TOOLS.length).toBeGreaterThan(0)
@@ -29,13 +34,13 @@ describe("Catálogo de ferramentas externas — dicas de instalação (v6.7)", (
     for (const tool of CANONICAL_TOOLS) {
       expect(tool.licenseSpdx.length).toBeGreaterThan(0)
       expect(tool.installHint.length).toBeGreaterThan(0)
-      expect(tool.installKaliWsl.length).toBeGreaterThan(0)
+      expect(kaliHint(tool).length).toBeGreaterThan(0)
     }
   })
 
   it("toda dica apt do Kali é executável de verdade (sem parênteses explicativos soltos)", () => {
     for (const tool of CANONICAL_TOOLS) {
-      const cmd = tool.installKaliWsl.split(" (")[0]!.trim()
+      const cmd = kaliHint(tool).split(" (")[0]!.trim()
       if (!SHELL_COMMAND_RE.test(cmd)) continue
       // Depois de remover o parêntese explicativo não pode sobrar parêntese aberto.
       expect(cmd.includes("(")).toBe(false)
@@ -45,10 +50,10 @@ describe("Catálogo de ferramentas externas — dicas de instalação (v6.7)", (
   })
 
   it("as dicas que não são comandos ficam fora do script e são reconhecíveis", () => {
-    const notShell = CANONICAL_TOOLS.filter((t) => !SHELL_COMMAND_RE.test(t.installKaliWsl.split(" (")[0]!.trim()))
+    const notShell = CANONICAL_TOOLS.filter((t) => !SHELL_COMMAND_RE.test(kaliHint(t).split(" (")[0]!.trim()))
     for (const tool of notShell) {
       // Precisa ser legível pelo operador: é virada em comentário pelo CLI.
-      expect(tool.installKaliWsl.length).toBeGreaterThan(10)
+      expect(kaliHint(tool).length).toBeGreaterThan(10)
     }
   })
 })
