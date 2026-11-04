@@ -86,4 +86,4 @@ jobs:
         run: |
           bun run script/check-cyberlab-licenses.ts
           bun --cwd cyberlab typecheck
-          bun test --cwd cyberlab ../tests/cyberlab/partners ../tests/cyberlab/labs ../tests/cyberlab/arsenal/arsenal-slots.test.ts
+          bun test --cwd cyberlab ../tests/cyberlab/partners ../tests/cyberlab/labs ../tests/cyberlab/safety ../tests/cyberlab/knowledge ../tests/cyberlab/arsenal/arsenal-slots.test.ts

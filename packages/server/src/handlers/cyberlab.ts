@@ -5,6 +5,7 @@ import {
   type EvidenceRecord,
   type ExecutionRecord,
   type SecurityFinding,
+  guardDestructive,
 } from "@cyberlab/core"
 import { Location } from "@opencode/core/location"
 import { Project } from "@opencode/core/project"
@@ -15,6 +16,31 @@ import { HttpServerRequest } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 import { response } from "../location"
+
+/**
+ * v6.7 — Bloqueia operação destrutiva SEM confirmação do operador.
+ * Usa `InvalidRequestError` (400) de propósito: é um erro declarado no contrato do
+ * endpoint, então a MENSAGEM chega ao chamador. Um erro genérico virava 500 com corpo
+ * vazio e o agente ficava sem saber o que pedir ao operador.
+ */
+const guardDestructiveEffect = (
+  operation: string,
+  payload: unknown,
+): Effect.Effect<void, InvalidRequestError> =>
+  Effect.suspend(() => {
+    const approval = guardDestructive(operation, (payload ?? {}) as Record<string, unknown>)
+    if (!approval) return Effect.void
+    // Falha TIPADA (não defect): `InvalidRequestError` está no contrato do endpoint,
+    // então a mensagem chega ao chamador. Lançar dentro de Effect.sync virava defect,
+    // que o HttpApi responde como 500 com corpo vazio — inútil para quem precisa ler.
+    return Effect.fail(
+      new InvalidRequestError({
+        message: approval.message,
+        kind: "destructive_action_blocked",
+        field: "confirm",
+      }),
+    )
+  })
 
 function toCapabilityInfo(cap: CapabilityDefinition) {
   return {
@@ -603,6 +629,7 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
       response(
         Effect.gen(function* () {
           const ws = yield* resolveWorkspace
+          yield* guardDestructiveEffect("cyberlab.arsenal.custom.remove", payload)
           const [updated, availableBrowsers] = yield* runBadRequest(async () => {
             const ov = await ws.removeCustomArsenalSlot(payload.slotId)
             return [ov, await ws.listAvailableBrowsers()] as const
@@ -616,6 +643,8 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
       response(
         Effect.gen(function* () {
           const ws = yield* resolveWorkspace
+          // v6.7: o agente NÃO pode limpar o arsenal sem o operador confirmar.
+          yield* guardDestructiveEffect("cyberlab.arsenal.prune", payload)
           const [updated, availableBrowsers] = yield* runBadRequest(async () => {
             const ov = await ws.pruneBrokenCustomArsenalSlots({
               ...(payload.removeGhosts !== undefined ? { removeGhosts: payload.removeGhosts } : {}),
@@ -797,6 +826,10 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
       response(
         Effect.gen(function* () {
           const ws = yield* resolveWorkspace
+          // v6.7: `reset` regrava arquivos e `stop` derruba o alvo — exigem confirmação.
+          if (payload.action === "reset" || payload.action === "stop") {
+            yield* guardDestructiveEffect(`cyberlab.labs.control.${payload.action}`, payload)
+          }
           if (payload.action === "start") {
             const started = yield* runBadRequest(() =>
               CyberLabWorkspaceManager.global.startTrainingLab({
@@ -898,6 +931,8 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
       response(
         Effect.gen(function* () {
           const ws = yield* resolveWorkspace
+          // v6.7: apagar nota é SEM VOLTA — exige `confirm` + `confirmPhrase` exata.
+          yield* guardDestructiveEffect("cyberlab.vault.delete", payload)
           return yield* runBadRequest(() => ws.deleteVaultNote(payload.relativePath))
         }),
       ),

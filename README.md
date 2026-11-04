@@ -1,4 +1,4 @@
-# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.6)
+# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.7)
 
 Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investigação Orientada por Hipóteses, Bug Bounty Autorizado, Engenharia Reversa, DFIR e Laboratórios de Treinamento**, construída sobre o **OpenCode V2 (`2.1.4`)** e projetada nativamente para **Windows 11 (PowerShell) + WSL2 (`kali-linux` 2026.x)** ou Linux nativo.
 
@@ -79,7 +79,7 @@ Também é possível subir junto da interface: `bun run cyberlab --rebuild --lab
 
 9. [Os 4 Parceiros Cognitivos CDI (`8788–8791`) & 5 Laboratórios de Treino](#8-os-4-parceiros-cognitivos-cdi-87888791--5-laboratórios-de-treino)
 10. [Governança de Escopo Bug Bounty, Custódia `SHA-256` & Segurança Anti-Prompt-Injection](#9-governança-de-escopo-bug-bounty-custódia-sha-256--segurança-anti-prompt-injection)
-11. [Histórico Completo de Versões (`v1.0` → `v6.6`), Verificação CI & Licenciamento MIT](#11-histórico-completo-de-versões-v10--v66-verificação-ci--licenciamento-mit)
+11. [Histórico Completo de Versões (`v1.0` → `v6.7`), Verificação CI & Licenciamento MIT](#11-histórico-completo-de-versões-v10--v67-verificação-ci--licenciamento-mit)
 
 ---
 
@@ -134,6 +134,59 @@ Regras que o `RULES-OF-ENGAGEMENT.md` deixa explícitas: **não** varrer o domí
 DoS/força bruta volumosa. E uma limitação honesta: laboratórios que dependem de interação fora de
 banda exigem Burp Collaborator (Burp Pro) e o firewall de saída do laboratório bloqueia servidores
 externos arbitrários — sem licença, marque `FORA DE ESCOPO` em vez de tentar um substituto.
+
+### 8.6 Guarda de ações destrutivas — o agente NÃO destrói sem perguntar (v6.7)
+
+Regra do projeto, agora **no código** (não só no prompt): `cyberlab/safety/destructive-guard.ts`.
+
+| Operação | Risco | O que exige |
+| --- | --- | --- |
+| `cyberlab.arsenal.prune` | destrutivo | `confirm: true` |
+| `cyberlab.arsenal.custom.remove` | destrutivo | `confirm: true` |
+| `cyberlab.labs.control` (`reset` / `stop`) | destrutivo | `confirm: true` |
+| `cyberlab.vault.delete` | **irreversível** | `confirm: true` **+** `confirmPhrase` digitada exata |
+| `cyberlab.knowledge.sync` | destrutivo | `confirm: true` |
+
+Sem a confirmação, a operação **falha fechada** e responde `HTTP 400` com o plano completo
+(o que seria afetado, o que tem volta e o que não tem) — para o agente conseguir **mostrar
+o plano ao operador** e pedir autorização. Erro sem corpo não ensina nada a ninguém.
+
+O humano clicando num botão da interface **já é** a confirmação: a UI envia `confirm: true`.
+O agente não tem como obter esse token, então sempre recebe o plano primeiro.
+
+### 8.7 Sincronização do cofre curado — `cyberlab knowledge` (v6.7)
+
+A semeadura da biblioteca só escrevia quando o arquivo **não** existia
+(`if (!existsSync(dest))`). Na prática: documentos novos entravam, mas qualquer doc que já
+estivesse no cofre ficava preso na versão do dia em que você rodou o CyberLab pela primeira
+vez — foi exatamente por isso que o `00-Index.md` continuava sendo o da v6.2.
+
+```powershell
+bun run cyberlab knowledge            # PLANO: não escreve nada
+bun run cyberlab knowledge --apply    # aplica, com .bak antes de cada troca
+```
+
+- Compara `version` + `last_reviewed` do frontmatter — status, não palpite.
+- Só toca em documento com `tier: curated`. `_drafts/`, `Investigacoes/` e notas suas são
+  preservadas (e aparecem como **protegidas** no plano).
+- Cada arquivo substituído ganha um `.bak` ao lado. Se não conseguir fazer o backup, **não
+  escreve**.
+- O `00-Index.md` foi corrigido: 35 documentos + o índice (vulnerabilidades eram 10, o texto
+  dizia 9).
+
+### 8.8 Evidência visível para o agente — `lab evidence --register` (v6.7)
+
+O `lab evidence` gravava em arquivos; o agente consulta o `EvidenceStore` (SQLite). Eram
+dois mundos separados, e por isso a calibração dizia "0 registros" mesmo com 19 requisições
+arquivadas. Agora:
+
+```powershell
+bun run cyberlab lab evidence lab-owasp-api-bola --register
+bun run cyberlab lab evidence lab-owasp-api-bola --out evidence\rodada-02 --register
+```
+
+Grava os arquivos **e** registra cada requisição no `EvidenceStore` (projeto = `labId`), de
+onde `cyberlab_evidence_list` passa a enxergá-las.
 
 ### 8.5 `cyberlab up` — 1 comando, **1 processo**, alvo embutido (v6.6)
 
@@ -451,7 +504,7 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
 
 ---
 
-## 11. Histórico Completo de Versões (`v1.0` → `v6.6`), Verificação CI & Licenciamento MIT
+## 11. Histórico Completo de Versões (`v1.0` → `v6.7`), Verificação CI & Licenciamento MIT
 
 - **v1.0 – v4.0**: Base OpenCode V2 (`2.1.4`), governança anti-TOCTOU, cofre `SHA-256`, 4 CDIs (`8788–8791`), 5 Labs de Treino e 9 modelos gratuitos OpenCode Zen.
 - **v5.0 – v5.8**: Arquitetura **Real Arsenal Edition** (3 colunas Antigravity, motor `X11/noVNC` 110 DPI sem deslocamento de mouse no zoom, navegador proxy em 1 clique, Burp oficial, REA MCP, PentAGI TLS `:8443` e ferramentas Kali 2026.1).
@@ -528,6 +581,22 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
     `/health`, reportando `RODANDO em OUTRO processo` em vez de "parado".
   - `cyberlab up --daemon` mantém o modo antigo (alvo em processo separado).
 
+- **v6.7**: **O agente não destrói nada sem perguntar + cofre sincronizado + evidência visível.**
+  - Nova `cyberlab/safety/destructive-guard.ts`: catálogo de operações destrutivas com risco,
+    consequências e requisito de liberação. Sem confirmação, **falha fechada** e responde
+    `HTTP 400` com o plano completo (usa `InvalidRequestError`, que é erro declarado no
+    contrato — lançar genérico virava 500 com corpo vazio e o agente ficava sem o plano).
+    `vault.delete` é `irreversível` e exige `confirmPhrase` digitada exata.
+    A interface envia `confirm: true` (o clique do operador é a confirmação).
+  - `cyberlab knowledge` / `library-sync.ts`: corrige a causa raiz do índice desatualizado —
+    a semeadura nunca sobrescrevia. Plano por padrão, `--apply` para escrever, backup `.bak`
+    antes de cada troca e arquivo do operador (`tier != curated`) intocado.
+  - `00-Index.md` corrigido (35 docs + índice; vulnerabilidades 10, não 9) com `version`
+    bumpada para `1.1.0`, para a sincronização detectar a mudança no cofre.
+  - `lab evidence --register` grava cada requisição também no `EvidenceStore` (SQLite),
+    acabando com o "0 registros" da calibração.
+  - CI passa a rodar `tests/cyberlab/safety` e `tests/cyberlab/knowledge`.
+
 ### Verificação Local Completa (Idêntica ao GitHub Actions Linux + Windows)
 
 ```bash
@@ -542,7 +611,7 @@ bun --cwd packages/cli typecheck
 bun --cwd packages/gui-plugins typecheck
 bun --cwd cyberlab typecheck
 
-# 3. Suíte automatizada de testes (85 testes / 1.344+ asserções)
+# 3. Suíte automatizada de testes (102 testes / 1.445+ asserções)
 bun --cwd cyberlab test
 ```
 

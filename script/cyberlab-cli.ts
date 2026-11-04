@@ -32,9 +32,20 @@ const shouldLaunchUnifiedApp =
     APP_SUBCOMMANDS.has(firstArg) ||
     (!CLI_SUBCOMMANDS.has(firstArg) && firstArg.startsWith("-")))
 
+const KNOWLEDGE_SUBCOMMANDS = new Set(["knowledge", "conhecimento", "vault", "cofre"])
 const UP_SUBCOMMANDS = new Set(["up", "subir"])
 
-if (UP_SUBCOMMANDS.has(firstArg)) {
+if (KNOWLEDGE_SUBCOMMANDS.has(firstArg)) {
+  const res = spawnSync(process.execPath, ["run", "script/cyberlab-knowledge.ts", ...args.slice(1)], {
+    cwd: repoRoot,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      CYBERLAB_WORKSPACE_ROOT: process.env.CYBERLAB_WORKSPACE_ROOT || process.cwd(),
+    },
+  })
+  process.exit(res.status ?? 1)
+} else if (UP_SUBCOMMANDS.has(firstArg)) {
   const res = spawnSync(process.execPath, ["run", "script/cyberlab-up.ts", ...args.slice(1)], {
     cwd: repoRoot,
     stdio: "inherit",

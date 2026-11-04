@@ -27,6 +27,8 @@ import { BUILTIN_TRAINING_LABS, TrainingLabManager } from "../cyberlab/labs/trai
 import { CyberLabKnowledgeEngine } from "../cyberlab/knowledge/curated-library.js"
 import { runBolaEvidenceSuite } from "../cyberlab/labs/evidence-recorder.js"
 import { listTargetProfiles, writeTargetScope } from "../cyberlab/labs/target-profiles.js"
+import { createDefaultCyberLabConfig } from "../cyberlab/config/config.js"
+import { EvidenceStore } from "../cyberlab/evidence/store.js"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const args = process.argv.slice(2)
@@ -67,6 +69,7 @@ function usage(): void {
       "Opções de evidence:",
       "  --out <dir>              Pasta de saída (padrão: evidence/<labId>/<timestamp>)",
       "  --port <n>               Usa um lab JÁ ativo nessa porta em vez de subir um novo",
+      "  --register               Registra o lote no EvidenceStore (o agente passa a vê-lo)",
       "",
       "Opções de scope:",
       "  --out <dir>              Pasta de saída (padrão: <labsRoot>/targets/<perfil>)",
@@ -637,6 +640,45 @@ switch (command) {
     console.log("")
     console.log(`${DIM}Verificação (PowerShell): (Get-FileHash .\manifest.json -Algorithm SHA256).Hash.ToLower()${RESET}`)
     console.log(`${DIM}Verificação (WSL2/Linux): sha256sum manifest.json${RESET}`)
+
+    if (args.includes("--register")) {
+      const wsRoot = resolveWorkspaceRoot()
+      const cfg = createDefaultCyberLabConfig(wsRoot)
+      const store = new EvidenceStore({
+        databasePath: cfg.databaseFilename,
+        artifactsDir: cfg.artifactsDirectory,
+      })
+      try {
+        const executionId = `lab-evidence-${stamp}`
+        let n = 0
+        for (const rec of result.manifest.cases) {
+          store.storeEvidence(
+            labIdArg,
+            {
+              kind: "http_exchange",
+              title: `${rec.experimentId} — ${rec.label}`,
+              source: { toolId: "cyberlab-lab-evidence", toolVersion: "6.7.0", executorId: "operator", executionId },
+              content: {
+                mediaType: "text/plain",
+                inlineText: readFileSync(path.join(outDir, rec.file), "utf8"),
+                sha256: rec.sha256,
+                byteLength: rec.bytes,
+              },
+              observedAt: rec.capturedAt,
+              labels: ["lab", labIdArg, rec.experimentId, `http-${rec.status}`],
+            },
+            { applyRedactionBeforeStore: false },
+          )
+          n += 1
+        }
+        console.log(`${GREEN}✔ ${n} evidências registradas no EvidenceStore${RESET} (projeto: ${labIdArg})`)
+        console.log(`  ${DIM}Banco: ${cfg.databaseFilename}${RESET}`)
+        console.log(`  ${DIM}O agente passa a enxergá-las via cyberlab_evidence_list.${RESET}`)
+      } finally {
+        store.close()
+      }
+      console.log("")
+    }
 
     if (startedHere) await manager.stopLab(labIdArg)
     process.exit(0)

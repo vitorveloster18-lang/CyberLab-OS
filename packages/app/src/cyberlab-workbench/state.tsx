@@ -580,7 +580,7 @@ function createWorkbenchService() {
         "/api/cyberlab/arsenal/custom/remove",
         {
           method: "POST",
-          body: JSON.stringify({ slotId }),
+          body: JSON.stringify({ slotId, confirm: true }),
         },
       )
       batch(() => {
@@ -604,7 +604,12 @@ function createWorkbenchService() {
       const updated = await cyberlabFetch<ArsenalOverviewDto>(
         serverTarget(),
         "/api/cyberlab/arsenal/prune",
-        { method: "POST", body: JSON.stringify({ removeGhosts: true, removeDuplicates: true }) },
+        {
+          method: "POST",
+          // v6.7: o clique do operador no botão da interface É a confirmação exigida
+          // pela guarda de ações destrutivas (o agente não tem como ter este token).
+          body: JSON.stringify({ removeGhosts: true, removeDuplicates: true, confirm: true }),
+        },
       )
       batch(() => {
         setBackend("arsenal", reconcile(updated))

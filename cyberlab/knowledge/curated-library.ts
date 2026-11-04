@@ -1071,8 +1071,8 @@ id: knowledge/index
 title: Biblioteca Curada CyberLab-Knowledge — Índice e Epistemologia
 tier: curated
 category: index
-version: "1.0.0"
-last_reviewed: "2026-11-03"
+version: "1.1.0"
+last_reviewed: "2026-11-04"
 status: validated
 sources:
   - "Arquitetura Epistemológica CyberLab OS v6.2"
@@ -1096,13 +1096,19 @@ Esta biblioteca organiza o conhecimento técnico do **Investigative Security Orc
 2. **Contexto da Investigação Atual (\`.cyberlab/investigations/\` + \`Investigacoes/\`, \`tier: session_context\`)**: missão, escopo autorizado, modelo do sistema, hipóteses ativas, experimentos e resultados negativos da sessão corrente.
 3. **Conhecimento Externo**: advisories oficiais, commits, patches e documentação primária consultados durante a sessão, sempre acompanhados de fonte, versão e data.
 
-## Mapa da Biblioteca (34 documentos curados)
+## Mapa da Biblioteca (35 documentos curados + este índice = 36)
 - **Fundamentos (8)**: [[http]], [[authentication]], [[authorization]], [[sessions]], [[networking]], [[jwt-oauth-oidc]], [[csrf-cors-samesite]], [[tls-crypto]]
 - **Metodologias (3)**: [[hypothesis-driven-testing]], [[evidence-validation]], [[root-cause-analysis]]
-- **Vulnerabilidades (9)**: [[idor-bola-bfla]], [[context-aware-injection]], [[http-url-json-differentials]], [[state-race-invariants]], [[ssrf]], [[deserialization-xxe-upload]], [[graphql-websocket]], [[cache-poisoning-deception]], [[race-conditions-toctou]], além de [[mass-assignment-rate-limit]]
+- **Vulnerabilidades (10)**: [[idor-bola-bfla]], [[context-aware-injection]], [[http-url-json-differentials]], [[state-race-invariants]], [[ssrf]], [[deserialization-xxe-upload]], [[graphql-websocket]], [[cache-poisoning-deception]], [[race-conditions-toctou]], [[mass-assignment-rate-limit]]
 - **Pesquisa Primária (3)**: [[cve-applicability-methodology]], [[patch-diff-methodology]], [[reproducible-writeup-standard]]
 - **Domínios (4)**: [[mobile-android-ios]], [[binary-reverse-engineering]], [[cloud-iam-containers]], [[logging-forensics-detection]]
 - **Ferramentas & Catálogo MCP (6)**: [[mcp-tool-catalog]], [[burp]], [[nuclei]], [[semgrep]], [[ai-assisted-pentest-workflows]], [[lab-owasp-api-bola]]
+- **Alvos autorizados (1)**: [[portswigger-web-security-academy]] — escopo, proibições e limites (v6.5)
+
+## Atualização v6.5 — alvo externo autorizado
+[[portswigger-web-security-academy]] documenta o único alvo externo com **autorização declarada**
+cadastrado até agora: hosts permitidos, o que é proibido, limites de taxa e a ponte entre as
+hipóteses H1–H4 calibradas no laboratório local e os tópicos da Academy.
 
 ## Atualização v6.3 (lacunas apontadas na Fase A)
 Os 14 documentos abaixo foram adicionados para fechar domínios que limitavam a formulação de hipóteses testáveis:

@@ -435,6 +435,8 @@ export namespace CyberLab {
   export const ArsenalPruneCustomSlotsInput = Schema.Struct({
     removeGhosts: optional(Schema.Boolean),
     removeDuplicates: optional(Schema.Boolean),
+    /** v6.7: confirmação humana exigida pela guarda de ações destrutivas. */
+    confirm: optional(Schema.Boolean),
   })
 
   export const ArsenalConfigPatchInput = Schema.Struct({
@@ -460,6 +462,8 @@ export namespace CyberLab {
 
   export const ArsenalCustomSlotRemoveInput = Schema.Struct({
     slotId: Schema.String,
+    /** v6.7: confirmação humana exigida pela guarda de ações destrutivas. */
+    confirm: optional(Schema.Boolean),
   })
 
   export const ArsenalLaunchInput = Schema.Struct({
@@ -670,6 +674,8 @@ export namespace CyberLab {
     preferredPort: optional(Schema.Number),
     resetFiles: optional(Schema.Boolean),
     setActive: optional(Schema.Boolean),
+    /** v6.7: confirmação humana para `reset` e `stop` (destrutivos). */
+    confirm: optional(Schema.Boolean),
   })
 
   export const ManagedProjectInfo = Schema.Struct({
@@ -761,6 +767,9 @@ export namespace CyberLab {
 
   export const VaultDeleteInput = Schema.Struct({
     relativePath: Schema.String,
+    /** v6.7: confirmação humana (risco `irreversible`). */
+    confirm: optional(Schema.Boolean),
+    confirmPhrase: optional(Schema.String),
   })
 
   export const VaultConfigInput = Schema.Struct({
