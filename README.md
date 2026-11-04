@@ -20,6 +20,7 @@ Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investiga
 7. [Catálogo Completo dos 48 Slots Oficiais + Slots Personalizados](#7-catálogo-completo-dos-48-slots-oficiais--slots-personalizados)
 8. [Laboratórios de Treino Prontos para Investigação (v6.4–v6.5)](#8-laboratórios-de-treino-prontos-para-investigação-v64v65)
    - [8.9 Diagnóstico do Arsenal — `lab slots` e `lab tools`](#89-diagnóstico-do-arsenal--lab-slots-e-lab-tools-v67)
+   - [8.10 Fase C — Pesquisa: `lab research`](#810-fase-c--pesquisa-lab-research-v67)
 ---
 
 ## 8. Laboratórios de Treino Prontos para Investigação (v6.4–v6.5)
@@ -264,6 +265,51 @@ wsl -d kali-linux -- bash -s < install-faltantes.sh
 > *alvo de treino* e o escopo autorizado declarado no Kit de Investigação é loopback. Quando o
 > navegador do operador **não** está na mesma máquina (preview remoto, container, sandbox), use
 > `CYBERLAB_LAB_HOST=0.0.0.0 bun run cyberlab lab start lab-owasp-api-bola --port 19081`.
+
+### 8.10 Fase C — Pesquisa: `lab research` (v6.7)
+
+A **Fase C** do ciclo metodológico (A–I) era a única que existia só no prompt do agente:
+*"consulte `CyberLab-Knowledge/` e fontes primárias sobre mecanismos, histórico de falhas,
+patches anteriores e pressupostos de segurança"* — sem ferramenta, cada operador montava a
+pesquisa à mão e nada ficava arquivado. Agora é um artefato versionado:
+
+```powershell
+bun run cyberlab lab research lab-owasp-api-bola
+bun run cyberlab lab research lab-owasp-api-bola --register   # também entra no EvidenceStore
+bun run cyberlab lab research lab-owasp-api-bola --offline    # não toca a rede (usa o cache)
+bun run cyberlab lab research lab-owasp-api-bola --refresh    # ignora o cache (TTL 12h)
+bun run cyberlab lab research lab-owasp-api-bola --json
+```
+
+Duas fontes, como manda a metodologia:
+
+1. **`CyberLab-Knowledge/`** — busca local na biblioteca curada do cofre (sem rede).
+2. **GitHub Advisory Database** (`GET api.github.com/advisories`) — histórico real de
+   falhas das tecnologias que o lab emula. Cada resposta é arquivada **bruta** em
+   `research-raw/` com SHA-256, para o relatório ser auditável.
+
+Gera `RESEARCH.md`, `research.json`, `research-raw/*.json` e `research-manifest.json`
+(lacre SHA-256 do lote). Autenticação opcional via `GITHUB_TOKEN`/`GH_TOKEN`: sem token o
+limite é 60 req/h, com token 5.000 req/h.
+
+> **A Fase C não declara vulnerabilidade — ela produz contexto para a Fase D.** O lab é um
+> alvo sintético em `node:http` puro, **sem dependências de terceiros**: os advisories
+> listados referem-se às tecnologias que ele *emula*, **não são CVEs do próprio lab**.
+> Isso está escrito explicitamente na seção "Limitações declaradas" do relatório.
+
+O perfil de pesquisa é curado por lab (`cyberlab/labs/research-profile.ts`): pacotes a
+consultar, classes de fraqueza (CWE/OWASP) e fontes primárias (RFC 8725 para JWT
+`alg:none`, OWASP API1:2023 para BOLA, CWE-639/347/209/693). Lab sem curadoria recebe um
+perfil **derivado** do modelo de Fase B — e esse perfil derivado deliberadamente **não
+consulta nenhum pacote**, para não inventar falso positivo.
+
+Dois ajustes que vieram de dados reais:
+
+- Um advisory pode listar vários pacotes; a normalização gera um registro por pacote
+  afetado **e depois colapsa para 1 linha por advisory**. Sem isso, `affects=jose`
+  devolvia 17 linhas (3 advisories) por causa de faixas repetidas e pacotes irmãos.
+- `pyjwt` aparece em três grafias (`pyjwt`, `PyJWT`, `pyJWT`); o colapso casa ignorando
+  caixa.
 
 ### 8.5 `cyberlab up` — 1 comando, **1 processo**, alvo embutido (v6.6)
 
@@ -702,7 +748,7 @@ bun --cwd packages/cli typecheck
 bun --cwd packages/gui-plugins typecheck
 bun --cwd cyberlab typecheck
 
-# 3. Suíte automatizada de testes (119 testes / 1.568+ asserções)
+# 3. Suíte automatizada de testes (137 testes / 1.688+ asserções)
 bun --cwd cyberlab test
 ```
 

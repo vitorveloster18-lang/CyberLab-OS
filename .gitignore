@@ -42,6 +42,9 @@ tsconfig.tsbuildinfo
 # CyberLab OS local runtime state & forensic evidence artifacts
 .cyberlab/
 .cyberlab-data/
+# Saída da Fase C (lab research): snapshot de advisories muda todo dia.
+# O relatório é reexecutável a qualquer momento com `bun run cyberlab lab research <labId>`.
+/research/
 /vault/
 *.sqlite
 *.sqlite-wal

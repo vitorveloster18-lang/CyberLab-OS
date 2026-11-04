@@ -16,6 +16,7 @@
  *   bun run cyberlab lab evidence lab-owasp-api-bola      # E1–E7 + SHA-256
  *   bun run cyberlab lab tools [--missing] [--script]
  *   bun run cyberlab lab slots --health
+ *   bun run cyberlab lab research lab-owasp-api-bola --register
  *   bun run cyberlab lab targets
  *   bun run cyberlab lab scope portswigger-wsa
  */
@@ -35,6 +36,7 @@ import { BUILTIN_EXTERNAL_TOOL_CATALOG, inspectExternalToolStatuses } from "../c
 import { ArsenalSlotManager, normalizeSlotNameForComparison } from "../cyberlab/arsenal/slot-manager.js"
 import { OFFICIAL_ARSENAL_SLOTS } from "../cyberlab/arsenal/catalog.js"
 import { ScopeController } from "../cyberlab/policy/scope.js"
+import { runLabResearch } from "../cyberlab/labs/research-phase.js"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const args = process.argv.slice(2)
@@ -66,6 +68,7 @@ function usage(): void {
       "  evidence <labId>         Reexecuta E1–E7 e arquiva comando+resposta com SHA-256",
       "  tools [--missing] [--script]  Mostra as ferramentas externas e como instalar as que faltam",
       "  slots [--json] [--health]    Lista os slots do Arsenal, duplicatas e slots fantasmas",
+      "  research <labId>         FASE C: pesquisa CyberLab-Knowledge + advisories (CVE/GHSA)",
       "  targets                  Lista alvos externos com AUTORIZAÇÃO declarada",
       "  scope <perfil>           Grava SCOPE.md + RULES-OF-ENGAGEMENT.md do alvo",
       "",
@@ -82,6 +85,13 @@ function usage(): void {
       "",
       "Opções de scope:",
       "  --out <dir>              Pasta de saída (padrão: <labsRoot>/targets/<perfil>)",
+      "",
+      "Opções de research:",
+      "  --out <dir>              Pasta de saída (padrão: <labsRoot>/research/<labId>/<timestamp>)",
+      "  --offline                Não toca a rede: reusa só o cache em disco",
+      "  --refresh                Ignora o cache (TTL 12h) e consulta a API de novo",
+      "  --register               Registra os artefatos no EvidenceStore",
+      "  --json                   Imprime o relatório em JSON",
       "",
       "Opções de slots:",
       "  --json                   Saída completa em JSON (slots, duplicatas, higiene)",
@@ -704,6 +714,121 @@ switch (command) {
     }
     if (overview.health.length > 0) {
       console.log(`\nHigiene: ${overview.health.length} problema(s). Rode: bun run cyberlab lab slots --health`)
+    }
+    process.exit(0)
+  }
+
+  case "research": {
+    if (!labIdArg) {
+      console.error(`${RED}Informe o labId. Ex.: bun run cyberlab lab research lab-owasp-api-bola${RESET}`)
+      process.exit(1)
+    }
+    const asJson = args.includes("--json")
+    const offline = args.includes("--offline")
+    const refresh = args.includes("--refresh")
+    const outFlag = readFlag("--out")
+    const wsRoot = resolveWorkspaceRoot()
+
+    const report = await runLabResearch({
+      labId: labIdArg,
+      workspaceRoot: wsRoot,
+      ...(offline ? { offline: true } : {}),
+      ...(refresh ? { refresh: true } : {}),
+      ...(outFlag ? { outDir: outFlag } : {}),
+    })
+
+    if (asJson) {
+      console.log(JSON.stringify(report, null, 2))
+    } else {
+      console.log(`${BOLD}Fase C — Pesquisa${RESET} ${CYAN}${report.labId}${RESET}`)
+      console.log(
+        `  Perfil: ${report.curated ? "curado" : "derivado do modelo (Fase B)"} · Modo: ${
+          report.offline ? "offline (cache)" : "online"
+        }`,
+      )
+      console.log(`  Alvo  : ${report.systemModel.title} — ${report.systemModel.baseUrl}`)
+      console.log("")
+      const docs = new Set<string>()
+      let docCount = 0
+      for (const k of report.knowledge) {
+        for (const h of k.hits) {
+          docs.add(h.docPath)
+          docCount += 1
+        }
+      }
+      console.log(`  Biblioteca curada : ${report.knowledge.length} consulta(s), ${docCount} hit(s), ${docs.size} documento(s) distinto(s)`)
+      let advCount = 0
+      for (const a of report.advisories) {
+        advCount += a.advisories.length
+        const tag =
+          a.status === "error"
+            ? `${RED}erro${RESET}`
+            : a.status === "empty"
+              ? `${DIM}vazio${RESET}`
+              : a.status === "offline"
+                ? `${YELLOW}cache${RESET}`
+                : a.status === "cached"
+                  ? `${CYAN}cache${RESET}`
+                  : `${GREEN}ok${RESET}`
+        console.log(
+          `  ${a.target.ecosystem}/${a.target.package.padEnd(16)} ${tag} · ${String(a.advisories.length).padStart(3)} advisory(ies)`,
+        )
+        if (a.error) console.log(`      ${YELLOW}${a.error}${RESET}`)
+      }
+      console.log(`  Total de advisories: ${advCount}`)
+      if (report.profile.weaknesses.length > 0) {
+        console.log("")
+        console.log("  Classes de fraqueza exercitadas:")
+        for (const w of report.profile.weaknesses) {
+          console.log(`    ${w.cwe} — ${w.name}${w.owasp ? `  (${w.owasp})` : ""}`)
+        }
+      }
+      console.log("")
+      console.log(`  ${GREEN}Relatório:${RESET} ${path.join(report.outputDir, "RESEARCH.md")}`)
+      console.log(`  ${DIM}Lacre (SHA-256 do lote): ${report.seal}${RESET}`)
+      console.log(`  ${DIM}Manifesto: ${path.join(report.outputDir, "research-manifest.json")}${RESET}`)
+    }
+
+    if (args.includes("--register")) {
+      const cfg = createDefaultCyberLabConfig(wsRoot)
+      const store = new EvidenceStore({
+        databasePath: cfg.databaseFilename,
+        artifactsDir: cfg.artifactsDirectory,
+      })
+      try {
+        const executionId = `lab-research-${Date.now()}`
+        let n = 0
+        for (const f of report.files) {
+          const abs = path.join(report.outputDir, f.name)
+          const isJson = f.name.endsWith(".json")
+          store.storeEvidence(
+            labIdArg,
+            {
+              kind: isJson ? "json" : "file",
+              title: `Fase C — ${labIdArg} — ${f.name}`,
+              source: {
+                toolId: "cyberlab-lab-research",
+                toolVersion: "6.7.0",
+                executorId: "operator",
+                executionId,
+              },
+              content: {
+                mediaType: isJson ? "application/json" : "text/markdown",
+                inlineText: readFileSync(abs, "utf8"),
+                sha256: f.sha256,
+                byteLength: f.bytes,
+              },
+              observedAt: report.generatedAt,
+              labels: ["lab", labIdArg, "fase-c", "research"],
+            },
+            { applyRedactionBeforeStore: false },
+          )
+          n += 1
+        }
+        console.log(`${GREEN}✔ ${n} artefato(s) da Fase C registrados no EvidenceStore${RESET} (projeto: ${labIdArg})`)
+      } finally {
+        store.close()
+      }
     }
     process.exit(0)
   }
