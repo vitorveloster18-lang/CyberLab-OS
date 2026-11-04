@@ -84,8 +84,19 @@ export interface PrimarySource {
   anchorKeywords: string[]
 }
 
+/**
+ * Marcadores observáveis que, se presentes na resposta bruta, **sustentam** a
+ * hipótese. São literais que o lab realmente devolve (conferidos contra o servidor
+ * de treino): nada aqui é suposição.
+ *
+ * Hipótese sem marcador (ex.: ausência de headers de segurança) fica com lista
+ * vazia e o relatório diz que a avaliação é manual — inventar um marcador para
+ * "ausência" produziria veredito falso.
+ */
 export interface LabResearchProfile {
   labId: string
+  /** Marcador(es) por hipótese: `H1 -> ["LAB{BOLA_...}"]`. */
+  observationMarkers: Record<string, string[]>
   /** Termos para buscar na biblioteca curada `CyberLab-Knowledge/` (Fase C, parte 1). */
   knowledgeQueries: string[]
   /** Pacotes a consultar na GitHub Advisory Database (Fase C, parte 2). */
@@ -101,6 +112,13 @@ export interface LabResearchProfile {
 const LAB_RESEARCH_PROFILES: Record<string, LabResearchProfile> = {
   "lab-owasp-api-bola": {
     labId: "lab-owasp-api-bola",
+    observationMarkers: {
+      H1: ["LAB{BOLA_CROSS_ACCOUNT_EXPOSED}", "bob@corp.lab"],
+      H2: ["LAB{JWT_ALG_NONE_ACCEPTED}", '"adminAccess": true'],
+      H3: ["SQLITE_ERROR"],
+      // H4 é AUSÊNCIA de headers: não há marcador de presença possível.
+      H4: [],
+    },
     knowledgeQueries: ["BOLA", "IDOR", "JWT", "OAuth 2.0", "SQL Injection", "API Security"],
     advisoryTargets: [
       {
@@ -258,6 +276,7 @@ export function deriveProfile(labId: string, model?: LabSystemModel | null): Lab
 
   return {
     labId,
+    observationMarkers: {},
     knowledgeQueries: Array.from(terms).slice(0, 12),
     advisoryTargets: [],
     weaknesses: [],

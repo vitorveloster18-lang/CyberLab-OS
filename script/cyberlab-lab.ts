@@ -18,6 +18,7 @@
  *   bun run cyberlab lab slots --health
  *   bun run cyberlab lab research lab-owasp-api-bola --register
  *   bun run cyberlab lab hypothesize lab-owasp-api-bola --register
+ *   bun run cyberlab lab experiment lab-owasp-api-bola --run --register
  *   bun run cyberlab lab targets
  *   bun run cyberlab lab scope portswigger-wsa
  */
@@ -39,6 +40,7 @@ import { OFFICIAL_ARSENAL_SLOTS } from "../cyberlab/arsenal/catalog.js"
 import { ScopeController } from "../cyberlab/policy/scope.js"
 import { runLabResearch } from "../cyberlab/labs/research-phase.js"
 import { runHypothesisPhase } from "../cyberlab/labs/hypothesis-phase.js"
+import { runExperimentPhase } from "../cyberlab/labs/experiment-phase.js"
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const args = process.argv.slice(2)
@@ -72,6 +74,7 @@ function usage(): void {
       "  slots [--json] [--health]    Lista os slots do Arsenal, duplicatas e slots fantasmas",
       "  research <labId>         FASE C: pesquisa CyberLab-Knowledge + advisories (CVE/GHSA)",
       "  hypothesize <labId>     FASE D: hipóteses ancoradas na Fase C + priorização (Fase E)",
+      "  experiment <labId>      FASE F: plano (padrão) ou execução (--run) dos experimentos",
       "  targets                  Lista alvos externos com AUTORIZAÇÃO declarada",
       "  scope <perfil>           Grava SCOPE.md + RULES-OF-ENGAGEMENT.md do alvo",
       "",
@@ -932,6 +935,167 @@ switch (command) {
           n += 1
         }
         console.log(`${GREEN}✔ ${n} artefato(s) da Fase D registrados no EvidenceStore${RESET} (projeto: ${labIdArg})`)
+      } finally {
+        store.close()
+      }
+    }
+    process.exit(0)
+  }
+
+  case "experiment": {
+    if (!labIdArg) {
+      console.error(`${RED}Informe o labId. Ex.: bun run cyberlab lab experiment lab-owasp-api-bola${RESET}`)
+      process.exit(1)
+    }
+    const doRun = args.includes("--run")
+    const asJson = args.includes("--json")
+    const portFlag = readFlag("--port")
+    const onlyFlag = readFlag("--only")
+    const outFlag = readFlag("--out")
+    const wsRoot = resolveWorkspaceRoot()
+
+    let board
+    try {
+      board = await runExperimentPhase({
+        labId: labIdArg,
+        workspaceRoot: wsRoot,
+        ...(doRun ? { run: true } : {}),
+        ...(portFlag ? { baseUrl: `http://127.0.0.1:${Number.parseInt(portFlag, 10)}` } : {}),
+        ...(onlyFlag ? { only: onlyFlag.split(",").map((s) => s.trim()).filter(Boolean) } : {}),
+        ...(outFlag ? { outDir: outFlag } : {}),
+      })
+    } catch (err) {
+      console.error(`${RED}${err instanceof Error ? err.message : String(err)}${RESET}`)
+      process.exit(1)
+    }
+
+    if (asJson) {
+      console.log(JSON.stringify(board, null, 2))
+    } else {
+      console.log(
+        `${BOLD}Fase F — Experimentação${RESET} ${CYAN}${board.labId}${RESET} ${doRun ? "" : `${DIM}(plano — nada executado)${RESET}`}`,
+      )
+      console.log(`  Alvo : ${board.baseUrl ?? "—"}`)
+      console.log(
+        `  Ordem: ${board.orderSource === "fase-d" ? "prioridade da Fase D" : "ordem das sementes (rode 'lab hypothesize' para priorizar)"}`,
+      )
+      console.log("")
+      for (const e of board.experiments) {
+        const exec = e.requests.filter((r) => r.outcome === "executed").length
+        const manual = e.requests.filter((r) => r.outcome === "manual").length
+        const err = e.requests.filter((r) => r.outcome === "error").length
+        const tag =
+          e.indicator === "sustenta"
+            ? `${GREEN}SUSTENTA${RESET}`
+            : e.indicator === "nao_observado"
+              ? `${DIM}nao observado${RESET}`
+              : e.indicator === "sem_marcador"
+                ? `${DIM}sem marcador${RESET}`
+                : `${DIM}nao executado${RESET}`
+        console.log(
+          `  ${e.seed.id} ${e.hypothesisId.padEnd(4)} ${String(e.requests.length).padStart(2)} req  ${tag}`,
+        )
+        if (doRun) {
+          for (const r of e.requests) {
+            const mark =
+              r.outcome === "executed"
+                ? `${GREEN}HTTP ${r.httpStatus}${RESET}`
+                : r.outcome === "manual"
+                  ? `${YELLOW}manual${RESET}`
+                  : r.outcome === "error"
+                    ? `${RED}erro${RESET}`
+                    : `${DIM}planejado${RESET}`
+            console.log(`      ${String(r.index + 1).padStart(2)}. ${mark} ${r.intent ?? r.command.slice(0, 70)}`)
+            if (r.error) console.log(`          ${YELLOW}${r.error}${RESET}`)
+          }
+          if (e.markersFound.length > 0) {
+            console.log(`      ${GREEN}marcadores: ${e.markersFound.join(", ")}${RESET}`)
+          }
+        } else {
+          for (const r of e.requests) {
+            console.log(
+              `      ${r.outcome === "manual" ? `${YELLOW}manual${RESET}` : `${DIM}$${RESET}`} ${r.command.slice(0, 100)}`,
+            )
+          }
+        }
+        if (exec + manual + err === 0) continue
+        console.log(`      ${DIM}${exec} executada(s), ${manual} manual(is), ${err} erro(s)${RESET}`)
+      }
+      console.log("")
+      console.log(
+        doRun
+          ? `  ${DIM}O indicador acima NÃO é veredito: diz só se o marcador apareceu. A decisão é da Fase G.${RESET}`
+          : `  ${DIM}Para executar: bun run cyberlab lab experiment ${labIdArg} --run${RESET}`,
+      )
+      console.log(`  ${GREEN}Relatório:${RESET} ${path.join(board.outputDir, "EXPERIMENTS.md")}`)
+      console.log(`  ${DIM}Lacre: ${board.seal}${RESET}`)
+    }
+
+    if (args.includes("--register")) {
+      const cfg = createDefaultCyberLabConfig(wsRoot)
+      const store = new EvidenceStore({
+        databasePath: cfg.databaseFilename,
+        artifactsDir: cfg.artifactsDirectory,
+      })
+      try {
+        const executionId = `lab-experiments-${Date.now()}`
+        let n = 0
+        for (const f of board.files) {
+          const isJson = f.name.endsWith(".json")
+          store.storeEvidence(
+            labIdArg,
+            {
+              kind: isJson ? "json" : "file",
+              title: `Fase F — ${labIdArg} — ${f.name}`,
+              source: {
+                toolId: "cyberlab-lab-experiment",
+                toolVersion: "6.7.0",
+                executorId: "operator",
+                executionId,
+              },
+              content: {
+                mediaType: isJson ? "application/json" : "text/markdown",
+                inlineText: readFileSync(path.join(board.outputDir, f.name), "utf8"),
+                sha256: f.sha256,
+                byteLength: f.bytes,
+              },
+              observedAt: board.generatedAt,
+              labels: ["lab", labIdArg, "fase-f", "experiments"],
+            },
+            { applyRedactionBeforeStore: false },
+          )
+          n += 1
+        }
+        // Capturas brutas individuais: é o que torna o achado reproduzível.
+        for (const e of board.experiments) {
+          for (const r of e.requests) {
+            if (r.outcome !== "executed" || !r.rawFile || !r.sha256) continue
+            store.storeEvidence(
+              labIdArg,
+              {
+                kind: "http_exchange",
+                title: `${e.seed.id} #${r.index + 1} — ${r.intent ?? "requisição"}`,
+                source: {
+                  toolId: "cyberlab-lab-experiment",
+                  toolVersion: "6.7.0",
+                  executorId: "operator",
+                  executionId,
+                },
+                content: {
+                  mediaType: "text/plain",
+                  inlineText: readFileSync(path.join(board.outputDir, r.rawFile), "utf8"),
+                  sha256: r.sha256,
+                  byteLength: r.bytes,
+                },
+                observedAt: board.generatedAt,
+                labels: ["lab", labIdArg, "fase-f", e.seed.id, `http-${r.httpStatus}`],
+              },
+              { applyRedactionBeforeStore: false },
+            )
+            n += 1
+          }
+        }
+        console.log(`${GREEN}✔ ${n} evidência(s) da Fase F registradas no EvidenceStore${RESET} (projeto: ${labIdArg})`)
       } finally {
         store.close()
       }

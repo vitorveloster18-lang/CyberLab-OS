@@ -22,6 +22,7 @@ Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investiga
    - [8.9 Diagnóstico do Arsenal — `lab slots` e `lab tools`](#89-diagnóstico-do-arsenal--lab-slots-e-lab-tools-v67)
    - [8.10 Fase C — Pesquisa: `lab research`](#810-fase-c--pesquisa-lab-research-v67)
    - [8.11 Fase D — Hipóteses ancoradas + priorização (Fase E)](#811-fase-d--hipóteses-ancoradas-na-fase-c--priorização-fase-e)
+  - [8.12 Fase F — Experimentação controlada: `lab experiment`](#812-fase-f--experimentação-controlada-lab-experiment-v67)
 ---
 
 ## 8. Laboratórios de Treino Prontos para Investigação (v6.4–v6.5)
@@ -362,6 +363,93 @@ e o relatório diz isso em vez de inventar.
 > CVE de biblioteca. O casamento agora é por **palavra** (`\b`), não por substring, e as
 > keywords são específicas (`jwt`, `alg:none`, `assinatura` — não `alg`, que casaria com
 > "algum"; não `token`, que casa com qualquer Bearer). Há teste de regressão para isso.
+
+### 8.12 Fase F — Experimentação controlada: `lab experiment` (v6.7)
+
+As sementes de experimento (E1–E6) já vinham com os comandos prontos — mas **ninguém os
+executava**. A Fase F executa, com duas regras que valem mais que a conveniência:
+
+```powershell
+# Plano (padrão): mostra o que faria, não toca no alvo
+bun run cyberlab lab experiment lab-owasp-api-bola
+
+# Execução: só com --run explícito
+bun run cyberlab lab experiment lab-owasp-api-bola --run --port 19081
+
+# Filtros e integração
+bun run cyberlab lab experiment lab-owasp-api-bola --run --only E1,E3
+bun run cyberlab lab experiment lab-owasp-api-bola --run --json
+bun run cyberlab lab experiment lab-owasp-api-bola --run --register
+```
+
+| Opção | Efeito |
+|---|---|
+| *(nenhuma)* | **Plano**: imprime cada `$ comando` e o que ficaria manual. Zero requisições. |
+| `--run` | Executa de verdade e arquiva o bruto. |
+| `--port N` | Redireciona o alvo (o comando registrado continua o original, para você reexecutar). |
+| `--only E1,E3` | Restringe os experimentos. |
+| `--json` | Máquina: `indicator`, `httpStatus`, `sha256`, `rawFile` por requisição. |
+| `--register` | Guarda no EvidenceStore, inclusive uma evidência `http_exchange` por captura. |
+
+**1. Nunca passa por shell.** Cada comando das sementes é *parseado* em uma requisição
+estruturada (método, URL, headers, corpo). O subconjunto aceito é deliberadamente pequeno:
+`-s -S -sS -i -k -v -L -g` (sem argumento) e `-H -X -d -A --data --data-raw --request`
+(com um). Qualquer outra coisa — `Set-Content` do PowerShell, `printf` com redireção,
+`-o`, `-w`, `-D` — **não é executada**: aparece como `manual` com
+`Comando fora do subconjunto suportado: execute manualmente.`
+
+> Isso é intencional. O E6 do `lab-owasp-api-bola` **aplica a remediação** no alvo
+> (escreve `.server-config.json` e reinicia o servidor). Executá-lo "porque o comando
+> estava ali" destruiria o laboratório vulnerável no meio do treino.
+
+**2. Ordem vem da Fase D**, não da ordem em que as sementes foram digitadas. Sem Fase D
+disponível, cai na ordem das sementes — e o relatório diz qual das duas usou.
+
+**Arquivamento bruto.** Cada requisição executada grava
+`raw/<E-id>-NN.txt` com status, headers e corpo **exatamente como vieram**, mais o
+SHA-256 e o tamanho em bytes. O relatório cita o arquivo e o hash:
+
+```
+HTTP/1.1 200 OK
+content-type: application/json; charset=utf-8
+
+{
+  "accountId": "1002",
+  "owner": "bob@corp.lab",
+  "balanceUsd": 94500,
+  "bolaFlag": "LAB{BOLA_CROSS_ACCOUNT_EXPOSED}"
+}
+```
+
+**Indicador ≠ veredito.** Para cada experimento o relatório cruza a resposta com os
+`observationMarkers` que a hipótese declara no perfil de pesquisa:
+
+| Indicador | Significado |
+|---|---|
+| `sustenta` | Um marcador esperado apareceu numa resposta. |
+| `nao_observado` | Rodou, mas nenhum marcador apareceu. |
+| `sem_marcador` | A hipótese não declara marcador observável (ex.: H4 — ausência de headers) e exige leitura humana. |
+| `nao_executado` | Plano, erro de rede, ou nenhum comando executável. |
+
+Resultado real no `lab-owasp-api-bola` (target no ar, `--run`):
+
+| # | Exp. | Hip. | Req. | Executadas | Indicador | Marcadores |
+|---|---|---|---|---|---|---|
+| 1 | `E3` | H2 | 4 | 4 | sustenta | `LAB{JWT_ALG_NONE_ACCEPTED}` |
+| 2 | `E1` | H1 | 3 | 3 | sustenta | `LAB{BOLA_CROSS_ACCOUNT_EXPOSED}` |
+| 3 | `E2` | H1 | 2 | 2 | sustenta | `LAB{BOLA_CROSS_ACCOUNT_EXPOSED}` |
+| 4 | `E6` | H1 | 7 | 0 (+7 manual) | nao_executado | — |
+| 5 | `E4` | H3 | 2 | 2 | sustenta | `SQLITE_ERROR` |
+| 6 | `E5` | H4 | 2 | 0 (+2 manual) | nao_executado | — |
+
+> **Bug que os testes pegaram na revisão:** o E6 saía como `nao_observado`. Tecnicamente
+> "nenhum marcador apareceu" — e praticamente uma mentira, porque sugeria que a hipótese
+> H1 *não se sustentou*, quando nada havia rodado. Agora, sem nenhuma requisição
+> executada, o indicador é `nao_executado`. Há teste de regressão para isso.
+
+Saídas em `research/<labId>/fase-f/<data-hora>/`: `EXPERIMENTS.md`, `experiments-f.json`,
+`experiments-manifest.json` e `raw/`. O lacre SHA-256 (`experiments-f.json` sem
+`files`/`seal`/`outputDir`) é o mesmo critério das Fases C e D.
 
 ### 8.5 `cyberlab up` — 1 comando, **1 processo**, alvo embutido (v6.6)
 
@@ -800,7 +888,7 @@ bun --cwd packages/cli typecheck
 bun --cwd packages/gui-plugins typecheck
 bun --cwd cyberlab typecheck
 
-# 3. Suíte automatizada de testes (151 testes / 1.739+ asserções)
+# 3. Suíte automatizada de testes (168 testes / 1.844+ asserções)
 bun --cwd cyberlab test
 ```
 
