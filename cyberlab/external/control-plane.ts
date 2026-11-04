@@ -496,6 +496,57 @@ export function inspectExternalToolStatuses(workspaceRoot: string): ExternalTool
   })
 }
 
+/**
+ * No Windows, `spawn(..., { shell: false })` **rejeita** `.cmd` e `.bat` com EINVAL:
+ * só aceita `.com`/`.exe`. Como `expandPlatformNames` procura justamente `.cmd` e
+ * `.bat` (é assim que npm/pip/choco instalam o shim de quase toda ferramenta), o
+ * produto localizava o binário e depois não conseguia executá-lo — um controle que
+ * parece funcionar e na hora de rodar falha.
+ *
+ * A saída é a mesma do `cross-spawn`: passar por `cmd.exe /d /s /c "<linha>"` com
+ * cada parte escapada e `windowsVerbatimArguments`, para o Node não reescapar.
+ */
+const WINDOWS_NATIVE_EXECUTABLE = /\.(?:com|exe)$/i
+/** Metacaracteres do cmd.exe — http://www.robvanderwoude.com/escapechars.php */
+const CMD_META_CHARS = /([()\][%!^"`<>&|;, *?])/g
+
+export function escapeCmdCommand(arg: string): string {
+  return arg.replace(CMD_META_CHARS, "^$1")
+}
+
+/**
+ * Escapa um argumento para a linha de comando do cmd.exe.
+ * Algoritmo canônico de https://qntm.org/cmd (o mesmo do cross-spawn).
+ */
+export function escapeCmdArgument(arg: string): string {
+  let out = `${arg}`
+  // Sequência de barras invertidas antes de aspas: dobra as barras e escapa a aspa.
+  out = out.replace(/(?=(\\+?)?)\1"/g, '$1$1\\"')
+  // Sequência de barras invertidas no fim (vai preceder a aspa de fechamento).
+  out = out.replace(/(?=(\\+?)?)\1$/, "$1$1")
+  out = `"${out}"`
+  return out.replace(CMD_META_CHARS, "^$1")
+}
+
+export function resolveSpawnTarget(
+  command: string,
+  args: readonly string[],
+  platform: NodeJS.Platform = process.platform,
+): { file: string; args: string[]; windowsVerbatimArguments: boolean } {
+  if (platform !== "win32") return { file: command, args: [...args], windowsVerbatimArguments: false }
+  // Normalizar separadores: caminho com "/" falha com ENOENT no cmd.
+  const normalized = path.normalize(command)
+  if (WINDOWS_NATIVE_EXECUTABLE.test(normalized)) {
+    return { file: normalized, args: [...args], windowsVerbatimArguments: false }
+  }
+  const shellCommand = [escapeCmdCommand(normalized), ...args.map((a) => escapeCmdArgument(a))].join(" ")
+  return {
+    file: process.env.comspec ?? "cmd.exe",
+    args: ["/d", "/s", "/c", `"${shellCommand}"`],
+    windowsVerbatimArguments: true,
+  }
+}
+
 export async function runSafeChildProcess(params: {
   /** Executável (Windows/Linux) ou `wsl.exe` quando o alvo vive dentro do WSL2. */
   command: string
@@ -514,9 +565,11 @@ export async function runSafeChildProcess(params: {
       return
     }
 
-    const child = spawn(params.command, [...params.args], {
+    const target = resolveSpawnTarget(params.command, params.args)
+    const child = spawn(target.file, target.args, {
       cwd: params.cwd,
       shell: false,
+      windowsVerbatimArguments: target.windowsVerbatimArguments,
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",

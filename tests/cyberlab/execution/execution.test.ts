@@ -113,7 +113,9 @@ describe("CyberLab Execution Dispatcher & First Read-Only Lab Executor", () => {
       }
       expect(parsed.observationCount).toBe(1)
       expect(parsed.observations[0]?.ruleId).toBe("SEC-001")
-      expect(parsed.observations[0]?.file).toBe("src/insecure-client.ts")
+      // No Windows o executor devolve `src\insecure-client.ts`; o que importa
+      // verificar é QUE arquivo foi sinalizado, não o separador da plataforma.
+      expect(parsed.observations[0]?.file.replace(/\\/g, "/")).toBe("src/insecure-client.ts")
 
       evidenceStore.close()
     } finally {
