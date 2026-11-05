@@ -62,7 +62,7 @@ describe("CyberLab OS v6.7 — Sincronização do Cofre Curado", () => {
     writeFileSync(
       stale,
       original
-        .replace('version: "1.1.0"', 'version: "0.9.0"')
+        .replace('version: "1.2.0"', 'version: "0.9.0"')
         .replace('last_reviewed: "2026-11-04"', 'last_reviewed: "2026-10-01"'),
       "utf8",
     )
@@ -71,7 +71,7 @@ describe("CyberLab OS v6.7 — Sincronização do Cofre Curado", () => {
     const item = plan.items.find((i) => i.relativePath === "00-Index.md")
     expect(item?.action).toBe("update")
     expect(item?.currentVersion).toBe("0.9.0")
-    expect(item?.incomingVersion).toBe("1.1.0")
+    expect(item?.incomingVersion).toBe("1.2.0")
     expect(item?.reason).toContain("Desatualizado")
     expect(item?.backupPath).toContain("00-Index.md.bak")
     expect(plan.counts.update).toBe(1)
@@ -84,7 +84,7 @@ describe("CyberLab OS v6.7 — Sincronização do Cofre Curado", () => {
 
     const target = path.join(vault, "CyberLab-Knowledge", "00-Index.md")
     const expected = CURATED_KNOWLEDGE_FILES.find((d) => d.relativePath.endsWith("00-Index.md"))!.content
-    writeFileSync(target, expected.replace('version: "1.1.0"', 'version: "0.1.0"'), "utf8")
+    writeFileSync(target, expected.replace('version: "1.2.0"', 'version: "0.1.0"'), "utf8")
 
     const result = applyKnowledgeLibrarySync(planKnowledgeLibrarySync(vault))
 
@@ -92,7 +92,7 @@ describe("CyberLab OS v6.7 — Sincronização do Cofre Curado", () => {
     expect(result.backups).toContain("00-Index.md.bak")
     expect(existsSync(`${target}.bak`)).toBe(true)
     expect(readFileSync(`${target}.bak`, "utf8")).toContain('version: "0.1.0"')
-    expect(readFileSync(target, "utf8")).toContain('version: "1.1.0"')
+    expect(readFileSync(target, "utf8")).toContain('version: "1.2.0"')
   })
 
   test("arquivo do OPERADOR (tier diferente de curated) é classificado como protegido", () => {

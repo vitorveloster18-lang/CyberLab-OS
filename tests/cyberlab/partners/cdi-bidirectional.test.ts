@@ -6,14 +6,14 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { CyberLabWorkspace, CyberLabWorkspaceManager } from "../../../cyberlab/index.js"
-import { hasPython, pythonCommand } from "../helpers/env-gates.js"
+import { hasPython, pythonInvocation } from "../helpers/env-gates.js"
 
 /**
  * Estes testes sobem parceiros CDI reais em Python. Sem interpretador no PATH eles sao
  * PULADOS com motivo: no Windows o atalho da Microsoft Store devolvia exit 49 e o teste
  * morria por timeout, o que parecia falha de produto e nao era.
  */
-const PY = pythonCommand()
+const PY = pythonInvocation()
 const pyTest = hasPython() ? test : test.skip
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url))
@@ -168,13 +168,13 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
     )
 
     const salemProc = spawn(
-      PY!,
-      [bridgeScriptPath, "--partner-id", "salem", "--port", String(salemPort), "--mode", "arg", "--script", salemScript],
+      PY![0]!,
+      [...PY!.slice(1), bridgeScriptPath, "--partner-id", "salem", "--port", String(salemPort), "--mode", "arg", "--script", salemScript],
       { env: { ...process.env, CYBERLAB_PARTNER_SECRET: customSecret }, stdio: ["ignore", "pipe", "pipe"] },
     )
     const kairosProc = spawn(
-      PY!,
-      [bridgeScriptPath, "--partner-id", "kairos", "--port", String(kairosPort), "--mode", "arg", "--script", kairosScript],
+      PY![0]!,
+      [...PY!.slice(1), bridgeScriptPath, "--partner-id", "kairos", "--port", String(kairosPort), "--mode", "arg", "--script", kairosScript],
       { env: { ...process.env, CYBERLAB_PARTNER_SECRET: customSecret }, stdio: ["ignore", "pipe", "pipe"] },
     )
 
@@ -422,7 +422,7 @@ print(json.dumps({
         "utf8",
       )
 
-      const proc = Bun.spawn([PY!, novaAutonomousScript], { stdout: "pipe", stderr: "pipe" })
+      const proc = Bun.spawn([...PY!, novaAutonomousScript], { stdout: "pipe", stderr: "pipe" })
       const [stdoutText, stderrText, exitCode] = await Promise.all([
         new Response(proc.stdout).text(),
         new Response(proc.stderr).text(),
@@ -618,7 +618,7 @@ print(json.dumps({
         "utf8",
       )
 
-      const proc = Bun.spawn([PY!, kairosScript], { stdout: "pipe", stderr: "pipe" })
+      const proc = Bun.spawn([...PY!, kairosScript], { stdout: "pipe", stderr: "pipe" })
       const [stdoutText, stderrText, exitCode] = await Promise.all([
         new Response(proc.stdout).text(),
         new Response(proc.stderr).text(),

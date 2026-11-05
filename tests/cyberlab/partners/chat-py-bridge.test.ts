@@ -6,14 +6,14 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { CyberLabWorkspace } from "../../../cyberlab/index.js"
-import { hasPython, pythonCommand } from "../helpers/env-gates.js"
+import { hasPython, pythonInvocation } from "../helpers/env-gates.js"
 
 /**
  * O teste executa o `chat_py_bridge.py` de verdade e por isso precisa de interpretador.
  * `test.skip` (em vez de um `return` no começo) garante que, sem Python, o teste
  * apareça como PULADO — nunca como aprovado sem ter testado nada.
  */
-const PY = pythonCommand()
+const PY = pythonInvocation()
 const pyTest = hasPython() ? test : test.skip
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url))
@@ -74,8 +74,8 @@ describe("Python chat_py_bridge.py <-> CyberLab OS HMAC-SHA256 Interoperability"
     )
 
     const proc = spawn(
-      PY!,
-      [
+      PY![0]!,
+      [...PY!.slice(1),
         bridgeScriptPath,
         "--partner-id",
         "chat-py-agent",

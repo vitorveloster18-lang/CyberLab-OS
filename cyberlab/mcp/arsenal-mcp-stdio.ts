@@ -24,6 +24,7 @@ import { existsSync, readFileSync, unwatchFile, watchFile } from "node:fs"
 import http from "node:http"
 import os from "node:os"
 import path from "node:path"
+import { wslPythonCommand } from "../python-runtime.js"
 import { OFFICIAL_ARSENAL_SLOTS, type ArsenalSlotDefinition } from "../arsenal/catalog.js"
 import {
   computeArsenalSlotHealth,
@@ -667,7 +668,7 @@ except Exception as e:
         "-d",
         preferredWslDistro,
         "--",
-        "python3",
+        wslPythonCommand(),
         "-c",
         py,
         String(port),
@@ -962,7 +963,7 @@ print(json.dumps({"ok": False, "error": last_err}))
       "-d",
       preferredWslDistro,
       "--",
-      "python3",
+      wslPythonCommand(),
       "-c",
       pyScript,
       String(burpMcpPort),

@@ -1,5 +1,5 @@
-import { spawnSync } from "node:child_process"
 import { chmodSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { pythonRuntime } from "../../../cyberlab/python-runtime.js"
 import os from "node:os"
 import path from "node:path"
 
@@ -34,36 +34,34 @@ function sleepSync(ms: number): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Interpretador Python utilizável (`python3` ou `python`), ou `null`.
+ * Interpretador Python utilizável, ou `null`.
  *
- * Por que não fixar `python3`: no Windows o instalador oficial registra `python`;
- * `python3` só existe se o "Python Launcher" estiver instalado. E quando o Windows
- * não tem Python nenhum, o atalho da Microsoft Store devolve status 49 e imprime uma
- * mensagem — é exatamente isso que fazia 4 testes estourarem o timeout de 5 s.
+ * NÃO é uma lista local de candidatos: delega a `cyberlab/python-runtime.ts`, que é a
+ * MESMA resolução usada pelo runtime. Testes escolhendo o Python por conta própria
+ * (ex.: `python3` fixo) validariam um interpretador que pode não ser o que o runtime
+ * dos CDIs usa — foi exatamente assim que a instalação do 3.12 quebrou o runtime
+ * enquanto a suíte continuava verde.
  */
+export function pythonRuntimeInfo() {
+  return pythonRuntime()
+}
+
 export function pythonCommand(): string | null {
-  return memoized("pythonCommand", () => {
-    for (const candidate of ["python3", "python"]) {
-      try {
-        const res = spawnSync(candidate, ["-c", "print(1)"], {
-          stdio: "ignore",
-          timeout: 15_000,
-          windowsHide: true,
-        })
-        if (!res.error && res.status === 0) return candidate
-      } catch {
-        // Candidato inexistente: tenta o próximo.
-      }
-    }
-    return null
-  })
+  return pythonRuntime()?.command ?? null
+}
+
+/** Linha de invocação completa (ex.: `["python3"]` ou `["py", "-3.11"]`). */
+export function pythonInvocation(): string[] | null {
+  const r = pythonRuntime()
+  return r ? [r.command, ...r.prefixArgs] : null
 }
 
 export function hasPython(): boolean {
   return pythonCommand() !== null
 }
 
-export const PYTHON_MISSING_REASON = "Python nao encontrado no PATH (instale com: winget install Python.Python.3.12)"
+export const PYTHON_MISSING_REASON =
+  "Python nao encontrado no PATH. Se o runtime usa uma serie especifica, fixe-a: CYBERLAB_PYTHON_VERSION=3.11 (ou CYBERLAB_PYTHON=<caminho>)"
 
 // ---------------------------------------------------------------------------
 // Symlink
