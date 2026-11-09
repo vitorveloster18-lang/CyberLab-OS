@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import net from "node:net"
 import os from "node:os"
 import path from "node:path"
 import {
   buildManualBrowserLaunchCommands,
+  buildProxyUnreachableGuidance,
   launchPreconfiguredProxyBrowser,
+  probeTcpPort,
+  resolveReachableProxyHost,
 } from "../../../cyberlab/proxy/browser-launcher.js"
 
 /**
@@ -136,5 +140,86 @@ describe("CyberLab OS v6.7 — Navegador Isolado no Proxy (browser-launcher)", (
     expect(res.manualPowershellCommand).toContain('--proxy-server="http://127.0.0.1:8081"')
     expect(res.manualBashCommand).toContain('--proxy-server="http://127.0.0.1:8081"')
     expect(res.message.length).toBeGreaterThan(20)
+  })
+})
+
+/**
+ * O Chrome mostrava ERR_PROXY_CONNECTION_FAILED sem o CyberLab dizer nada: o
+ * navegador era aberto apontando para uma porta em que ninguém escutava.
+ */
+describe("CyberLab OS v6.7 — alcançabilidade do proxy antes de abrir o navegador", () => {
+  const servers: net.Server[] = []
+
+  const listenOnEphemeralPort = async (): Promise<number> =>
+    new Promise((resolve, reject) => {
+      const server = net.createServer((socket) => socket.end())
+      server.once("error", reject)
+      server.listen(0, "127.0.0.1", () => {
+        servers.push(server)
+        const addr = server.address()
+        resolve(typeof addr === "object" && addr ? addr.port : 0)
+      })
+    })
+
+  afterEach(async () => {
+    for (const server of servers.splice(0)) {
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
+  })
+
+  test("probeTcpPort detecta porta aberta e porta fechada", async () => {
+    const openPort = await listenOnEphemeralPort()
+    expect(await probeTcpPort("127.0.0.1", openPort)).toBe(true)
+
+    // Porta efêmera sem ninguém escutando: não deve lançar, só devolver false.
+    const closedServer = net.createServer()
+    await new Promise<void>((resolve) => closedServer.listen(0, "127.0.0.1", () => resolve()))
+    const closedPort = (closedServer.address() as net.AddressInfo).port
+    await new Promise<void>((resolve) => closedServer.close(() => resolve()))
+
+    expect(await probeTcpPort("127.0.0.1", closedPort)).toBe(false)
+  })
+
+  test("resolveReachableProxyHost acha o proxy quando ele está de pé", async () => {
+    const openPort = await listenOnEphemeralPort()
+    const res = await resolveReachableProxyHost({ port: openPort })
+
+    expect(res.reachable).toBe(true)
+    expect(res.host).toBe("127.0.0.1")
+    expect(res.triedHosts).toContain("127.0.0.1")
+  })
+
+  test("sem proxy de pé: reachable=false e lista os endereços tentados", async () => {
+    // Porta alta e livre — nada vai responder.
+    const res = await resolveReachableProxyHost({ port: 59999, timeoutMs: 250 })
+
+    expect(res.reachable).toBe(false)
+    expect(res.triedHosts.length).toBeGreaterThan(0)
+    expect(res.triedHosts).toContain("127.0.0.1")
+  })
+
+  test("host preferido do operador é tentado primeiro", async () => {
+    const res = await resolveReachableProxyHost({
+      port: 59998,
+      preferredHost: "10.0.0.7",
+      timeoutMs: 250,
+    })
+
+    expect(res.triedHosts[0]).toBe("10.0.0.7")
+    expect(res.reachable).toBe(false)
+  })
+
+  test("orientação cita a porta, o Burp parado, o WSL2 e a rede espelhada", () => {
+    const guidance = buildProxyUnreachableGuidance(8080, ["127.0.0.1", "172.20.1.5"])
+
+    expect(guidance).toContain("8080")
+    expect(guidance).toContain("127.0.0.1")
+    expect(guidance).toContain("172.20.1.5")
+    expect(guidance).toContain("ERR_PROXY_CONNECTION_FAILED")
+    // As três causas que realmente acontecem, na ordem de probabilidade.
+    expect(guidance).toContain("Burp")
+    expect(guidance).toContain("WSL2")
+    expect(guidance).toContain("networkingMode=mirrored")
+    expect(guidance).toContain("PortSwigger.BurpSuite.Community")
   })
 })

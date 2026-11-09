@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process"
 import { existsSync, mkdirSync, readdirSync } from "node:fs"
+import net from "node:net"
 import os from "node:os"
 import path from "node:path"
 
@@ -20,6 +21,118 @@ export interface LaunchProxyBrowserResult {
   message: string
   manualPowershellCommand: string
   manualBashCommand: string
+  /**
+   * `false` quando NADA respondia na porta do proxy no momento do lançamento.
+   * O navegador é aberto mesmo assim, mas a mensagem passa a explicar o
+   * `ERR_PROXY_CONNECTION_FAILED` que o Chrome mostraria sem contexto nenhum.
+   */
+  proxyReachable?: boolean
+  /** Endereços testados — essencial para diferenciar "Burp parado" de "Burp no WSL2". */
+  triedHosts?: string[]
+}
+
+/** Abre um socket TCP e diz se alguém aceita conexão. Nunca lança. */
+export function probeTcpPort(host: string, port: number, timeoutMs = 700): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket()
+    let settled = false
+    const finish = (ok: boolean) => {
+      if (settled) return
+      settled = true
+      socket.destroy()
+      resolve(ok)
+    }
+    socket.setTimeout(timeoutMs)
+    socket.once("connect", () => finish(true))
+    socket.once("timeout", () => finish(false))
+    socket.once("error", () => finish(false))
+    try {
+      socket.connect(port, host)
+    } catch {
+      finish(false)
+    }
+  })
+}
+
+/** IP da distro WSL2 visto do host Windows — é por ele que o host alcança serviços do WSL. */
+export function detectWslDistroIp(distro: string): string | null {
+  if (process.platform !== "win32") return null
+  try {
+    const res = spawnSync("wsl.exe", ["-d", distro, "--", "hostname", "-I"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
+      timeout: 8000,
+    })
+    if (res.status !== 0 || !res.stdout) return null
+    const ip = res.stdout
+      .split(/\s+/)
+      .map((s) => s.trim())
+      .find((s) => /^\d+\.\d+\.\d+\.\d+$/.test(s))
+    return ip ?? null
+  } catch {
+    return null
+  }
+}
+
+export interface ReachableProxyHost {
+  host: string
+  reachable: boolean
+  triedHosts: string[]
+}
+
+/**
+ * Descobre em QUAL endereço o proxy realmente está antes de abrir o navegador.
+ *
+ * Motivo: o CyberLab apontava o Chrome para `127.0.0.1:<porta>` sem checar nada.
+ * Se o Burp estivesse parado — ou rodando dentro do WSL2, onde o listener vive em
+ * outro namespace de rede — o operador recebia um `ERR_PROXY_CONNECTION_FAILED`
+ * do Chrome, sem a menor indicação de que o problema era a porta e não o CyberLab.
+ */
+export async function resolveReachableProxyHost(options: {
+  port: number
+  preferredHost?: string
+  wslDistro?: string
+  timeoutMs?: number
+}): Promise<ReachableProxyHost> {
+  const candidates: string[] = [options.preferredHost?.trim() || "127.0.0.1", "127.0.0.1"]
+
+  if (options.wslDistro) {
+    const wslIp = detectWslDistroIp(options.wslDistro)
+    if (wslIp) candidates.push(wslIp)
+  }
+
+  const seen = new Set<string>()
+  const triedHosts: string[] = []
+  for (const host of candidates) {
+    if (!host || seen.has(host)) continue
+    seen.add(host)
+    triedHosts.push(host)
+    if (await probeTcpPort(host, options.port, options.timeoutMs ?? 700)) {
+      return { host, reachable: true, triedHosts }
+    }
+  }
+
+  return { host: candidates[0]!, reachable: false, triedHosts }
+}
+
+/** Explica, em linguagem de operador, por que o Chrome diria "sem internet". */
+export function buildProxyUnreachableGuidance(port: number, triedHosts: string[]): string {
+  const tried = triedHosts.join(", ")
+  return [
+    `⚠️ Nada respondeu na porta do proxy (${tried}, porta ${port}). O navegador abriu, mas vai ` +
+      `mostrar ERR_PROXY_CONNECTION_FAILED até existir um proxy ouvindo aí.`,
+    ``,
+    `Causas possíveis, na ordem em que costumam acontecer:`,
+    `1. O Burp não está rodando. Abra com 🪟 "Abrir Janela Externa (Burp Suite)" e confirme o ` +
+      `listener em Proxy > Proxy settings (padrão 127.0.0.1:8080).`,
+    `2. O Burp está rodando DENTRO do WSL2. Nesse caso o listener fica no namespace de rede do ` +
+      `WSL e NÃO aparece em 127.0.0.1 do Windows. Instale o Burp no Windows ` +
+      `(\`winget install --id PortSwigger.BurpSuite.Community -e\`) ou ative rede espelhada ` +
+      `(%USERPROFILE%\\.wslconfig → [wsl2] networkingMode=mirrored, depois \`wsl --shutdown\`).`,
+    `3. A porta do listener do Burp não é ${port}. Confira em Proxy settings e reaponte a porta ` +
+      `do slot.`,
+  ].join("\n")
 }
 
 function resolveExecutableInPath(cmd: string): string | null {

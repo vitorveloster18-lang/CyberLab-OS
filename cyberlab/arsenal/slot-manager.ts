@@ -50,6 +50,11 @@ export interface PersistedArsenalConfig {
    * Existe porque a detecção falha em instalações fora dos caminhos conhecidos.
    */
   browserExecutablePath?: string
+  /**
+   * Endereço do proxy que o botão 🌐 deve usar. Padrão `127.0.0.1` (Burp no host).
+   * Útil quando o Burp roda dentro do WSL2 e só responde pelo IP da distro.
+   */
+  browserProxyHost?: string
 }
 
 export interface ArsenalSlotStatus {
@@ -517,6 +522,10 @@ export class ArsenalSlotManager {
           typeof parsed.browserExecutablePath === "string" && parsed.browserExecutablePath.trim()
             ? parsed.browserExecutablePath.trim()
             : undefined,
+        browserProxyHost:
+          typeof parsed.browserProxyHost === "string" && parsed.browserProxyHost.trim()
+            ? parsed.browserProxyHost.trim()
+            : undefined,
       }
     } catch {
       return fallback
@@ -535,6 +544,25 @@ export class ArsenalSlotManager {
     else delete this.config.browserExecutablePath
     this.saveConfig()
     return this.getBrowserExecutablePath()
+  }
+
+  /** Host do proxy para o botão 🌐, ou `null` (usa 127.0.0.1 e cai para o IP do WSL2). */
+  getBrowserProxyHost(): string | null {
+    return this.config.browserProxyHost?.trim() || null
+  }
+
+  /** Fixa (ou limpa, com `null`) o host do proxy do botão 🌐. */
+  setBrowserProxyHost(host: string | null): string | null {
+    const trimmed = host?.trim() ?? ""
+    if (trimmed) this.config.browserProxyHost = trimmed
+    else delete this.config.browserProxyHost
+    this.saveConfig()
+    return this.getBrowserProxyHost()
+  }
+
+  /** Distro WSL2 preferida — usada para alcançar um proxy que rode dentro do Kali. */
+  getPreferredWslDistro(): string {
+    return this.config.preferredWslDistro
   }
 
   private saveConfig(): void {

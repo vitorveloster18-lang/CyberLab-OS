@@ -90,6 +90,8 @@ import {
 import {
   detectInstalledProxyBrowsers,
   launchPreconfiguredProxyBrowser,
+  resolveReachableProxyHost,
+  buildProxyUnreachableGuidance,
   type LaunchProxyBrowserResult,
 } from "./proxy/browser-launcher.js"
 import { ApprovalManager } from "./policy/approval.js"
@@ -722,14 +724,36 @@ export class CyberLabWorkspace {
     preferredBrowserId?: string
   }): Promise<LaunchProxyBrowserResult> {
     await this.ensureInitialized()
+    const proxyPort = params.proxyPort ?? 8080
     const configuredBrowser = this.arsenal.getBrowserExecutablePath()
-    return launchPreconfiguredProxyBrowser({
-      proxyPort: params.proxyPort ?? 8080,
+    const configuredHost = this.arsenal.getBrowserProxyHost()
+
+    // Descobre ONDE o proxy está antes de abrir o navegador. Sem isso o operador
+    // recebia um ERR_PROXY_CONNECTION_FAILED do Chrome sem nenhuma pista de que o
+    // problema era a porta — e não o CyberLab.
+    const reach = await resolveReachableProxyHost({
+      port: proxyPort,
+      ...(configuredHost ? { preferredHost: configuredHost } : {}),
+      wslDistro: this.arsenal.getPreferredWslDistro(),
+    })
+
+    const result = launchPreconfiguredProxyBrowser({
+      proxyPort,
+      proxyHost: reach.host,
       workspaceRoot: this.workspaceRoot,
       ...(params.startUrl ? { startUrl: params.startUrl } : {}),
       ...(params.preferredBrowserId ? { preferredBrowserId: params.preferredBrowserId } : {}),
       ...(configuredBrowser ? { browserExecutablePath: configuredBrowser } : {}),
     })
+
+    return {
+      ...result,
+      proxyReachable: reach.reachable,
+      triedHosts: reach.triedHosts,
+      message: reach.reachable
+        ? result.message
+        : `${result.message}\n\n${buildProxyUnreachableGuidance(proxyPort, reach.triedHosts)}`,
+    }
   }
 
   async listAvailableBrowsers() {

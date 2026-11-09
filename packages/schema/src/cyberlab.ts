@@ -329,6 +329,14 @@ export namespace CyberLab {
     message: Schema.String,
     manualPowershellCommand: Schema.String,
     manualBashCommand: Schema.String,
+    /**
+     * `false` quando nada respondia na porta do proxy no momento do lançamento.
+     * O navegador abre mesmo assim, e `message` já vem com o diagnóstico do
+     * `ERR_PROXY_CONNECTION_FAILED` que o Chrome exibiria sem contexto nenhum.
+     */
+    proxyReachable: optional(Schema.Boolean),
+    /** Endereços testados — diferenciam "Burp parado" de "Burp rodando no WSL2". */
+    triedHosts: optional(Schema.Array(Schema.String)),
   })
 
   export const ArsenalCategoryInfo = Schema.Struct({

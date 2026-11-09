@@ -642,7 +642,10 @@ function createWorkbenchService() {
         },
       )
       setBackend("lastBrowserLaunch", res)
-      if (res.launched) setNotice(res.message)
+      // Abriu o navegador mas não há proxy ouvindo: é o caso que gerava o
+      // ERR_PROXY_CONNECTION_FAILED sem explicação. Mostra como erro para o
+      // diagnóstico não passar despercebido no meio dos avisos.
+      if (res.launched && res.proxyReachable !== false) setNotice(res.message)
       else setError(res.message)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
