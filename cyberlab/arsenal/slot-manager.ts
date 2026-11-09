@@ -44,6 +44,12 @@ export interface PersistedArsenalConfig {
   enforceScopeOnCliRuns: boolean
   slotOverrides: Record<string, SlotUserOverride>
   customSlots: ArsenalSlotDefinition[]
+  /**
+   * Caminho do navegador que o botão 🌐 (Navegador Isolado no Proxy) deve abrir.
+   * Quando ausente, usa-se a detecção automática (Chromium/Edge/Brave/Chrome).
+   * Existe porque a detecção falha em instalações fora dos caminhos conhecidos.
+   */
+  browserExecutablePath?: string
 }
 
 export interface ArsenalSlotStatus {
@@ -507,10 +513,28 @@ export class ArsenalSlotManager {
         slotOverrides:
           parsed.slotOverrides && typeof parsed.slotOverrides === "object" ? parsed.slotOverrides : {},
         customSlots: Array.isArray(parsed.customSlots) ? parsed.customSlots : [],
+        browserExecutablePath:
+          typeof parsed.browserExecutablePath === "string" && parsed.browserExecutablePath.trim()
+            ? parsed.browserExecutablePath.trim()
+            : undefined,
       }
     } catch {
       return fallback
     }
+  }
+
+  /** Navegador fixado pelo operador para o botão 🌐, ou `null` para detecção automática. */
+  getBrowserExecutablePath(): string | null {
+    return this.config.browserExecutablePath?.trim() || null
+  }
+
+  /** Fixa (ou limpa, com `null`) o navegador usado pelo botão 🌐. */
+  setBrowserExecutablePath(executablePath: string | null): string | null {
+    const trimmed = executablePath?.trim() ?? ""
+    if (trimmed) this.config.browserExecutablePath = trimmed
+    else delete this.config.browserExecutablePath
+    this.saveConfig()
+    return this.getBrowserExecutablePath()
   }
 
   private saveConfig(): void {

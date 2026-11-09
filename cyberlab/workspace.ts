@@ -722,17 +722,31 @@ export class CyberLabWorkspace {
     preferredBrowserId?: string
   }): Promise<LaunchProxyBrowserResult> {
     await this.ensureInitialized()
+    const configuredBrowser = this.arsenal.getBrowserExecutablePath()
     return launchPreconfiguredProxyBrowser({
       proxyPort: params.proxyPort ?? 8080,
       workspaceRoot: this.workspaceRoot,
       ...(params.startUrl ? { startUrl: params.startUrl } : {}),
       ...(params.preferredBrowserId ? { preferredBrowserId: params.preferredBrowserId } : {}),
+      ...(configuredBrowser ? { browserExecutablePath: configuredBrowser } : {}),
     })
   }
 
   async listAvailableBrowsers() {
     await this.ensureInitialized()
     return detectInstalledProxyBrowsers()
+  }
+
+  /** Fixa (ou limpa, com `null`) o navegador que o botão 🌐 abre. */
+  async setBrowserExecutablePath(executablePath: string | null) {
+    await this.ensureInitialized()
+    return this.arsenal.setBrowserExecutablePath(executablePath)
+  }
+
+  /** Navegador atualmente fixado para o botão 🌐, ou `null` (detecção automática). */
+  async getBrowserExecutablePath() {
+    await this.ensureInitialized()
+    return this.arsenal.getBrowserExecutablePath()
   }
 
   async listWorkspaceFiles(relativeDir = "."): Promise<{

@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process"
-import { existsSync, mkdirSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
@@ -40,6 +40,42 @@ function resolveExecutableInPath(cmd: string): string | null {
     }
   } catch {
     // Ignore
+  }
+  return null
+}
+
+/**
+ * Caminho canônico de um executável registrado no Windows.
+ *
+ * Chrome/Edge/Brave se registram em `App Paths`. É a fonte mais confiável porque
+ * cobre instalação **por usuário** (`%LOCALAPPDATA%`, que é o padrão do instalador
+ * baixado do site), por máquina (`%ProgramFiles%`) e em unidades fora do padrão.
+ * A lista de caminhos fixos cobria só o caso mais comum e deixava o botão 🌐
+ * inútil para todo o resto — o operador via "nenhum navegador encontrado" mesmo
+ * com o Chrome aberto na tela.
+ */
+function queryWindowsAppPath(exeName: string): string | null {
+  if (process.platform !== "win32") return null
+  const roots = [
+    "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths",
+    "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths",
+    "HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\App Paths",
+  ]
+  for (const root of roots) {
+    try {
+      const res = spawnSync("reg.exe", ["query", `${root}\\${exeName}`, "/ve"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        windowsHide: true,
+        timeout: 3000,
+      })
+      if (res.status !== 0 || !res.stdout) continue
+      const match = /REG_SZ\s+(.+)$/im.exec(res.stdout)
+      const candidate = match?.[1]?.trim().replace(/^["']|["']$/g, "")
+      if (candidate && existsSync(candidate)) return candidate
+    } catch {
+      // Registro indisponível ou chave ausente — segue para a próxima raiz.
+    }
   }
   return null
 }
@@ -102,6 +138,12 @@ export function detectInstalledProxyBrowsers(): DetectedProxyBrowser[] {
       }
       addCandidate(item.id, item.name, resolveExecutableInPath(`${item.id}.exe`))
     }
+
+    // Fallback final: registro do Windows. Só entra se os caminhos fixos acima
+    // falharem, e é justamente o que salva a instalação por usuário.
+    addCandidate("chrome", "Google Chrome", queryWindowsAppPath("chrome.exe"))
+    addCandidate("msedge", "Microsoft Edge (Chromium)", queryWindowsAppPath("msedge.exe"))
+    addCandidate("brave", "Brave Browser", queryWindowsAppPath("brave.exe"))
     return found
   }
 
@@ -149,6 +191,35 @@ export function detectInstalledProxyBrowsers(): DetectedProxyBrowser[] {
     "Microsoft Edge (Windows Host)",
     "/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
   )
+  addCandidate(
+    "chrome-wsl",
+    "Google Chrome (Windows Host)",
+    "/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+  )
+
+  // Instalação por usuário: o Chrome baixado do site vai para %LOCALAPPDATA% e
+  // NUNCA para Program Files. Sem isso, rodar o CyberLab dentro do WSL2 deixava
+  // a detecção vazia mesmo com o Chrome instalado no host.
+  const mntUsers = "/mnt/c/Users"
+  if (existsSync(mntUsers)) {
+    try {
+      for (const user of readdirSync(mntUsers)) {
+        if (user.startsWith(".") || user === "Public" || user === "Default") continue
+        addCandidate(
+          "chrome-wsl",
+          "Google Chrome (Windows Host)",
+          `/mnt/c/Users/${user}/AppData/Local/Google/Chrome/Application/chrome.exe`,
+        )
+        addCandidate(
+          "msedge-wsl",
+          "Microsoft Edge (Windows Host)",
+          `/mnt/c/Users/${user}/AppData/Local/Microsoft/Edge/Application/msedge.exe`,
+        )
+      }
+    } catch {
+      // Diretório ilegível — os candidatos fixos acima já cobrem o básico.
+    }
+  }
 
   return found
 }
@@ -168,10 +239,17 @@ export function buildManualBrowserLaunchCommands(options: {
     ? `--ignore-certificate-errors-spki-list="${options.spkiSha256Base64}"`
     : `--ignore-certificate-errors`
 
+  // Ordem importa: a instalação POR USUÁRIO (%LOCALAPPDATA%) é o padrão do
+  // instalador do site da Google e vinha sendo ignorada aqui.
   const powershell = [
-    `$edge = "${"$"}{env:ProgramFiles(x86)}\\Microsoft\\Edge\\Application\\msedge.exe"`,
-    `if (-not (Test-Path $edge)) { $edge = "$env:ProgramFiles\\Google\\Chrome\\Application\\chrome.exe" }`,
-    `& $edge --user-data-dir="$env:TEMP\\cyberlab-proxy-browser" --proxy-server="${proxyUrl}" --proxy-bypass-list="${bypass}" ${certFlag} --no-first-run "${options.startUrl}"`,
+    `$candidates = @(`,
+    `"\${env:ProgramFiles(x86)}\\Microsoft\\Edge\\Application\\msedge.exe",`,
+    `"$env:LOCALAPPDATA\\Google\\Chrome\\Application\\chrome.exe",`,
+    `"\${env:ProgramFiles(x86)}\\Google\\Chrome\\Application\\chrome.exe",`,
+    `"$env:ProgramFiles\\Google\\Chrome\\Application\\chrome.exe"`,
+    `) | Where-Object { Test-Path $_ } | Select-Object -First 1`,
+    `if (-not $candidates) { throw "Nenhum navegador Chromium nos caminhos conhecidos. Defina browserExecutablePath em %USERPROFILE%\\.cyberlab\\arsenal-config.json" }`,
+    `& $candidates --user-data-dir="$env:TEMP\\cyberlab-proxy-browser" --proxy-server="${proxyUrl}" --proxy-bypass-list="${bypass}" ${certFlag} --no-first-run "${options.startUrl}"`,
   ].join("; ")
 
   const bash = `google-chrome --user-data-dir="/tmp/cyberlab-proxy-browser" --proxy-server="${proxyUrl}" --proxy-bypass-list="${bypass}" ${certFlag} --no-first-run "${options.startUrl}"`
@@ -187,6 +265,13 @@ export function launchPreconfiguredProxyBrowser(options: {
   startUrl?: string
   preferredBrowserId?: string
   cyberlabUiPort?: number
+  /**
+   * Caminho do executável fixado pelo operador (`browserExecutablePath` em
+   * `%USERPROFILE%\.cyberlab\arsenal-config.json`). Tem prioridade sobre a
+   * detecção automática e, se não existir, falha com mensagem acionável em vez
+   * de cair silenciosamente para outro navegador.
+   */
+  browserExecutablePath?: string
 }): LaunchProxyBrowserResult {
   const host = options.proxyHost || "127.0.0.1"
   const startUrl = options.startUrl?.trim() || "about:blank"
@@ -225,10 +310,29 @@ export function launchPreconfiguredProxyBrowser(options: {
   }
 
   const browsers = detectInstalledProxyBrowsers()
-  const chosen =
-    (options.preferredBrowserId
-      ? browsers.find((b) => b.id === options.preferredBrowserId)
-      : undefined) ?? browsers[0]
+  const explicitPath = options.browserExecutablePath?.trim() ?? ""
+  const chosen: DetectedProxyBrowser | undefined = explicitPath
+    ? { id: "operator_override", displayName: path.basename(explicitPath), executablePath: explicitPath }
+    : (options.preferredBrowserId
+        ? browsers.find((b) => b.id === options.preferredBrowserId)
+        : undefined) ?? browsers[0]
+
+  if (explicitPath && !existsSync(explicitPath)) {
+    return {
+      launched: false,
+      browserName: path.basename(explicitPath),
+      executablePath: explicitPath,
+      proxyUrl,
+      startUrl,
+      spkiSha256Base64: spki,
+      profileDirectory,
+      message:
+        `O navegador fixado em \`browserExecutablePath\` não foi encontrado: ${explicitPath}. ` +
+        `Corrija o caminho em %USERPROFILE%\\.cyberlab\\arsenal-config.json (ou remova a chave para voltar à detecção automática).`,
+      manualPowershellCommand: manual.powershell,
+      manualBashCommand: manual.bash,
+    }
+  }
 
   if (!chosen) {
     return {
