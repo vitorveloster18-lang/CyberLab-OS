@@ -20,6 +20,12 @@ import { fileURLToPath } from "node:url"
 import type { ProjectScope } from "../contracts/policy.js"
 import { redactSensitiveContent } from "../evidence/provenance.js"
 import { buildWslgLaunchArgs, probeWslg } from "../external/wsl-runtime.js"
+import {
+  probeVmTarget,
+  resetVmRuntimeCaches,
+  type VmProbeResult,
+  type VmTarget,
+} from "../external/vm-runtime.js"
 import { isPathInsideRoot, type ScopeController } from "../policy/scope.js"
 import {
   ARSENAL_CATEGORY_LABELS,
@@ -56,6 +62,12 @@ export interface PersistedArsenalConfig {
    * Útil quando o Burp roda dentro do WSL2 e só responde pelo IP da distro.
    */
   browserProxyHost?: string
+  /**
+   * VM Linux (VirtualBox/Hyper-V) dirigida pelo CyberLab. Existe para a classe de
+   * ferramentas que o WSL2 nunca executa: Wi-Fi em modo monitor, USB, bridge de
+   * LAN e captura crua na placa física do host.
+   */
+  vmTarget?: VmTarget
 }
 
 export interface ArsenalSlotStatus {
@@ -134,6 +146,12 @@ export type ArsenalSlotHealthKind =
   | "duplicate_custom_slot"
   | "non_executable_target"
   | "unconfigured_custom_slot"
+  /**
+   * Slot cuja capacidade central exige kernel real (Wi-Fi em modo monitor, USB,
+   * bridge de LAN, captura na placa física) mas nenhuma VM está configurada ou
+   * alcançável. Sem isso o operador clica achando que é só configurar — e nunca é.
+   */
+  | "requires_real_kernel"
 
 export interface ArsenalSlotHealthIssue {
   slotId: string
@@ -298,10 +316,46 @@ export function normalizeSlotNameForComparison(name: string): string {
 export function computeArsenalSlotHealth(
   slots: readonly ArsenalSlotStatus[],
   overrides: Record<string, SlotUserOverride> = {},
+  /**
+   * Resultado já sondado da VM, injetado por quem chama. É uma decisão deliberada:
+   * um probe SSH custa até 8s, e esta função é pura e chamada a cada render — se
+   * ela sondasse sozinha, a interface congelaria.
+   */
+  vmProbe?: VmProbeResult,
 ): ArsenalSlotHealthIssue[] {
   const issues: ArsenalSlotHealthIssue[] = []
 
   // --- 1 & 3 & 4: problemas individuais de slots personalizados ---
+  // Slots que prometem algo que o WSL2 estruturalmente não entrega (Wi-Fi em modo
+  // monitor, USB, bridge de LAN, captura na placa física). O aviso só aparece quando
+  // não há VM de pé — com VM alcançável, o slot é legítimo e não há o que reportar.
+  // ArsenalSlotStatus não carrega o campo; a flag mora na definição do catálogo.
+  const kernelSlotIds = new Set(
+    OFFICIAL_ARSENAL_SLOTS.filter((def) => def.requiresRealKernel).map((def) => def.slotId),
+  )
+  const needingKernel = slots.filter(
+    (slot) => !slot.isCustom && kernelSlotIds.has(slot.slotId),
+  )
+  if (needingKernel.length > 0) {
+    const vm =
+      vmProbe ?? { reachable: true, reason: "", distro: null }
+    if (!vm.reachable) {
+      for (const slot of needingKernel) {
+        issues.push({
+          slotId: slot.slotId,
+          name: slot.name,
+          kind: "requires_real_kernel",
+          severity: "warning",
+          message: `O "${slot.name}" depende de hardware/rede que o WSL2 não expõe (USB, modo monitor de Wi-Fi, bridge de LAN ou placa física). Sem kernel real a capacidade principal não funciona. ${vm.reason}`,
+          configuredPath: null,
+          suggestion:
+            "Suba uma VM Kali com adaptador host-only + chave SSH e configure `vmTarget` no arsenal-config.json — ou use este slot sabendo que só a parte que não depende de hardware vai funcionar.",
+          duplicateOfSlotId: null,
+        })
+      }
+    }
+  }
+
   for (const slot of slots) {
     if (!slot.isCustom) continue
     const override = overrides[slot.slotId] ?? {}
@@ -527,6 +581,23 @@ export class ArsenalSlotManager {
           typeof parsed.browserProxyHost === "string" && parsed.browserProxyHost.trim()
             ? parsed.browserProxyHost.trim()
             : undefined,
+        vmTarget:
+          parsed.vmTarget &&
+          typeof parsed.vmTarget === "object" &&
+          typeof parsed.vmTarget.host === "string" &&
+          typeof parsed.vmTarget.user === "string"
+            ? {
+                host: parsed.vmTarget.host.trim(),
+                user: parsed.vmTarget.user.trim(),
+                ...(typeof parsed.vmTarget.port === "number" ? { port: parsed.vmTarget.port } : {}),
+                ...(typeof parsed.vmTarget.identityFile === "string" && parsed.vmTarget.identityFile.trim()
+                  ? { identityFile: parsed.vmTarget.identityFile.trim() }
+                  : {}),
+                ...(typeof parsed.vmTarget.label === "string" && parsed.vmTarget.label.trim()
+                  ? { label: parsed.vmTarget.label.trim() }
+                  : {}),
+              }
+            : undefined,
       }
     } catch {
       return fallback
@@ -564,6 +635,25 @@ export class ArsenalSlotManager {
   /** Distro WSL2 preferida — usada para alcançar um proxy que rode dentro do Kali. */
   getPreferredWslDistro(): string {
     return this.config.preferredWslDistro
+  }
+
+  /** VM Linux dirigida pelo CyberLab (VirtualBox/Hyper-V) ou `null`. */
+  getVmTarget(): VmTarget | null {
+    return this.config.vmTarget ?? null
+  }
+
+  /** Configura (ou limpa, com `null`) a VM dirigida pelo CyberLab. */
+  setVmTarget(target: VmTarget | null): VmTarget | null {
+    if (target && target.host.trim() && target.user.trim()) this.config.vmTarget = target
+    else delete this.config.vmTarget
+    this.saveConfig()
+    resetVmRuntimeCaches()
+    return this.getVmTarget()
+  }
+
+  /** Sonda a VM configurada. Resultado vem com motivo acionável quando falha. */
+  probeVmTarget(force = false) {
+    return probeVmTarget(this.config.vmTarget, force)
   }
 
   private saveConfig(): void {
@@ -1345,7 +1435,11 @@ export class ArsenalSlotManager {
       categories,
       slots,
       runs,
-      health: computeArsenalSlotHealth(slots, this.config.slotOverrides),
+      health: computeArsenalSlotHealth(
+        slots,
+        this.config.slotOverrides,
+        probeVmTarget(this.config.vmTarget),
+      ),
     }
   }
 

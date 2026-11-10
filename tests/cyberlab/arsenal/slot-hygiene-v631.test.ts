@@ -178,7 +178,10 @@ describe("CyberLab OS v6.3.1 — Higiene de Slots Personalizados (fantasmas, dup
     const officialAfter = after.slots.filter((s) => !s.isCustom).length
     expect(officialAfter).toBe(officialBefore)
 
-    // O diagnóstico fica limpo após a poda
-    expect(after.health).toEqual([])
+    // O diagnóstico de slots PERSONALIZADOS fica limpo após a poda.
+    // Os avisos `requires_real_kernel` sobrevivem por design: são de slots
+    // oficiais (Wireshark, MVT, Frida) e este ambiente de teste não tem VM.
+    const leftoverCustom = after.health.filter((i) => i.kind !== "requires_real_kernel")
+    expect(leftoverCustom).toEqual([])
   })
 })

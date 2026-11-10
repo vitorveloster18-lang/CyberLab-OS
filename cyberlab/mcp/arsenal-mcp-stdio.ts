@@ -20,6 +20,7 @@
  */
 
 import { spawnSync } from "node:child_process"
+import { probeVmTarget, readPersistedVmTarget } from "../external/vm-runtime.js"
 import { existsSync, readFileSync, unwatchFile, watchFile } from "node:fs"
 import http from "node:http"
 import os from "node:os"
@@ -874,6 +875,7 @@ function callBurpSseInsideWsl(
 ): { ok: boolean; result?: unknown; error?: string } {
   const pyScript = `
 import http.client, json, sys, urllib.parse
+
 
 port = int(sys.argv[1])
 method = sys.argv[2]
@@ -1731,6 +1733,7 @@ const HEALTH_KIND_LABEL: Record<ArsenalSlotHealthIssue["kind"], string> = {
   duplicate_custom_slot: "👥 Duplicata",
   non_executable_target: "📄 Alvo Não-Executável",
   unconfigured_custom_slot: "⚙️ Slot Sem Configuração",
+  requires_real_kernel: "🖥️ Exige Kernel Real",
 }
 
 async function handleArsenalSlotHealthCall(
@@ -1738,7 +1741,11 @@ async function handleArsenalSlotHealthCall(
   callArgs: Record<string, unknown>,
 ): Promise<void> {
   const { slots, overrides } = buildHealthSnapshot()
-  const issues = computeArsenalSlotHealth(slots, overrides as never)
+  const issues = computeArsenalSlotHealth(
+    slots,
+    overrides as never,
+    probeVmTarget(readPersistedVmTarget()),
+  )
 
   const lines: string[] = [
     `# Higiene do Arsenal CyberLab OS (${slots.length} slots — ${slots.filter((s) => s.isCustom).length} personalizados)`,

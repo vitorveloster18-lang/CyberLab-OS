@@ -47,6 +47,17 @@ export interface ArsenalSlotDefinition {
    * agente invoca de fato existe.
    */
   externalToolId?: string
+  /**
+   * A capacidade CENTRAL deste slot depende de hardware/rede que o WSL2 **não
+   * expõe**: modo monitor de Wi-Fi, dispositivo USB, bridge de LAN de verdade ou
+   * captura crua na placa física do host.
+   *
+   * NÃO significa "não funciona no WSL2". Significa "a função prometida exige um
+   * kernel real", e por isso o CyberLab avisa em vez de deixar o operador clicar
+   * achando que vai funcionar. Só marque quando a capacidade principal é essa —
+   * marcar um slot que funciona parcialmente trocaria um silêncio por uma mentira.
+   */
+  requiresRealKernel?: boolean
   /** Candidate binary names on Windows */
   windowsBinaries: string[]
   /** Well-known Windows installation paths (supports %LOCALAPPDATA%, %ProgramFiles%, %USERPROFILE%, {toolsRoot}) */
@@ -638,6 +649,9 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
   },
   {
     slotId: "wireshark",
+    requiresRealKernel: true,
+    // Captura promíscua na placa FÍSICA do host; dentro do WSL2 só se vê o
+    // tráfego do próprio WSL (vEthernet).
     externalToolId: "tshark",
     name: "Wireshark GUI & tshark Oficial",
     shortLabel: "Wireshark / tshark",
@@ -788,6 +802,9 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
   },
   {
     slotId: "frida-apktool",
+    requiresRealKernel: true,
+    // Instrumentação por ADB depende de USB; só a análise estática (apktool)
+    // roda sem kernel real.
     name: "Frida & Apktool (Instrumentação Mobile Dinâmica & SSL Unpinning)",
     shortLabel: "Frida / Apktool",
     category: "reverse_mobile",
@@ -1094,6 +1111,9 @@ export const OFFICIAL_ARSENAL_SLOTS: ArsenalSlotDefinition[] = [
   },
   {
     slotId: "mvt",
+    requiresRealKernel: true,
+    // Backups funcionam em qualquer lugar; o caminho ADB/USB (que é o uso
+    // principal em forense) exige USB, que o WSL2 não enxerga sem usbipd.
     externalToolId: "mvt-android",
     name: "MVT — Mobile Verification Toolkit (Amnesty International)",
     shortLabel: "MVT Forensics",
