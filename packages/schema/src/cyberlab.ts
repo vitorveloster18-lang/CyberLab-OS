@@ -423,6 +423,7 @@ export namespace CyberLab {
       "duplicate_custom_slot",
       "non_executable_target",
       "unconfigured_custom_slot",
+      "requires_real_kernel",
     ]),
     severity: Schema.Literals(["warning", "error"]),
     message: Schema.String,
