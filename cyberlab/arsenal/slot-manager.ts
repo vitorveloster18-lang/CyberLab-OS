@@ -19,6 +19,7 @@ import tls from "node:tls"
 import { fileURLToPath } from "node:url"
 import type { ProjectScope } from "../contracts/policy.js"
 import { redactSensitiveContent } from "../evidence/provenance.js"
+import { buildWslgLaunchArgs, probeWslg } from "../external/wsl-runtime.js"
 import { isPathInsideRoot, type ScopeController } from "../policy/scope.js"
 import {
   ARSENAL_CATEGORY_LABELS,
@@ -3312,18 +3313,37 @@ export class ArsenalSlotManager {
             ? splitCommandLineArgs(params.rawArgs)
             : []
 
+      // Modo de abertura GUI — só faz sentido para runtime WSL2.
+      let guiMode: "wslg" | "wsl-direct" | null = null
+      let wslgReason = ""
+
       if (chosenRuntime === "wsl") {
-        const child = spawn(
-          "wsl.exe",
-          ["-d", this.config.preferredWslDistro, "--", binPath, ...extraArgs],
-          {
-            cwd: this.workspaceRoot,
-            detached: true,
-            stdio: "ignore",
-            windowsHide: false,
-          },
-        )
-        child.unref()
+        const wslg = probeWslg(this.config.preferredWslDistro)
+        if (wslg.available) {
+          // Janela NATIVA do Windows: o app não fica preso dentro do stream noVNC
+          // da coluna central, e o clipboard do host passa a funcionar.
+          const child = spawn(
+            "wsl.exe",
+            buildWslgLaunchArgs({
+              distro: this.config.preferredWslDistro,
+              binary: binPath,
+              args: extraArgs,
+              wslg,
+            }),
+            { cwd: this.workspaceRoot, detached: true, stdio: "ignore", windowsHide: false },
+          )
+          child.unref()
+          guiMode = "wslg"
+        } else {
+          const child = spawn(
+            "wsl.exe",
+            ["-d", this.config.preferredWslDistro, "--", binPath, ...extraArgs],
+            { cwd: this.workspaceRoot, detached: true, stdio: "ignore", windowsHide: false },
+          )
+          child.unref()
+          guiMode = "wsl-direct"
+          wslgReason = wslg.reason
+        }
       } else if (chosenRuntime === "windows" && /\.jar$/i.test(binPath)) {
         const javaExe = this.findWindowsJavaExecutable(path.dirname(binPath))
         const jvmArgs = [
@@ -3364,7 +3384,14 @@ export class ArsenalSlotManager {
 
       return {
         ok: true,
-        message: `${slot.name} iniciado (${chosenRuntime}: ${binPath}).`,
+        message:
+          guiMode === "wslg"
+            ? `${slot.name} aberto em JANELA NATIVA do Windows via WSLg (${binPath}). ` +
+              `Fica fora do stream noVNC: dá para colocar lado a lado com o navegador, e a área de ` +
+              `transferência do Windows funciona normalmente.`
+            : guiMode === "wsl-direct"
+              ? `${slot.name} iniciado (${chosenRuntime}: ${binPath}). ${wslgReason}`
+              : `${slot.name} iniciado (${chosenRuntime}: ${binPath}).`,
         overview: this.getOverview(false),
       }
     }

@@ -131,6 +131,119 @@ export function probeWslEnvironment(force = false): WslEnvironmentInfo {
   return info
 }
 
+export interface WslgInfo {
+  /** WSLg funcional: apps Linux ganham uma janela NATIVA do Windows. */
+  available: boolean
+  /** Motivo quando indisponível — vai direto para a mensagem do operador. */
+  reason: string
+  display: string | null
+  xdgRuntimeDir: string | null
+  pulseServer: string | null
+}
+
+let wslgCache: { distro: string; info: WslgInfo; at: number } | null = null
+const WSLG_TTL_MS = 300_000
+
+/**
+ * Detecta o WSLg — a camada que dá a apps Linux do WSL2 uma janela nativa do Windows.
+ *
+ * Por que isso importa tanto: sem WSLg o CyberLab precisa streamar o desktop inteiro
+ * do Kali por noVNC dentro de um iframe. Daí vêm dois problemas reais que o operador
+ * sentiu na pele — (a) o app abre DENTRO da coluna central e cobre o que estiver lá
+ * (o Burp sendo engolido pelo próprio navegador), e (b) a área de transferência do
+ * host não chega na sessão, porque um stream VNC não participa do clipboard do Windows.
+ */
+export function probeWslg(distro: string, force = false): WslgInfo {
+  const unavailable = (reason: string): WslgInfo => ({
+    available: false,
+    reason,
+    display: null,
+    xdgRuntimeDir: null,
+    pulseServer: null,
+  })
+
+  if (process.platform !== "win32") {
+    return unavailable("WSLg só existe no host Windows.")
+  }
+  if (!force && wslgCache && wslgCache.distro === distro && Date.now() - wslgCache.at < WSLG_TTL_MS) {
+    return wslgCache.info
+  }
+
+  const script = [
+    'if [ -d /mnt/wslg/runtime-dir ]; then echo "WSLG_DIR=1"; else echo "WSLG_DIR=0"; fi',
+    'if [ -S /tmp/.X11-unix/X0 ] || [ -e /mnt/wslg/.X11-unix/X0 ]; then echo "XSOCK=1"; else echo "XSOCK=0"; fi',
+    'echo "DISPLAY=${DISPLAY:-}"',
+    'echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-}"',
+    'echo "PULSE_SERVER=${PULSE_SERVER:-}"',
+  ].join("\n")
+
+  let out = ""
+  try {
+    const res = spawnSync("wsl.exe", ["-d", distro, "--", "bash", "-s"], {
+      input: script,
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 20_000,
+    })
+    out = decodePotentialUtf16Le(res.stdout ?? "")
+  } catch (err) {
+    return unavailable(`Falha ao sondar o WSLg: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  const read = (key: string): string | null => {
+    const match = new RegExp(`^${key}=(.*)$`, "m").exec(out)
+    const value = match?.[1]?.trim()
+    return value && value.length > 0 ? value : null
+  }
+
+  const hasDir = read("WSLG_DIR") === "1"
+  const hasSock = read("XSOCK") === "1"
+  const display = read("DISPLAY") ?? (hasDir ? ":0" : null)
+  const xdgRuntimeDir = read("XDG_RUNTIME_DIR") ?? (hasDir ? "/mnt/wslg/runtime-dir" : null)
+  const pulseServer = read("PULSE_SERVER") ?? (hasDir ? "/mnt/wslg/PulseServer" : null)
+
+  const info: WslgInfo =
+    (hasDir || hasSock) && display
+      ? {
+          available: true,
+          reason: "WSLg ativo — apps Linux abrem em janela nativa do Windows.",
+          display,
+          xdgRuntimeDir,
+          pulseServer,
+        }
+      : unavailable(
+          "WSLg não detectado nesta distro. Ele acompanha o Windows 11 (ou Windows 10 21H2+ com WSL " +
+            "atualizado) e é o que permite janela nativa para apps Linux. Rode `wsl --update` e depois " +
+            "`wsl --shutdown`. Até lá o CyberLab usa o desktop stream por noVNC, que não compartilha a " +
+            "área de transferência do Windows.",
+        )
+
+  wslgCache = { distro, info, at: Date.now() }
+  return info
+}
+
+/**
+ * Monta o argv para abrir um app Linux em janela NATIVA via WSLg.
+ *
+ * As variáveis são exportadas com `env` (não com `export` dentro de um shell) para
+ * manter a garantia de execução sem interpolação de shell.
+ * Não forçamos `-u root`: apps gráficos rodando como root costumam brigar com o
+ * dono do XDG_RUNTIME_DIR.
+ */
+export function buildWslgLaunchArgs(params: {
+  distro: string
+  binary: string
+  args: readonly string[]
+  wslg: WslgInfo
+}): string[] {
+  const envPairs: string[] = []
+  if (params.wslg.display) envPairs.push(`DISPLAY=${params.wslg.display}`)
+  if (params.wslg.xdgRuntimeDir) envPairs.push(`XDG_RUNTIME_DIR=${params.wslg.xdgRuntimeDir}`)
+  if (params.wslg.pulseServer) envPairs.push(`PULSE_SERVER=${params.wslg.pulseServer}`)
+
+  return ["-d", params.distro, "--", "env", ...envPairs, params.binary, ...params.args]
+}
+
 interface ProbeCacheEntry {
   hits: Map<string, WslBinaryHit>
   at: number
@@ -140,6 +253,7 @@ const PROBE_TTL_MS = 120_000
 
 export function resetWslRuntimeCaches(): void {
   envCache = null
+  wslgCache = null
   probeCache.clear()
 }
 
