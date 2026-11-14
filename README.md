@@ -523,9 +523,10 @@ bun run --cwd packages/core fix-node-pty
 bun run cyberlab status
 
 # Declarar o escopo autorizado ANTES de qualquer execução (tudo ou nada)
-bun run cyberlab scope --set 10.0.0.0/24 exemplo.com
-bun run cyberlab scope            # mostra o escopo vigente
-bun run cyberlab scope --clear
+bun run cyberlab scope 10.0.0.0/24 exemplo.com        # alvos internos
+bun run cyberlab scope --external exemplo.com         # libera alvo público/roteável
+bun run cyberlab scope                                # mostra o escopo vigente
+bun run cyberlab scope --clear                        # encerra a autorização
 
 # Rodar uma ferramenta do seu Kali sob guarda do CyberLab
 bun run cyberlab exec -- nmap -sV -p 80,443 10.0.0.10
@@ -533,7 +534,8 @@ bun run cyberlab exec -- nuclei -u https://exemplo.com -t exposures/
 bun run cyberlab exec --timeout 120 -- curl -s -i https://exemplo.com/login
 
 # Evidências, achados e relatório
-bun run cyberlab evidence --verify
+bun run cyberlab evidence                             # lista com SHA-256
+bun run cyberlab evidence --verify <id da evidência>  # reconfere a custódia
 bun run cyberlab findings
 bun run cyberlab report > relatorio.md
 ```

@@ -76,4 +76,4 @@ contribui com trava de escopo, redação de segredos e custódia `SHA-256`.
 Práticas recomendadas para o ambiente local:
 - Manter o repositório em sistema de arquivos `ext4` nativo (`~/src/cyberlab-os`) para máximo desempenho de I/O com Bun e SQLite WAL.
 - Isolar laboratórios vulneráveis em redes Docker internas (`--internal` ou bridge dedicada sem bind público `0.0.0.0` na interface física).
-- Declarar o escopo (`cyberlab scope --set ...`) **antes** de qualquer `cyberlab exec`.
+- Declarar o escopo (`cyberlab scope <alvos>`) **antes** de qualquer `cyberlab exec`.

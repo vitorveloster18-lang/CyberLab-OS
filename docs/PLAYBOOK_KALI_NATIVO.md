@@ -44,11 +44,18 @@ Nada sai do papel enquanto o escopo não estiver declarado. O comando é **tudo 
 nada**: você passa a lista inteira de uma vez.
 
 ```bash
-bun run cyberlab scope --set 10.0.0.0/24 exemplo.com *.exemplo.com
+# alvos internos / laboratório
+bun run cyberlab scope 10.0.0.0/24 127.0.0.1
+
+# alvo público (bug bounty autorizado) — exige --external
+bun run cyberlab scope --external exemplo.com *.exemplo.com
+
 bun run cyberlab scope                 # mostra o escopo vigente
 bun run cyberlab scope --json          # para o agente consumir
 bun run cyberlab scope --clear         # encerra a autorização
 ```
+
+Sem `--external`, domínios públicos/roteáveis são recusados: o padrão é falha fechada.
 
 ### 2.2 Rodar ferramentas sob guarda
 
@@ -71,10 +78,10 @@ Bloqueios (alvo fora de escopo) e falhas da ferramenta devolvem **exit 1**.
 ### 2.3 Evidências, achados e relatório
 
 ```bash
-bun run cyberlab evidence              # lista os registros
-bun run cyberlab evidence --verify     # reconfere todos os SHA-256
-bun run cyberlab findings              # achados e status de revisão
-bun run cyberlab report > relatorio.md # relatório reproduzível
+bun run cyberlab evidence                             # lista os registros com SHA-256
+bun run cyberlab evidence --verify <id da evidência>  # reconfere a custódia
+bun run cyberlab findings                             # achados e status de revisão
+bun run cyberlab report > relatorio.md                # relatório reproduzível
 ```
 
 Cada evidência carrega o comando, o alvo, o carimbo de tempo, o `SHA-256` do conteúdo
@@ -118,7 +125,7 @@ bun run cyberlab lab status lab-owasp-api-bola     # anote a porta do alvo
 
 # No Burp: Proxy > Proxy settings > listener em 127.0.0.1:8080
 # Depois aponte o navegador (ou o curl) para esse proxy:
-bun run cyberlab scope --set 127.0.0.1
+bun run cyberlab scope 127.0.0.1
 bun run cyberlab exec -- curl -s -x http://127.0.0.1:8080 http://127.0.0.1:19081/api/v1/accounts/1002
 ```
 
@@ -175,7 +182,7 @@ bun run cyberlab status
 
 | Sintoma | Causa | Solução |
 |---|---|---|
-| `comando bloqueado pelo escopo` | alvo fora da lista autorizada | `bun run cyberlab scope --set <alvos>` |
+| `comando bloqueado pelo escopo` | alvo fora da lista autorizada (ou público sem `--external`) | `bun run cyberlab scope <alvos>` |
 | `binário não encontrado` | a ferramenta não está no `PATH` do seu Kali | `sudo apt install -y <pacote>` ou chame pelo caminho absoluto |
 | Pacote instalado mas binário ausente | a distro não publica o binário no `PATH` | use o caminho absoluto: `bun run cyberlab exec -- /usr/share/ghidra/support/analyzeHeadless ...` |
 | `lab status` diz "parado" mas o alvo responde | o daemon subiu em outro terminal | é esperado: use `bun run cyberlab lab stop <labId>` e suba de novo |

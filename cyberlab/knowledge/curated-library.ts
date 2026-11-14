@@ -288,7 +288,7 @@ bun run cyberlab lab status lab-owasp-api-bola
 
 > O CyberLab OS não embute navegador nem proxy: o operador usa o Burp que já tem
 > instalado. O que o CyberLab garante é o escopo — declare o alvo com
-> \`cyberlab scope --set\` e rode as ferramentas por \`cyberlab exec\` para que cada
+> \`cyberlab scope <alvos>\` e rode as ferramentas por \`cyberlab exec\` para que cada
 > saída vire evidência com SHA-256.
 
 ## 5. Transferindo o método calibrado no laboratório local
@@ -2316,7 +2316,7 @@ related:
 no terminal do Kali dele, por \`cyberlab exec\`. O que o CyberLab garante:
 
 - **Trava de Escopo Bug Bounty**: o comando é recusado se o alvo não estiver no escopo
-  declarado (\`cyberlab scope --set ...\`);
+  declarado (\`cyberlab scope <alvos>\`, e \`--external\` para alvo público);
 - **Zero interpolação de shell**: o binário e os argumentos vão para o \`spawn\` sem
   passar por um interpretador;
 - **Redação \`SHA-256\`**: segredos na saída são mascarados antes de chegarem ao contexto;
@@ -2324,7 +2324,7 @@ no terminal do Kali dele, por \`cyberlab exec\`. O que o CyberLab garante:
   relatório da Fase I.
 
 \`\`\`bash
-bun run cyberlab scope --set 10.0.0.0/24 exemplo.com
+bun run cyberlab scope --external 10.0.0.0/24 exemplo.com
 bun run cyberlab exec -- nmap -sV -p 80,443 10.0.0.10
 bun run cyberlab exec -- nuclei -u https://exemplo.com -tags tech -rl 15 -silent
 \`\`\`
