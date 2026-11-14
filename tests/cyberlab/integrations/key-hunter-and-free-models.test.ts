@@ -1,68 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import os from "node:os"
+import { readFileSync } from "node:fs"
 import path from "node:path"
-import { BUILTIN_EXTERNAL_TOOL_CATALOG, CyberLabWorkspace } from "../../../cyberlab/index.js"
 
-describe("CyberLab External KeyHunter Rust CLI Bridge & OpenCode Free AI Models Fix", () => {
-  test("1. External KeyHunter Rust CLI Bridge (fadidevv/keyhunter) executes shell=false and redacts leaked tokens in stdout custody", async () => {
-    const tmpDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-ext-keyhunter-"))
-    const binDir = path.join(tmpDir, "mock-bin")
-    mkdirSync(binDir, { recursive: true })
-    const origPath = process.env.PATH ?? ""
-    try {
-      const catEntry = BUILTIN_EXTERNAL_TOOL_CATALOG.find((t) => t.toolId === "keyhunter")
-      expect(catEntry).toBeDefined()
-      expect(catEntry?.licenseSpdx).toBe("MIT")
-
-      const rawMockSecret = "ghp_" + "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"
-      if (process.platform !== "win32") {
-        const mockBin = path.join(binDir, "keyhunter")
-        writeFileSync(
-          mockBin,
-          `#!/usr/bin/env node\nconsole.log(JSON.stringify({ argv: process.argv.slice(2), findings: [{ provider: "github", key: "${rawMockSecret}" }] }));\n`,
-          "utf8",
-        )
-        chmodSync(mockBin, 0o755)
-        process.env.PATH = `${binDir}:${origPath}`
-
-        const ws = await new CyberLabWorkspace({
-          projectId: "proj-ext-kh",
-          workspaceRoot: tmpDir,
-          inMemoryDb: true,
-        }).ensureInitialized()
-
-        const exec = await ws.submitExecution({
-          capabilityId: "external.keyhunter-cli",
-          mode: "manual",
-          input: {
-            subcommand: "scan",
-            provider: "github",
-            outputFormat: "json",
-            verifiedOnly: true,
-          },
-        })
-
-        expect(exec.status).toBe("succeeded")
-        const evList = await ws.listEvidence(exec.executionId)
-        expect(evList.length).toBeGreaterThanOrEqual(1)
-        const stdoutContent = await ws.readEvidenceContent(evList[0]!.evidenceId)
-        expect(stdoutContent.text).toContain('"scan"')
-        expect(stdoutContent.text).toContain('"-p"')
-        expect(stdoutContent.text).toContain('"github"')
-        expect(stdoutContent.text).toContain('"-V"')
-        // Automatic custody redaction must mask ghp_... token!
-        expect(stdoutContent.text).not.toContain(rawMockSecret)
-        expect(stdoutContent.text).toContain("[REDACTED:GITHUB_TOKEN]")
-
-        ws.close()
-      }
-    } finally {
-      process.env.PATH = origPath
-      rmSync(tmpDir, { recursive: true, force: true })
-    }
-  })
-
+describe("CyberLab — modelos livres do OpenCode", () => {
   test("2. OpenCode Free AI Models fix: snapshot exposes 9 active free models with public key, models-dev checks loadable(), CLI sets valid User-Agent, and UI includes freeSet", async () => {
     const repoRoot = path.resolve(import.meta.dir, "../../..")
 

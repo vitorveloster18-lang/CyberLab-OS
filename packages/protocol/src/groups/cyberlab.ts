@@ -277,53 +277,6 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
       ),
   )
   .add(
-    HttpApiEndpoint.get("cyberlab.external.tools", "/api/cyberlab/external/tools", {
-      query: LocationQuery,
-      success: Location.response(CyberLab.ExternalToolsOverview),
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.external.tools",
-          summary: "List external tools & inbox status in CyberLab Control Plane",
-          description:
-            "Inspect externally installed tools (nmap, nuclei, ffuf, tshark, opentrap, mvt, ghidra) and .cyberlab/inbox pending files.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.external.ingest", "/api/cyberlab/external/ingest", {
-      query: LocationQuery,
-      payload: CyberLab.IngestExternalActionInput,
-      success: Location.response(CyberLab.IngestExternalActionOutput),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.external.ingest",
-          summary: "Ingest an action executed outside CyberLab OS into the unified EvidenceStore",
-          description:
-            "Validates target against ScopeController, redacts secrets, computes SHA-256, and stores external manual/MCP/plugin output.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.external.sync", "/api/cyberlab/external/sync", {
-      query: LocationQuery,
-      success: Location.response(CyberLab.InboxSyncOutput),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.external.sync",
-          summary: "Synchronize .cyberlab/inbox external tool outputs into EvidenceStore",
-          description: "Ingest and archive all artifacts dropped by external tools into .cyberlab/inbox/.",
-        }),
-      ),
-  )
-  .add(
     HttpApiEndpoint.post("cyberlab.evidence.read", "/api/cyberlab/evidence/read", {
       query: LocationQuery,
       payload: CyberLab.ReadEvidenceInput,

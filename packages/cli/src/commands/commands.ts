@@ -726,40 +726,6 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             ),
           },
         }),
-        Spec.make("external", {
-          description:
-            "Unified Control Plane for external tools (nmap, nuclei, ffuf, tshark, opentrap, mvt, ghidra), manual ingest, and .cyberlab/inbox sync",
-          params: {
-            action: Flag.String("action").pipe(
-              Flag.withAlias("a"),
-              Flag.withDescription("Operation: tools | sync | ingest | wrap (defaults to tools)"),
-              Flag.optional,
-            ),
-            tool: Flag.String("tool").pipe(
-              Flag.withDescription("External tool identifier (e.g. opentrap, nmap, burp, wireshark, nuclei)"),
-              Flag.optional,
-            ),
-            target: Flag.String("target").pipe(
-              Flag.withAlias("t"),
-              Flag.withDescription("Target host, URL, IP, or workspace path for ScopeController audit"),
-              Flag.optional,
-            ),
-            file: Flag.String("file").pipe(
-              Flag.withAlias("f"),
-              Flag.withDescription("File containing raw output from an external tool run (for --action ingest)"),
-              Flag.optional,
-            ),
-            binary: Flag.String("binary").pipe(
-              Flag.withDescription("External binary name or path (for --action wrap)"),
-              Flag.optional,
-            ),
-            args: Flag.String("args").pipe(
-              Flag.withDescription("JSON array of CLI arguments passed with shell=false (for --action wrap)"),
-              Flag.optional,
-            ),
-            json: Flag.Boolean("json").pipe(Flag.withDescription("Output as JSON"), Flag.withDefault(false)),
-          },
-        }),
 
       ],
     }),

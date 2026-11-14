@@ -37,53 +37,6 @@ import {
   type MultiCdiDispatchReport,
 } from "./partners/cdi-hub.js"
 import { HttpPartnerTransport } from "./partners/transport.js"
-import {
-  EXTERNAL_DALFOX_INPUT_SCHEMA_ID,
-  EXTERNAL_FFUF_INPUT_SCHEMA_ID,
-  EXTERNAL_GHIDRA_INPUT_SCHEMA_ID,
-  EXTERNAL_JADX_INPUT_SCHEMA_ID,
-  EXTERNAL_KEYHUNTER_INPUT_SCHEMA_ID,
-  EXTERNAL_NMAP_INPUT_SCHEMA_ID,
-  EXTERNAL_NUCLEI_INPUT_SCHEMA_ID,
-  EXTERNAL_TRIVY_INPUT_SCHEMA_ID,
-  EXTERNAL_TSHARK_INPUT_SCHEMA_ID,
-  EXTERNAL_YARAX_INPUT_SCHEMA_ID,
-  ExternalControlPlane,
-  ExternalDalfoxCapability,
-  ExternalDalfoxExecutor,
-  ExternalDalfoxInputSchema,
-  ExternalFfufCapability,
-  ExternalFfufExecutor,
-  ExternalFfufInputSchema,
-  ExternalGhidraCapability,
-  ExternalGhidraExecutor,
-  ExternalGhidraInputSchema,
-  ExternalJadxCapability,
-  ExternalJadxExecutor,
-  ExternalJadxInputSchema,
-  ExternalKeyHunterCapability,
-  ExternalKeyHunterExecutor,
-  ExternalKeyHunterInputSchema,
-  ExternalNmapCapability,
-  ExternalNmapExecutor,
-  ExternalNmapInputSchema,
-  ExternalNucleiCapability,
-  ExternalNucleiExecutor,
-  ExternalNucleiInputSchema,
-  ExternalTrivyCapability,
-  ExternalTrivyExecutor,
-  ExternalTrivyInputSchema,
-  ExternalTsharkCapability,
-  ExternalTsharkExecutor,
-  ExternalTsharkInputSchema,
-  ExternalYaraXCapability,
-  ExternalYaraXExecutor,
-  ExternalYaraXInputSchema,
-  type ExternalToolRuntimeStatus,
-  type InboxSyncResult,
-  type IngestExternalActionInput,
-  type IngestExternalActionResult,
-} from "./external/control-plane.js"
 import { ApprovalManager } from "./policy/approval.js"
 import { PolicyEngine } from "./policy/authorize.js"
 import { ScopeController, parseBugBountyScopeImport } from "./policy/scope.js"
@@ -136,7 +89,6 @@ export class CyberLabWorkspace {
   readonly partnerAuth: PartnerAuthenticator
   readonly partnerBridge: PartnerBridge
   readonly cdiHub: CdiPartnerHub
-  readonly externalControl: ExternalControlPlane
   readonly vault: CyberLabObsidianVault
   private readonly scopePersistencePath: string | null
   private readonly ownedManager?: CyberLabWorkspaceManager
@@ -183,12 +135,6 @@ export class CyberLabWorkspace {
       evidenceStore: this.evidenceStore,
       dispatcher: this.dispatcher,
       maxEnvelopeBytes: cfg.maxPartnerEnvelopeBytes,
-    })
-    this.externalControl = new ExternalControlPlane({
-      projectId: this.projectId,
-      workspaceRoot: this.workspaceRoot,
-      scopes: this.scopes,
-      evidenceStore: this.evidenceStore,
     })
     this.vault = new CyberLabObsidianVault({
       projectId: this.projectId,
@@ -287,47 +233,6 @@ export class CyberLabWorkspace {
     this.schemas.registerEffectSchema(WORKSPACE_AUDIT_INPUT_SCHEMA_ID, WorkspaceAuditInputSchema)
     this.executors.registerExecutor(new WorkspaceAuditExecutor())
     await this.capabilities.register(WorkspaceAuditCapability)
-
-    // Register governed External Tool Control Plane bridges (Nmap, Nuclei, ffuf, tshark, dalfox, ghidra, jadx, yarax, trivy, keyhunter)
-    this.schemas.registerEffectSchema(EXTERNAL_NMAP_INPUT_SCHEMA_ID, ExternalNmapInputSchema)
-    this.executors.registerExecutor(new ExternalNmapExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalNmapCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_NUCLEI_INPUT_SCHEMA_ID, ExternalNucleiInputSchema)
-    this.executors.registerExecutor(new ExternalNucleiExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalNucleiCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_FFUF_INPUT_SCHEMA_ID, ExternalFfufInputSchema)
-    this.executors.registerExecutor(new ExternalFfufExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalFfufCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_TSHARK_INPUT_SCHEMA_ID, ExternalTsharkInputSchema)
-    this.executors.registerExecutor(new ExternalTsharkExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalTsharkCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_DALFOX_INPUT_SCHEMA_ID, ExternalDalfoxInputSchema)
-    this.executors.registerExecutor(new ExternalDalfoxExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalDalfoxCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_GHIDRA_INPUT_SCHEMA_ID, ExternalGhidraInputSchema)
-    this.executors.registerExecutor(new ExternalGhidraExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalGhidraCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_JADX_INPUT_SCHEMA_ID, ExternalJadxInputSchema)
-    this.executors.registerExecutor(new ExternalJadxExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalJadxCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_YARAX_INPUT_SCHEMA_ID, ExternalYaraXInputSchema)
-    this.executors.registerExecutor(new ExternalYaraXExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalYaraXCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_TRIVY_INPUT_SCHEMA_ID, ExternalTrivyInputSchema)
-    this.executors.registerExecutor(new ExternalTrivyExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalTrivyCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_KEYHUNTER_INPUT_SCHEMA_ID, ExternalKeyHunterInputSchema)
-    this.executors.registerExecutor(new ExternalKeyHunterExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalKeyHunterCapability)
 
     // Load CyberLab skills
     this.skills.loadFromDirectory(repoSkillsDir)
@@ -748,34 +653,6 @@ export class CyberLabWorkspace {
       evidence: this.evidenceStore.listEvidence(this.projectId),
       findings: this.evidenceStore.listFindings(this.projectId),
     })
-  }
-
-  async listExternalTools(): Promise<ExternalToolRuntimeStatus[]> {
-    await this.ensureInitialized()
-    return this.externalControl.listTools()
-  }
-
-  async ingestExternalAction(input: IngestExternalActionInput): Promise<IngestExternalActionResult> {
-    await this.ensureInitialized()
-    return this.externalControl.ingestExternalAction(input)
-  }
-
-  async syncExternalInbox(actor?: string): Promise<InboxSyncResult> {
-    await this.ensureInitialized()
-    return this.externalControl.syncInbox(actor)
-  }
-
-  async runSupervisedExternalCommand(params: {
-    toolId: string
-    binary: string
-    args: readonly string[]
-    target: string
-    signal?: AbortSignal
-    onStdoutChunk?: (chunk: string) => void
-    onStderrChunk?: (chunk: string) => void
-  }) {
-    await this.ensureInitialized()
-    return this.externalControl.runSupervisedExternalCommand(params)
   }
 
   async delegateToPartner(params: {
