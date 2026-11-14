@@ -87,12 +87,12 @@ const Handlers = Runtime.handlers(Commands, {
     run: () => import("./commands/handlers/cyberlab/run"),
     exec: () => import("./commands/handlers/cyberlab/exec"),
     scope: () => import("./commands/handlers/cyberlab/scope"),
+    studio: () => import("./commands/handlers/cyberlab/studio"),
     evidence: () => import("./commands/handlers/cyberlab/evidence"),
     findings: () => import("./commands/handlers/cyberlab/findings"),
     report: () => import("./commands/handlers/cyberlab/report"),
     partner: () => import("./commands/handlers/cyberlab/partner"),
     external: () => import("./commands/handlers/cyberlab/external"),
-    studio: () => import("./commands/handlers/cyberlab/studio"),
   },
 })
 

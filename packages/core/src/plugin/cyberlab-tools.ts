@@ -361,23 +361,6 @@ export const Plugin = {
                 }
               }
 
-              if (input.operation === "list_arsenal_slots") {
-                const arsenal = yield* Effect.tryPromise({
-                  try: () => ws.getArsenalOverview(false),
-                  catch: (e) => failTool("cyberlab_external_control", e),
-                })
-                const installedIds = arsenal.slots.filter((s) => s.installed).map((s) => s.slotId)
-                const lines = arsenal.slots.map(
-                  (s) =>
-                    `${s.slotId} (${s.name}) [${s.kind}]: ${s.installed ? `INSTALLED via ${s.activeRuntime} (${s.resolvedPath ?? s.embedUrl ?? ""})` : "NOT INSTALLED"}`,
-                )
-                const summary = `WSL2=${arsenal.environment.preferredWslDistro || "none"} | Installed Slots (${installedIds.length}/${arsenal.slots.length}):\n${lines.join("\n")}`
-                return {
-                  output: { availableTools: installedIds, ingestedEvidenceIds: [], summary },
-                  content: summary,
-                }
-              }
-
               const summary = tools
                 .map(
                   (t) =>

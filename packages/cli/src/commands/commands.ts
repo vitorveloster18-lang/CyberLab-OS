@@ -707,6 +707,25 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             json: Flag.Boolean("json").pipe(Flag.withDescription("Output full outcome as JSON"), Flag.withDefault(false)),
           },
         }),
+        Spec.make("studio", {
+          description:
+            "Launch the full-screen browser Security Studio workbench (Proxy, Repeater, Decoder, Web/Nuclei/ffuf, Nmap/TLS, PCAP, Forensics, Custody)",
+          params: {
+            port: Flag.Int("port").pipe(
+              Flag.withAlias("p"),
+              Flag.withDescription("HTTP port to bind (default: 4180)"),
+              Flag.optional,
+            ),
+            host: Flag.String("host").pipe(
+              Flag.withDescription("Hostname/interface to bind (default: 0.0.0.0)"),
+              Flag.optional,
+            ),
+            demoLab: Flag.Boolean("demo-lab").pipe(
+              Flag.withDescription("Spin up an isolated localhost HTTP/TLS/PCAP/ELF/APK demo lab target"),
+              Flag.withDefault(false),
+            ),
+          },
+        }),
         Spec.make("external", {
           description:
             "Unified Control Plane for external tools (nmap, nuclei, ffuf, tshark, opentrap, mvt, ghidra), manual ingest, and .cyberlab/inbox sync",
@@ -741,25 +760,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             json: Flag.Boolean("json").pipe(Flag.withDescription("Output as JSON"), Flag.withDefault(false)),
           },
         }),
-        Spec.make("studio", {
-          description:
-            "Launch the full-screen browser Security Studio workbench (Proxy, Repeater, Decoder, Web/Nuclei/ffuf, Nmap/TLS, PCAP, Forensics, Custody)",
-          params: {
-            port: Flag.Int("port").pipe(
-              Flag.withAlias("p"),
-              Flag.withDescription("HTTP port to bind (default: 4180)"),
-              Flag.optional,
-            ),
-            host: Flag.String("host").pipe(
-              Flag.withDescription("Hostname/interface to bind (default: 0.0.0.0)"),
-              Flag.optional,
-            ),
-            demoLab: Flag.Boolean("demo-lab").pipe(
-              Flag.withDescription("Spin up an isolated localhost HTTP/TLS/PCAP/ELF/APK demo lab target"),
-              Flag.withDefault(false),
-            ),
-          },
-        }),
+
       ],
     }),
   ],

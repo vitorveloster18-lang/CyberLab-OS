@@ -19,13 +19,10 @@ import { EvidenceStore, type IntegrityCheckResult } from "./evidence/store.js"
 import { CyberLabExecutionDispatcher } from "./execution/dispatcher.js"
 import { TrainingLabManager, type TrainingLabStatus } from "./labs/training-labs.js"
 import {
-  ArsenalSlotManager,
-  type ArsenalLiveRun,
-  type ArsenalOverview,
-  type SlotUserOverride,
+  listWorkspaceFiles as listWorkspaceFilesImpl,
+  readWorkspaceFilePreview as readWorkspaceFilePreviewImpl,
   type WorkspaceFileEntry,
-} from "./arsenal/slot-manager.js"
-import type { ArsenalRuntimePreference, ArsenalSlotKind } from "./arsenal/catalog.js"
+} from "./workspace-files.js"
 import {
   CyberLabObsidianVault,
   type VaultNoteDocument,
@@ -87,13 +84,6 @@ import {
   type IngestExternalActionInput,
   type IngestExternalActionResult,
 } from "./external/control-plane.js"
-import {
-  detectInstalledProxyBrowsers,
-  launchPreconfiguredProxyBrowser,
-  resolveReachableProxyHost,
-  buildProxyUnreachableGuidance,
-  type LaunchProxyBrowserResult,
-} from "./proxy/browser-launcher.js"
 import { ApprovalManager } from "./policy/approval.js"
 import { PolicyEngine } from "./policy/authorize.js"
 import { ScopeController, parseBugBountyScopeImport } from "./policy/scope.js"
@@ -147,7 +137,6 @@ export class CyberLabWorkspace {
   readonly partnerBridge: PartnerBridge
   readonly cdiHub: CdiPartnerHub
   readonly externalControl: ExternalControlPlane
-  readonly arsenal: ArsenalSlotManager
   readonly vault: CyberLabObsidianVault
   private readonly scopePersistencePath: string | null
   private readonly ownedManager?: CyberLabWorkspaceManager
@@ -200,12 +189,6 @@ export class CyberLabWorkspace {
       workspaceRoot: this.workspaceRoot,
       scopes: this.scopes,
       evidenceStore: this.evidenceStore,
-    })
-    this.arsenal = new ArsenalSlotManager({
-      projectId: this.projectId,
-      workspaceRoot: this.workspaceRoot,
-      scopes: this.scopes,
-      ...(options.inMemoryDb ? { globalConfigDir: path.join(this.workspaceRoot, ".cyberlab") } : {}),
     })
     this.vault = new CyberLabObsidianVault({
       projectId: this.projectId,
@@ -650,135 +633,12 @@ export class CyberLabWorkspace {
     }
   }
 
-  async getArsenalOverview(forceRefresh = false): Promise<ArsenalOverview> {
-    await this.ensureInitialized()
-    return this.arsenal.getOverview(forceRefresh)
-  }
-
-  async configureArsenal(params: {
-    toolsRootDir?: string
-    preferredWslDistro?: string
-    enforceScopeOnCliRuns?: boolean
-    slotId?: string
-    slotOverride?: SlotUserOverride
-  }): Promise<ArsenalOverview> {
-    await this.ensureInitialized()
-    return this.arsenal.configureSettings(params)
-  }
-
-  async upsertCustomArsenalSlot(params: {
-    slotId?: string
-    name: string
-    shortLabel?: string
-    kind: ArsenalSlotKind
-    tagline?: string
-    description?: string
-    executableOrUrl: string
-    preferredRuntime?: ArsenalRuntimePreference
-    companionProxyPort?: number
-    defaultArgsTemplate?: string
-  }): Promise<ArsenalOverview> {
-    await this.ensureInitialized()
-    return this.arsenal.upsertCustomSlot(params)
-  }
-
-  async removeCustomArsenalSlot(slotId: string): Promise<ArsenalOverview> {
-    await this.ensureInitialized()
-    return this.arsenal.removeCustomSlot(slotId)
-  }
-
-  /** Remove slots personalizados fantasmas (sem binário) e duplicatas. Nunca toca slots oficiais. */
-  async pruneBrokenCustomArsenalSlots(params: {
-    removeGhosts?: boolean
-    removeDuplicates?: boolean
-  }): Promise<ArsenalOverview> {
-    await this.ensureInitialized()
-    return this.arsenal.pruneBrokenCustomSlots(params).overview
-  }
-
-  async launchArsenalSlot(params: {
-    slotId: string
-    action: "run_cli" | "launch_desktop" | "start_web" | "stop_web" | "install_tool"
-    target?: string
-    rawArgs?: string
-    runtimeOverride?: "windows" | "wsl" | "linux_mac"
-  }): Promise<{
-    ok: boolean
-    message: string
-    embedUrl?: string
-    run?: ArsenalLiveRun
-    overview: ArsenalOverview
-  }> {
-    await this.ensureInitialized()
-    return this.arsenal.launchSlot(params)
-  }
-
-  async stopArsenalRun(runId: string): Promise<ArsenalLiveRun | null> {
-    await this.ensureInitialized()
-    return this.arsenal.stopRun(runId)
-  }
-
-  async launchCompanionProxyBrowser(params: {
-    proxyPort?: number
-    startUrl?: string
-    preferredBrowserId?: string
-  }): Promise<LaunchProxyBrowserResult> {
-    await this.ensureInitialized()
-    const proxyPort = params.proxyPort ?? 8080
-    const configuredBrowser = this.arsenal.getBrowserExecutablePath()
-    const configuredHost = this.arsenal.getBrowserProxyHost()
-
-    // Descobre ONDE o proxy está antes de abrir o navegador. Sem isso o operador
-    // recebia um ERR_PROXY_CONNECTION_FAILED do Chrome sem nenhuma pista de que o
-    // problema era a porta — e não o CyberLab.
-    const reach = await resolveReachableProxyHost({
-      port: proxyPort,
-      ...(configuredHost ? { preferredHost: configuredHost } : {}),
-      wslDistro: this.arsenal.getPreferredWslDistro(),
-    })
-
-    const result = launchPreconfiguredProxyBrowser({
-      proxyPort,
-      proxyHost: reach.host,
-      workspaceRoot: this.workspaceRoot,
-      ...(params.startUrl ? { startUrl: params.startUrl } : {}),
-      ...(params.preferredBrowserId ? { preferredBrowserId: params.preferredBrowserId } : {}),
-      ...(configuredBrowser ? { browserExecutablePath: configuredBrowser } : {}),
-    })
-
-    return {
-      ...result,
-      proxyReachable: reach.reachable,
-      triedHosts: reach.triedHosts,
-      message: reach.reachable
-        ? result.message
-        : `${result.message}\n\n${buildProxyUnreachableGuidance(proxyPort, reach.triedHosts)}`,
-    }
-  }
-
-  async listAvailableBrowsers() {
-    await this.ensureInitialized()
-    return detectInstalledProxyBrowsers()
-  }
-
-  /** Fixa (ou limpa, com `null`) o navegador que o botão 🌐 abre. */
-  async setBrowserExecutablePath(executablePath: string | null) {
-    await this.ensureInitialized()
-    return this.arsenal.setBrowserExecutablePath(executablePath)
-  }
-
-  /** Navegador atualmente fixado para o botão 🌐, ou `null` (detecção automática). */
-  async getBrowserExecutablePath() {
-    await this.ensureInitialized()
-    return this.arsenal.getBrowserExecutablePath()
-  }
-
   async listWorkspaceFiles(relativeDir = "."): Promise<{
     currentDir: string
     entries: WorkspaceFileEntry[]
   }> {
     await this.ensureInitialized()
-    return this.arsenal.listWorkspaceFiles(relativeDir)
+    return listWorkspaceFilesImpl(this.workspaceRoot, relativeDir)
   }
 
   async readWorkspaceFilePreview(relativeFilePath: string): Promise<{
@@ -788,7 +648,7 @@ export class CyberLabWorkspace {
     content: string
   }> {
     await this.ensureInitialized()
-    return this.arsenal.readWorkspaceFilePreview(relativeFilePath)
+    return readWorkspaceFilePreviewImpl(this.workspaceRoot, relativeFilePath)
   }
 
   async getVaultOverview(): Promise<VaultOverview> {
@@ -819,7 +679,7 @@ export class CyberLabWorkspace {
     return this.vault.setCustomVaultRoot(customDir)
   }
 
-  async persistArsenalOutputToEvidence(params: {
+  async persistOutputToEvidence(params: {
     title: string
     content: string
     slotId?: string
@@ -832,9 +692,9 @@ export class CyberLabWorkspace {
         kind: "stdout",
         title: params.title,
         source: {
-          toolId: params.slotId ?? "arsenal-slot",
-          executorId: "arsenal-slot-manager",
-          executionId: `ars-${crypto.randomUUID().slice(0, 8)}`,
+          toolId: params.slotId ?? "manual-ingest",
+          executorId: "cyberlab-workspace",
+          executionId: `ing-${crypto.randomUUID().slice(0, 8)}`,
         },
         content: {
           mediaType: "text/plain",
@@ -991,7 +851,6 @@ export class CyberLabWorkspace {
   close(): void {
     if (this.closed) return
     this.closed = true
-    this.arsenal.close()
     if (this.ownedManager) {
       this.ownedManager.closeAll()
     }

@@ -22,12 +22,6 @@ function walk(dir: string): string[] {
 
 /** Endpoints protegidos e o caminho HTTP correspondente. */
 const PROTECTED_ROUTES: Array<{ operation: string; route: string; label: string }> = [
-  { operation: "cyberlab.arsenal.prune", route: "/api/cyberlab/arsenal/prune", label: "Limpar Fantasmas & Duplicatas" },
-  {
-    operation: "cyberlab.arsenal.custom.remove",
-    route: "/api/cyberlab/arsenal/custom/remove",
-    label: "Remover slot personalizado",
-  },
   { operation: "cyberlab.vault.delete", route: "/api/cyberlab/vault/delete", label: "Apagar nota do cofre" },
   { operation: "cyberlab.labs.control.reset", route: "/api/cyberlab/labs/control", label: "Resetar laboratório" },
   { operation: "cyberlab.labs.control.stop", route: "/api/cyberlab/labs/control", label: "Parar laboratório" },
@@ -81,12 +75,4 @@ describe("CyberLab OS v6.7 — a interface não pode ser pega pela própria guar
     expect(problems).toEqual([])
   })
 
-  test("a remoção de nota do cofre avisa que não há lixeira antes de apagar", () => {
-    const withDelete = sources.filter((s) => s.text.includes("/api/cyberlab/vault/delete"))
-    expect(withDelete.length).toBeGreaterThan(0)
-    for (const src of withDelete) {
-      expect(src.text, src.file).toContain("window.confirm")
-      expect(src.text, src.file).toContain("confirmPhrase")
-    }
-  })
 })

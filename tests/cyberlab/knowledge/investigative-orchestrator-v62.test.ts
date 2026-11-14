@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { spawn } from "node:child_process"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import {
@@ -167,107 +166,6 @@ describe("CyberLab OS v6.2 — Investigative Security Orchestrator, Subagent Gua
       expect(mirrorContent).toContain("Resultados Negativos")
       expect(mirrorContent).toContain("H1 refutada")
       expect(readFileSync(targetAbs, "utf8")).toBe(originalHttpBytes)
-    } finally {
-      rmSync(tmpWorkspace, { recursive: true, force: true })
-    }
-  })
-
-  test("3. Unified MCP Hub (--slot __hub__) serves all 8 Knowledge & Investigation-Memory tools over JSON-RPC even with 0 scanner slots active", async () => {
-    const tmpWorkspace = mkdtempSync(path.join(tmpdir(), "cyberlab-hub-know-v62-"))
-    try {
-      mkdirSync(path.join(tmpWorkspace, ".cyberlab"), { recursive: true })
-      writeFileSync(
-        path.join(tmpWorkspace, ".cyberlab", "mcp-enabled-slots.json"),
-        JSON.stringify({ updatedAt: new Date().toISOString(), enabledSlots: [] }),
-        "utf8",
-      )
-
-      const scriptPath = path.resolve(import.meta.dir, "../../../cyberlab/mcp/arsenal-mcp-stdio.ts")
-      const rpcResponses = await new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
-        const proc = spawn(
-          process.execPath,
-          ["run", scriptPath, "--slot", "__hub__", "--workspace", tmpWorkspace],
-          { stdio: ["pipe", "pipe", "pipe"] },
-        )
-
-        const collected: Array<Record<string, unknown>> = []
-        let stdoutBuf = ""
-        const timer = setTimeout(() => {
-          proc.kill()
-          reject(new Error(`Timeout waiting for MCP Hub responses. Collected: ${collected.length}`))
-        }, 12000)
-
-        proc.stdout.on("data", (chunk: Buffer) => {
-          stdoutBuf += chunk.toString("utf8")
-          const lines = stdoutBuf.split(/\r?\n/)
-          stdoutBuf = lines.pop() ?? ""
-          for (const line of lines) {
-            if (!line.trim()) continue
-            const msg = JSON.parse(line) as Record<string, unknown>
-            if (msg.id !== undefined) {
-              collected.push(msg)
-              if (collected.length === 4) {
-                clearTimeout(timer)
-                proc.stdin.end()
-                resolve(collected)
-              }
-            }
-          }
-        })
-
-        proc.on("error", (err) => {
-          clearTimeout(timer)
-          reject(err)
-        })
-
-        const requests = [
-          { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05" } },
-          { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
-          {
-            jsonrpc: "2.0",
-            id: 3,
-            method: "tools/call",
-            params: { name: "search_knowledge", arguments: { query: "hypothesis" } },
-          },
-          {
-            jsonrpc: "2.0",
-            id: 4,
-            method: "tools/call",
-            params: { name: "read_document", arguments: { docPath: "tools/mcp-tool-catalog" } },
-          },
-        ]
-        for (const req of requests) {
-          proc.stdin.write(`${JSON.stringify(req)}\n`)
-        }
-      })
-
-      const listRes = rpcResponses.find((r) => r.id === 2) as {
-        result: { tools: Array<{ name: string }> }
-      }
-      const toolNames = listRes.result.tools.map((t) => t.name)
-      for (const expectedTool of [
-        "search_knowledge",
-        "read_document",
-        "get_related_documents",
-        "get_document_metadata",
-        "create_draft_note",
-        "propose_document_update",
-        "investigation_memory_read",
-        "investigation_memory_update",
-        "arsenal_mcp_status",
-      ]) {
-        expect(toolNames).toContain(expectedTool)
-      }
-
-      const searchRes = rpcResponses.find((r) => r.id === 3) as {
-        result: { content: Array<{ text: string }> }
-      }
-      expect(searchRes.result.content[0]?.text).toContain("methodologies/hypothesis-driven-testing")
-
-      const readRes = rpcResponses.find((r) => r.id === 4) as {
-        result: { content: Array<{ text: string }> }
-      }
-      expect(readRes.result.content[0]?.text).toContain("Catálogo Mestre de Ferramentas MCP")
     } finally {
       rmSync(tmpWorkspace, { recursive: true, force: true })
     }

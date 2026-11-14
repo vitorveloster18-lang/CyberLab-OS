@@ -340,148 +340,7 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
       ),
   )
   .add(
-    HttpApiEndpoint.get("cyberlab.arsenal.overview", "/api/cyberlab/arsenal", {
-      query: LocationQuery,
-      success: Location.response(CyberLab.ArsenalOverview),
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.overview",
-          summary: "Get CyberLab OS v5.0 Real External Arsenal overview",
-          description: "Returns Windows + WSL2 Kali slots, custom slots, live CLI/installer runs, and companion browsers.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.arsenal.probe", "/api/cyberlab/arsenal/probe", {
-      query: LocationQuery,
-      success: Location.response(CyberLab.ArsenalOverview),
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.probe",
-          summary: "Force fresh Windows PowerShell + WSL2 Kali binary & web detection",
-          description: "Refreshes WSL2 distros, external binaries, and CyberChef local web directory.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.put("cyberlab.arsenal.config", "/api/cyberlab/arsenal/config", {
-      query: LocationQuery,
-      payload: CyberLab.ArsenalConfigPatchInput,
-      success: Location.response(CyberLab.ArsenalOverview),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.config",
-          summary: "Update external tools root, WSL2 distro, or individual slot overrides",
-          description: "Persists global Arsenal configuration in ~/.cyberlab/arsenal-config.json.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.arsenal.custom.upsert", "/api/cyberlab/arsenal/custom", {
-      query: LocationQuery,
-      payload: CyberLab.ArsenalCustomSlotInput,
-      success: Location.response(CyberLab.ArsenalOverview),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.custom.upsert",
-          summary: "Create or update a Custom User Arsenal Slot",
-          description: "Adds any new CLI tool, local Web UI, or Desktop/WSL2 GUI tool into the CyberLab OS Arsenal.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.arsenal.prune", "/api/cyberlab/arsenal/prune", {
-      query: LocationQuery,
-      payload: CyberLab.ArsenalPruneCustomSlotsInput,
-      success: Location.response(CyberLab.ArsenalOverview),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.prune",
-          summary: "Remove broken (ghost) and duplicate Custom User Arsenal Slots",
-          description:
-            "Deletes custom slots whose configured executable no longer exists on Windows/PATH/WSL2 and custom slots that duplicate an already-installed slot. Official slots are never removed.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.arsenal.custom.remove", "/api/cyberlab/arsenal/custom/remove", {
-      query: LocationQuery,
-      payload: CyberLab.ArsenalCustomSlotRemoveInput,
-      success: Location.response(CyberLab.ArsenalOverview),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.custom.remove",
-          summary: "Remove a Custom User Arsenal Slot",
-          description: "Removes a custom slot from ~/.cyberlab/arsenal-config.json.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.arsenal.launch", "/api/cyberlab/arsenal/launch", {
-      query: LocationQuery,
-      payload: CyberLab.ArsenalLaunchInput,
-      success: Location.response(CyberLab.ArsenalLaunchResult),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.launch",
-          summary: "Launch or run a Real External Arsenal Slot (Web UI, CLI Runner, Desktop/WSL2 GUI, or Installer)",
-          description: "Starts local web embed, streams Windows/WSL2 CLI run, opens desktop GUI, or runs installer.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.arsenal.stop", "/api/cyberlab/arsenal/stop", {
-      query: LocationQuery,
-      payload: CyberLab.ArsenalStopRunInput,
-      success: Location.response(Schema.Struct({ stopped: Schema.Boolean })),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.stop",
-          summary: "Terminate a running Arsenal CLI or installer process",
-          description: "Sends SIGTERM/taskkill to a running external process.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.arsenal.browser", "/api/cyberlab/arsenal/browser", {
-      query: LocationQuery,
-      payload: CyberLab.ArsenalProxyBrowserInput,
-      success: Location.response(CyberLab.ProxyBrowserLaunchResult),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.browser",
-          summary: "Launch isolated Chrome/Edge/Brave routed through external proxy (Burp, OpenTRAP, mitmweb, Caido, ZAP)",
-          description: "Spawns an isolated browser profile pointed at 127.0.0.1:<proxyPort>.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.arsenal.persist", "/api/cyberlab/arsenal/persist", {
+    HttpApiEndpoint.post("cyberlab.evidence.persist", "/api/cyberlab/evidence/persist", {
       query: LocationQuery,
       payload: CyberLab.ArsenalPersistOutputInput,
       success: Location.response(CyberLab.ArsenalPersistOutputResult),
@@ -490,7 +349,7 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "cyberlab.arsenal.persist",
+          identifier: "cyberlab.evidence.persist",
           summary: "Persist tool output into SHA-256 EvidenceStore with automatic secret redaction",
           description: "Records tool output in cryptographic chain-of-custody.",
         }),
