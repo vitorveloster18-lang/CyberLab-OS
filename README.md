@@ -564,13 +564,14 @@ do workspace e a identidade visual do CyberLab. Para abrir:
 bun run cyberlab:tui
 ```
 
-Isso sobe o TUI (terminal UI) do OpenCode dentro da pasta do projeto. Dentro dele:
+Isso sobe o TUI (terminal UI) do OpenCode dentro da pasta do projeto, **já com o
+tema `cyberlab` e o agente `Orchestrator` ativos por padrão**. Dentro dele:
 
-- **Agente `Orchestrator`** — aperte `Tab` para alternar para o orquestrador de
-  segurança do CyberLab (investigação orientada por hipóteses, biblioteca
-  `CyberLab-Knowledge`, validação de evidências);
-- **Tema `cyberlab`** — digite `/theme` e escolha `cyberlab` para a paleta esmeralda
-  do CyberLab (ou defina no config do TUI: `"theme": { "name": "cyberlab" }`);
+- **Agente `Orchestrator`** — já é o agente padrão ao abrir (investigação orientada
+  por hipóteses, biblioteca `CyberLab-Knowledge`, validação de evidências). Aperte
+  `Tab` se quiser alternar para outro agente;
+- **Tema `cyberlab`** — paleta esmeralda ativa por padrão. Para trocar, digite
+  `/theme` ou defina no config do TUI: `"theme": { "name": "opencode" }`;
 - **Ferramentas do workspace** — o agente enxerga as capacidades registradas
   (`cyberlab_status`, `cyberlab_execute`, `cyberlab_evidence`, …) e o escopo
   declarado em `.cyberlab/scope.json`.
