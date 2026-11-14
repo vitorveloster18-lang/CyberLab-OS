@@ -609,6 +609,40 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             json: Flag.Boolean("json").pipe(Flag.withDescription("Output execution record as JSON"), Flag.withDefault(false)),
           },
         }),
+        Spec.make("exec", {
+          description:
+            "Run a native command under CyberLab scope guard, secret redaction and SHA-256 evidence capture",
+          params: {
+            command: Argument.String("command").pipe(
+              Argument.withDescription("Command and arguments, passed after -- (e.g. nmap -sV 10.0.0.5)"),
+              Argument.variadic({ min: 0 }),
+            ),
+            timeout: Flag.String("timeout").pipe(
+              Flag.withDescription("Timeout in seconds (default 1800)"),
+              Flag.optional,
+            ),
+            json: Flag.Boolean("json").pipe(Flag.withDescription("Output as JSON"), Flag.withDefault(false)),
+          },
+        }),
+        Spec.make("scope", {
+          description:
+            "Show, set or clear the authorized engagement scope used by `cyberlab exec`",
+          params: {
+            targets: Argument.String("targets").pipe(
+              Argument.withDescription("Allowed targets (e.g. 10.0.0.0/24 exemplo.com)"),
+              Argument.variadic({ min: 0 }),
+            ),
+            clear: Flag.Boolean("clear").pipe(
+              Flag.withDescription("Deactivate the scope (cyberlab exec then refuses network targets)"),
+              Flag.withDefault(false),
+            ),
+            external: Flag.Boolean("external").pipe(
+              Flag.withDescription("Allow public/routable external targets when setting a scope"),
+              Flag.withDefault(false),
+            ),
+            json: Flag.Boolean("json").pipe(Flag.withDescription("Output as JSON"), Flag.withDefault(false)),
+          },
+        }),
         Spec.make("evidence", {
           description: "List or verify SHA-256 evidence records in the CyberLab workspace",
           params: {
