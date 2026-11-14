@@ -53,3 +53,6 @@ tsconfig.tsbuildinfo
 # Python bytecode
 __pycache__/
 *.py[cod]
+
+# Ferramentas locais baixadas pelo sandbox (binarios grandes, nunca versionar)
+.tools/

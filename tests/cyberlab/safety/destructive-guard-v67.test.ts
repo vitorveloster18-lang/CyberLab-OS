@@ -9,7 +9,7 @@ import {
 describe("CyberLab OS v6.7 — Guarda de Ações Destrutivas (agente não destrói sem perguntar)", () => {
   test("toda operação destrutiva conhecida é bloqueada sem confirmação", () => {
     const ops = listProtectedOperations()
-    expect(ops.length).toBeGreaterThanOrEqual(6)
+    expect(ops.length).toBeGreaterThanOrEqual(4)
     for (const op of ops) {
       const verdict = evaluateDestructiveOperation(op, { slotId: "custom-x", labId: "lab-owasp-api-bola" })
       expect(verdict.allowed).toBe(false)
@@ -23,15 +23,15 @@ describe("CyberLab OS v6.7 — Guarda de Ações Destrutivas (agente não destr�
 
   test("operação fora do catálogo é liberada (a guarda falha fechada só no que conhece)", () => {
     expect(evaluateDestructiveOperation("cyberlab.status", {}).allowed).toBe(true)
-    expect(evaluateDestructiveOperation("cyberlab.arsenal.overview", {}).allowed).toBe(true)
+    expect(evaluateDestructiveOperation("cyberlab.status", {}).allowed).toBe(true)
   })
 
-  test("prune exige apenas confirm:true e libera quando ele vem", () => {
-    const blocked = evaluateDestructiveOperation("cyberlab.arsenal.prune", {})
+  test("sincronizar a biblioteca exige apenas confirm:true e libera quando ele vem", () => {
+    const blocked = evaluateDestructiveOperation("cyberlab.knowledge.sync", {})
     expect(blocked.allowed).toBe(false)
     if (!blocked.allowed) expect(blocked.approval.requirement).toBe("confirm:true")
 
-    expect(evaluateDestructiveOperation("cyberlab.arsenal.prune", { confirm: true }).allowed).toBe(true)
+    expect(evaluateDestructiveOperation("cyberlab.knowledge.sync", { confirm: true }).allowed).toBe(true)
   })
 
   test("apagar nota do cofre é irreversível: exige confirm E a frase exata", () => {
@@ -87,14 +87,14 @@ describe("CyberLab OS v6.7 — Guarda de Ações Destrutivas (agente não destr�
   })
 
   test("assertNotBlocked lança erro identificável e não executa nada", () => {
-    expect(() => assertNotBlocked("cyberlab.arsenal.prune", {})).toThrow(/AÇÃO DESTRUTIVA BLOQUEADA/)
+    expect(() => assertNotBlocked("cyberlab.knowledge.sync", {})).toThrow(/AÇÃO DESTRUTIVA BLOQUEADA/)
     try {
-      assertNotBlocked("cyberlab.arsenal.prune", {})
+      assertNotBlocked("cyberlab.knowledge.sync", {})
       expect.unreachable("deveria ter lançado")
     } catch (err) {
       expect((err as Error).name).toBe("DestructiveActionBlockedError")
     }
-    expect(() => assertNotBlocked("cyberlab.arsenal.prune", { confirm: true })).not.toThrow()
+    expect(() => assertNotBlocked("cyberlab.knowledge.sync", { confirm: true })).not.toThrow()
   })
 
   test("todo spec declara verbo, alvo e consequências (nada de entrada vazia)", () => {

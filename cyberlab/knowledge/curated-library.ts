@@ -274,19 +274,22 @@ comportamento real de aplicação**.
 6. **Não publique a solução como se fosse descoberta sua.** As soluções oficiais
    existem; citá-las depois de resolver é honesto, apresentá-las como achado, não.
 
-## 4. Como apontar o Burp (Windows + WSL2)
+## 4. Como apontar o Burp ( Kali nativo)
 
-\`\`\`powershell
-# 1) Suba a interface do CyberLab OS e abra o Burp pelo slot do arsenal
-bun run cyberlab
+\`\`\`bash
+# 1) Suba o laboratório de treino e descubra a porta do alvo
+bun run cyberlab lab start lab-owasp-api-bola --daemon
+bun run cyberlab lab status lab-owasp-api-bola
 
 # 2) No Burp: Proxy > Proxy settings > adicione um listener em 127.0.0.1:8080
-# 3) Configure o navegador para usar esse proxy e acesse SOMENTE o hostname do seu laboratório
+# 3) Configure o navegador (ou o curl) para usar esse proxy e acesse SOMENTE o
+#    hostname do seu laboratório, nunca um alvo fora do escopo declarado
 \`\`\`
 
-> No Windows, o Burp escuta no host e o WSL2 enxerga esse IP — use
-> \`cyberlab/external/wsl-runtime.ts\` (resolução em 4 camadas) para não hardcodar
-> endereço de gateway, que muda a cada reinício do WSL2.
+> O CyberLab OS não embute navegador nem proxy: o operador usa o Burp que já tem
+> instalado. O que o CyberLab garante é o escopo — declare o alvo com
+> \`cyberlab scope --set\` e rode as ferramentas por \`cyberlab exec\` para que cada
+> saída vire evidência com SHA-256.
 
 ## 5. Transferindo o método calibrado no laboratório local
 
@@ -376,7 +379,7 @@ related:
 | E4 | \`sub\` de outro usuário, assinatura válida do próprio | Dados do outro tenant? |
 | E5 | \`redirect_uri\` = \`https://alvo/callback/../../evil\` | Código entregue fora do domínio? |
 
-Use \`burp_suite_send_http1_request\` ([[burp]]) alterando **somente** a variável da linha.
+Use \`cyberlab exec -- curl ...\` (ou o Repeater do seu Burp) alterando **somente** a variável da linha.
 
 ## 4. Critério de evidência
 Aceitar token inválido em endpoint que não expõe dado nem privilégio é **informativo**, não vulnerabilidade. Classifique em [[evidence-validation]] e registre o impacto observado com par baseline vs. PoC.
@@ -477,7 +480,7 @@ related:
 |---|---|
 | \`nmap --script ssl-enum-ciphers\` (\`external.nmap-service-probe\`) | Enumera protocolos/suites aceitos |
 | \`mitmweb\` (slot) | Tenta interceptar tráfego do app sob teste |
-| \`burp_suite_send_http1_request\` | Verifica se o backend aceita HTTP simples vs. redireciona |
+| \`cyberlab exec -- curl -s -i\` \| Verifica se o backend aceita HTTP simples vs. redireciona |
 | \`openssl s_client\` (WSL2) | Inspeciona cadeia, SNI e validade |
 
 ## 4. Critério de severidade
@@ -632,7 +635,7 @@ related:
 4. Classifique com [[evidence-validation]] e registre o par baseline/PoC.
 
 ## 4. Ferramenta
-\`burp_suite_send_http1_request\` cobre GraphQL sobre HTTP. Para WS use o slot \`caido\`/\`mitmweb\` ou o script do laboratório; todo resultado deve virar evidência SHA-256 antes de virar finding.
+\`cyberlab exec -- curl\` cobre GraphQL sobre HTTP. Para WS use \`wscat\`/\`websocat\` (seu, no PATH) ou o script do laboratório; todo resultado deve virar evidência SHA-256 antes de virar finding.
 `,
   },
   {
@@ -720,7 +723,7 @@ Operações que **lêem um estado e então agem sobre ele** (verificar saldo →
 ## 3. Protocolo experimental obrigatório
 1. **Baseline sequencial**: execute a operação 1x e registre o resultado esperado.
 2. **Defina N**: mínimo 20 execuções concorrentes por tentativa.
-3. **Sincronize a chegada**: use a técnica *single-packet attack* (HTTP/2: último byte de todas as requisições no mesmo pacote TCP) ou \`burp_suite_call_tool\` com grupo paralelo; sem sincronização a janela raramente é atingida.
+3. **Sincronize a chegada**: use a técnica *single-packet attack* (HTTP/2: último byte de todas as requisições no mesmo pacote TCP) ou o grupo paralelo do seu Burp; sem sincronização a janela raramente é atingida.
 4. **Meça**: registre a taxa de sucesso (ex.: 3 de 20 com saldo negativo).
 5. **Repita** para descartar flakiness de rede.
 6. **Critério de parada**: 0 sucessos em 3 baterias de N=20 → declare **resultado negativo** e registre em \`investigation_memory_update\` (não é refutação absoluta, é evidência de baixa explorabilidade).
@@ -891,7 +894,7 @@ Use o MCP \`GhidraMCP\` (\`:8080\`) ou \`JADX-AI-MCP\` (\`:8650\`) quando:
 - Confirme dinamicamente: uma hipótese estática não validada é \`inconclusive\` em [[evidence-validation]].
 
 ## 5. Ferramentas MCP no CyberLab OS
-\`ghidra\` (\`:8080\` HTTP, ~30 tools de análise), \`jadx\` (\`:8650\`), \`rizin-cutter\`, \`capa\`, \`gef\`, \`frida-apktool\`, e REA (56 tools) via \`arsenal_run_tool\`/\`arsenal_mcp_status\`.
+\`ghidra\` (\`:8080\` HTTP, ~30 tools de análise), \`jadx\` (\`:8650\`), \`rizin-cutter\`, \`capa\`, \`gef\`, \`frida-apktool\`, e REA — todos do operador, chamados por \`cyberlab exec\`.
 `,
   },
   {
@@ -1051,7 +1054,7 @@ Ferramenta de IA é **geradora de hipóteses e de automação de experimento**, 
 ## 3. Protocolo obrigatório
 1. **Antes**: defina escopo (\`investigation_memory_update\`) e confirme \`.cyberlab/scope.json\`.
 2. **Durante**: peça à ferramenta **uma hipótese por vez**, com a variável a modificar e o critério de parada.
-3. **Depois**: **reproduza manualmente** com \`burp_suite_send_http1_request\` ou \`arsenal_run_tool\` e capture evidência própria.
+3. **Depois**: **reproduza manualmente** com \`cyberlab exec -- curl ...\` (ou pelo Repeater do seu Burp) e capture evidência própria.
 4. **Nunca** reporte texto gerado por IA sem reprodução: LLM alucina CVE, path e parâmetro com frequência.
 
 ## 4. Falhas características a checar
@@ -1218,7 +1221,7 @@ recomendações estão relacionadas à causa raiz.
 ## 7. Execução no CyberLab
 
 - **Fases 1–6**: \`investigation_memory_update\` mantém o grafo da cadeia sem poluir a biblioteca curada.
-- **Fase 6**: \`arsenal_slot_health\` antes de qualquer execução — slot indisponível invalida o experimento, não apenas o atrasa.
+- **Fase 6**: \`cyberlab exec -- which <binário>\` antes de qualquer execução — binário ausente invalida o experimento, não apenas o atrasa.
 - **Evidência**: \`cyberlab_evidence_list\` + hash \`SHA-256\`. O grafo da cadeia é evidência de **modelo**; não substitui a evidência de **impacto**.
 - **Nunca** validar um elo de terceiro (fornecedor real, extensão pública, repositório alheio) contra o sistema real: use réplica local.
 `,
@@ -1674,7 +1677,7 @@ Quase nenhuma aplicação moderna processa HTTP diretamente na origem. O caminho
 2. Quais cabeçalhos de encaminhamento (\`X-Forwarded-For\`, \`X-Real-IP\`, \`X-Original-URL\`) são sobrescritos vs. concatenados na borda?
 
 ## 4. Validação Controlada
-Utilize \`burp_suite_send_http1_request\` ou \`burp_suite_call_tool\` (\`send_http2_request\`) em [[burp]] alterando **uma única variável sintática por vez** e comparando status, headers de cache e tempo de resposta.
+Utilize \`cyberlab exec -- curl ...\` (ou o Repeater do seu Burp) alterando **uma única variável sintática por vez** e comparando status, headers de cache e tempo de resposta.
 `,
   },
   {
@@ -1976,8 +1979,8 @@ related:
 ## 1. Protocolo Experimental Seguro (Duas Contas Próprias)
 1. Crie **Conta A (Atacante de Teste)** e **Conta B (Vítima de Teste)** dentro do ambiente autorizado.
 2. Na Conta B, crie um recurso privado de teste contendo um marcador único benigno (\`cyberlab-canary-B\`).
-3. Capture a requisição legítima no Proxy de [[burp]] (\`burp_suite_get_proxy_history\`).
-4. Envie para o Repeater (\`burp_suite_create_repeater_tab\`) substituindo **apenas** a credencial da Conta B pela da Conta A.
+3. Capture a requisição legítima no Proxy do seu Burp.
+4. Envie para o Repeater substituindo **apenas** a credencial da Conta B pela da Conta A (ou refaça com \`cyberlab exec -- curl -H "Authorization: Bearer ..."\`).
 5. Compare resposta, efeitos colaterais em banco e escopo de propriedades (BOPLA/Mass Assignment como \`role\`, \`org_id\`, \`verified\`).
 `,
   },
@@ -2204,10 +2207,10 @@ related:
 
 ## Quando Selecionar o Burp Suite MCP
 Selecione o Burp quando a pergunta investigativa exigir **inspeção de tráfego real autenticado do operador** ou **experimentos HTTP controlados de alta precisão** (1 variável por vez):
-- \`burp_suite_status\`: confirma conexão SSE em \`:9876\` e lista capacidades ativas.
-- \`burp_suite_get_proxy_history\`: consulta tráfego real navegado pelo operador (prefira \`regex\` específico e \`count\` enxuto para economizar contexto).
-- \`burp_suite_send_http1_request\` / \`burp_suite_call_tool\` (\`send_http2_request\`): executa experimento diferencial direto dentro do escopo autorizado.
-- \`burp_suite_create_repeater_tab\`: entrega uma requisição preparada na tela central para revisão visual conjunta com o operador humano.
+- **Seu Burp, por você**: abra o listener em \`127.0.0.1:8080\` e aponte o navegador (ou o \`curl\` via \`-x\`) para ele.
+- **Histórico**: leia o tráfego no próprio Burp; traga para o contexto só o trecho relevante (não o histórico inteiro).
+- \`cyberlab exec -- curl -s -i ...\`: executa o experimento diferencial dentro do escopo autorizado e já arquiva a evidência.
+- **Revisão conjunta**: monte a requisição no Repeater do seu Burp e reproduza por \`cyberlab exec\` para que ela também vire evidência.
 `,
   },
   {
@@ -2236,7 +2239,7 @@ related:
 
 ## Uso Cirúrgico vs. Ruído Indiscriminado
 - **Incorreto**: disparar milhares de templates genéricos contra um alvo sem conhecer a stack.
-- **Correto (Orientado por Hipótese)**: após identificar na Fase B/C a tecnologia exata (ex.: Actuator, GraphQL, Nginx, tecnologia específica), invoque \`arsenal_run_tool\` com \`slotId: "nuclei"\` filtrando tags/templates pertinentes (\`-tags\`, \`-t\`, \`-rl 15\`, \`-silent\`) e valide todo match positivo conforme [[evidence-validation]].
+- **Correto (Orientado por Hipótese)**: após identificar na Fase B/C a tecnologia exata (ex.: Actuator, GraphQL, Nginx, tecnologia específica), rode \`cyberlab exec -- nuclei -u <alvo> -tags <tag> -t <template> -rl 15 -silent\` e valide todo match positivo conforme [[evidence-validation]].
 `,
   },
   {
@@ -2266,7 +2269,7 @@ related:
 ## Quando Selecionar em Auditoria White-Box / Grey-Box
 - Mapear rapidamente rotas, middlewares de autenticação e *sinks* perigosos na Fase B (Modelagem).
 - Caçar **variantes estruturais** em todo o repositório após encontrar 1 bug real ou analisar um patch em [[patch-diff-methodology]].
-- Execute via \`arsenal_run_tool\` (\`slotId: "semgrep"\`) sobre diretórios locais do workspace.
+- Execute via \`cyberlab exec -- semgrep --config auto <dir>\` sobre diretórios locais do workspace.
 `,
   },
   {
@@ -2280,7 +2283,7 @@ version: "1.0.0"
 last_reviewed: "2026-11-03"
 status: validated
 sources:
-  - "CyberLab OS Unified MCP Hub v6.2 (cyberlab/mcp/arsenal-mcp-stdio.ts)"
+  - "CyberLab OS Knowledge MCP Server (cyberlab/mcp/knowledge-mcp-stdio.ts)"
 limitations:
   - "Ferramentas de execução externa obedecem estritamente a .cyberlab/scope.json e só executam slots com botão 🟢 MCP ativo e binário instalado."
 related:
@@ -2292,7 +2295,7 @@ related:
 
 # Catálogo Mestre de Ferramentas MCP do CyberLab OS
 
-#mcp #catalog #arsenal #knowledge #tools
+#mcp #catalog #knowledge #tools #exec
 
 ## 1. Biblioteca de Conhecimento (\`CyberLab-Knowledge/\`)
 - \`search_knowledge\`: pesquisa conceitos, vulnerabilidades, CVEs, metodologias e guias de ferramentas.
@@ -2306,15 +2309,39 @@ related:
 - \`investigation_memory_read\`: lê o estado estruturado da investigação atual (missão, escopo, modelo, hipóteses, testes e resultados negativos).
 - \`investigation_memory_update\`: atualiza modelo, hipóteses, experimentos, resultados negativos e próximos passos sem poluir a biblioteca curada.
 
-## 3. Hub Unificado do Arsenal Externo (48+ Slots Oficiais + Customizados)
-- \`arsenal_mcp_status\`: inventário instantâneo em tempo real de todas as ferramentas com \`🟢 MCP\` ativo (GUI ao vivo, Windows, WSL2 Kali e Web Embed).
-- \`arsenal_tool_help\`: verifica versão, caminho resolvido e flags de qualquer slot antes de montar um experimento.
-- \`arsenal_run_tool\`: executa ferramenta CLI autorizada com zero interpolação de shell, Trava de Escopo Bug Bounty e redação \`SHA-256\`.
+## 3. Execução de Ferramentas do Operador (\`cyberlab exec\`)
 
-## 4. Pontes GUI em Tempo Real
-- **Burp Suite (\`:9876\` SSE)**: \`burp_suite_status\`, \`burp_suite_get_proxy_history\`, \`burp_suite_send_http1_request\`, \`burp_suite_create_repeater_tab\`, \`burp_suite_send_to_intruder\`, \`burp_suite_set_intercept\`, \`burp_suite_call_tool\`.
-- **Ghidra (\`:8080\` HTTP — \`LaurieWired/GhidraMCP\`)**: \`ghidra_mcp_status\`, \`ghidra_mcp_decompile\`, \`ghidra_mcp_call\`.
-- **JADX-GUI (\`:8650\` HTTP — \`zinja-coder/jadx-ai-mcp\`)**: \`jadx_mcp_status\`, \`jadx_mcp_get_class_source\`, \`jadx_mcp_call\`.
+**O CyberLab OS não empacota ferramenta nenhuma.** Quem executa \`nmap\`, \`nuclei\`,
+\`ffuf\`, \`tshark\`, \`sqlmap\`, \`ghidra\`, \`jadx\` ou qualquer outro binário é o operador,
+no terminal do Kali dele, por \`cyberlab exec\`. O que o CyberLab garante:
+
+- **Trava de Escopo Bug Bounty**: o comando é recusado se o alvo não estiver no escopo
+  declarado (\`cyberlab scope --set ...\`);
+- **Zero interpolação de shell**: o binário e os argumentos vão para o \`spawn\` sem
+  passar por um interpretador;
+- **Redação \`SHA-256\`**: segredos na saída são mascarados antes de chegarem ao contexto;
+- **Custódia**: cada execução vira um registro de evidência com id próprio, citável no
+  relatório da Fase I.
+
+\`\`\`bash
+bun run cyberlab scope --set 10.0.0.0/24 exemplo.com
+bun run cyberlab exec -- nmap -sV -p 80,443 10.0.0.10
+bun run cyberlab exec -- nuclei -u https://exemplo.com -tags tech -rl 15 -silent
+\`\`\`
+
+**Nunca presuma que uma ferramenta existe.** Antes de montar um experimento, confirme
+com \`cyberlab exec -- which <binário>\` (ou \`command -v\`). Pacote instalado não
+implica binário no \`PATH\` — o Ghidra do Kali, por exemplo, só publica o launcher
+gráfico; o \`analyzeHeadless\` fica em \`/usr/share/ghidra/support/\` e precisa ser
+chamado pelo caminho absoluto.
+
+## 4. Ferramentas gráficas do operador
+
+Burp Suite, Ghidra, JADX-GUI, Wireshark e semelhantes são **do operador**, abertos por
+ele. O CyberLab não sobe ponte para elas: o que ele oferece é o alvo (\`cyberlab lab
+start\`) e a guarda de escopo sobre o tráfego que você direciona a elas. Se precisar de
+uma requisição diferencial, use \`cyberlab exec -- curl ...\` — a saída já entra como
+evidência, sem precisar de ponte alguma.
 `,
   },
 ]

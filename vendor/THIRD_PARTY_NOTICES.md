@@ -43,12 +43,11 @@ SOFTWARE.
 
 Os seguintes módulos nativos em `cyberlab/` e `integrations/` são implementações originais `MIT` do **CyberLab OS**, registradas em `vendor/manifests/`:
 
-- **`cyberlab-arsenal-slots`** (`cyberlab/arsenal/catalog.ts`, `cyberlab/arsenal/slot-manager.ts`, `cyberlab/proxy/browser-launcher.ts`) — Gerenciador de Slots Externos Reais (Windows PowerShell + WSL2 Kali Linux + Web UIs locais + Custom Slots + navegador isolado pré-configurado para proxies externos) (`MIT`).
 - **`cyberlab-workspace-audit`** (`integrations/code-analysis/workspace-audit-executor.ts`) — Auditoria rápida local somente leitura de configuração e higiene de workspace (`MIT`).
-- **`cyberlab-external-control-plane`** (`cyberlab/external/control-plane.ts`) — Plano de controle `MIT` (`shell=false` + kill-switch + custódia `SHA-256` + sincronização `.cyberlab/inbox/`) (`MIT`).
+- **`cyberlab-knowledge-mcp`** (`cyberlab/mcp/knowledge-mcp-stdio.ts`) — Servidor MCP `stdio` somente de conhecimento: 8 ferramentas de leitura/escrita sobre a Biblioteca Curada `CyberLab-Knowledge/` (`MIT`).
 - **`cyberlab-cdi-hub`** (`cyberlab/partners/cdi-hub.ts` e `integrations/partners/chat_py_bridge.py`) — Hub Multi-CDI e Gateway Bidirecional `HMAC-SHA256` (`Kairós:8788`, `Naia:8789`, `Salem:8790`, `Nova:8791`) com autonomia horizontal plena e 5 Laboratórios de Treinamento interativos (`MIT`).
 
-Conectores externos opcionais sob licenças permissivas registrados em `vendor/manifests/` (invocados via `shell=false` sem incorporação binária no repositório): `dalfox-external-connector` (`MIT`), `ghidra-headless-connector` (`Apache-2.0`), `jadx-external-connector` (`Apache-2.0`), `yarax-external-connector` (`BSD-3-Clause`), `trivy-external-connector` (`Apache-2.0`) e `keyhunter-external-connector` (`MIT`, `fadidevv/keyhunter`).
+Nenhum binário de terceiros é embutido: o operador usa as ferramentas já instaladas no seu próprio Kali, acionadas por `cyberlab exec`.
 
 ---
 

@@ -10,9 +10,10 @@
  *   bun run cyberlab knowledge --json          # plano em JSON
  */
 
-import { existsSync } from "node:fs"
+import { existsSync, mkdirSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { ensureKnowledgeLibrarySeeded } from "../cyberlab/knowledge/curated-library.js"
 import {
   applyKnowledgeLibrarySync,
   planKnowledgeLibrarySync,
@@ -71,12 +72,12 @@ if (args.includes("--help") || args.includes("-h")) {
   process.exit(0)
 }
 
-if (!existsSync(vaultRoot)) {
-  console.log(`${YELLOW}Cofre não encontrado:${RESET} ${vaultRoot}`)
-  console.log(
-    `${DIM}Ele é criado na primeira vez que a interface sobe (${BOLD}bun run cyberlab up${RESET}${DIM}).${RESET}`,
-  )
-  process.exit(0)
+if (!existsSync(path.join(vaultRoot, "CyberLab-Knowledge"))) {
+  // Sem a interface web, o cofre é semeado aqui mesmo: idempotente, nunca sobrescreve
+  // uma nota que o operador já tenha editado.
+  mkdirSync(vaultRoot, { recursive: true })
+  ensureKnowledgeLibrarySeeded(vaultRoot)
+  console.log(`${GREEN}Cofre semeado:${RESET} ${vaultRoot}`)
 }
 
 const plan = planKnowledgeLibrarySync(vaultRoot)

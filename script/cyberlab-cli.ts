@@ -12,41 +12,23 @@ const CLI_SUBCOMMANDS = new Set([
   "status",
   "capabilities",
   "run",
+  "exec",
+  "scope",
   "evidence",
   "findings",
   "report",
   "partner",
-  "external",
 ])
 
-const APP_SUBCOMMANDS = new Set(["start", "app", "up", "serve", "studio"])
-
-/** Subcomandos de laboratório (v6.4) — tratados pelo script/start-cyberlab.ts / script/cyberlab-lab.ts. */
+/** Subcomandos de laboratório (v6.4) — tratados pelo script/cyberlab-lab.ts. */
 const LAB_SUBCOMMANDS = new Set(["lab", "labs", "laboratorio"])
 
-const firstArg = args[0] ?? ""
-const isHelp = firstArg === "--help" || firstArg === "-h" || firstArg === "help"
-const shouldLaunchUnifiedApp =
-  !isHelp &&
-  (args.length === 0 ||
-    APP_SUBCOMMANDS.has(firstArg) ||
-    (!CLI_SUBCOMMANDS.has(firstArg) && firstArg.startsWith("-")))
-
 const KNOWLEDGE_SUBCOMMANDS = new Set(["knowledge", "conhecimento", "vault", "cofre"])
-const UP_SUBCOMMANDS = new Set(["up", "subir"])
+
+const firstArg = args[0] ?? ""
 
 if (KNOWLEDGE_SUBCOMMANDS.has(firstArg)) {
   const res = spawnSync(process.execPath, ["run", "script/cyberlab-knowledge.ts", ...args.slice(1)], {
-    cwd: repoRoot,
-    stdio: "inherit",
-    env: {
-      ...process.env,
-      CYBERLAB_WORKSPACE_ROOT: process.env.CYBERLAB_WORKSPACE_ROOT || process.cwd(),
-    },
-  })
-  process.exit(res.status ?? 1)
-} else if (UP_SUBCOMMANDS.has(firstArg)) {
-  const res = spawnSync(process.execPath, ["run", "script/cyberlab-up.ts", ...args.slice(1)], {
     cwd: repoRoot,
     stdio: "inherit",
     env: {
@@ -66,12 +48,9 @@ if (KNOWLEDGE_SUBCOMMANDS.has(firstArg)) {
     },
   })
   process.exit(res.status ?? 1)
-} else if (shouldLaunchUnifiedApp) {
-  if (APP_SUBCOMMANDS.has(firstArg)) {
-    process.argv = [process.argv[0]!, process.argv[1]!, ...args.slice(1)]
-  }
-  await import("./start-cyberlab.js")
 } else {
+  // Sem argumentos o CyberLab mostra a propria ajuda no terminal: nada de subir
+  // servidor web a escondidas.
   const res = spawnSync(process.execPath, ["run", "src/index.ts", "cyberlab", ...args], {
     cwd: cliDir,
     stdio: "inherit",

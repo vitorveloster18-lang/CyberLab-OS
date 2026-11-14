@@ -17,11 +17,11 @@ Exige obrigatoriamente:
 5. Registro integral de copyright e texto da licença em `vendor/THIRD_PARTY_NOTICES.md` (`noticesRecorded: true`);
 6. Patches locais, quando existirem, isolados e documentados em `vendor/patches/`.
 
-### B. Execução de Processo Local Separado (`approved_internal_process`)
-Para uso pessoal/laboratorial em Windows + WSL2 + Docker, ferramentas com licenças copyleft fortes ou cláusulas específicas (como GPL, AGPL, NPSL ou licenças com condições adicionais) **não devem ter seu código-fonte copiado nem linkado estaticamente ao CyberLab OS**:
-- O CyberLab OS fornece apenas um **adaptador próprio original** em `integrations/` e uma **skill metodológica original** em `skills/`;
-- O usuário instala o binário oficial da ferramenta separadamente no ambiente WSL2 ou em container Docker isolado;
-- Nenhum binário de terceiros não aprovado é embutido em pacotes de distribuição do CyberLab OS.
+### B. Execução de Processo Local Separado
+Para uso pessoal/laboratorial, ferramentas com licenças copyleft fortes ou cláusulas específicas (como GPL, AGPL, NPSL ou licenças com condições adicionais) **não devem ter seu código-fonte copiado nem linkado estaticamente ao CyberLab OS**:
+- O CyberLab OS fornece apenas **governança**: trava de escopo, redação de segredos e custódia `SHA-256` aplicadas a um binário que o operador já possui;
+- O usuário instala o binário oficial da ferramenta separadamente, com o gerenciador de pacotes do Kali dele;
+- Nenhum binário de terceiros é baixado, embutido ou versionado em pacotes de distribuição do CyberLab OS.
 
 ### C. Integração Somente por Plugin / Protocolo (`plugin_only`)
 Aplicável a softwares proprietários (ex.: Burp Suite Community, Hopper) ou serviços AGPL/externos (ex.: Shannon, Signal):

@@ -18,30 +18,22 @@ Nenhum componente externo passa para incorporação (`vendor/`) ou execução in
 
 ---
 
-## 2. Triagem Inicial de Engenharia
+## 2. Triagem de Engenharia
 
-| Componente | Categoria | Estado Inicial | Modo Pretendido | Observações Críticas |
+**O CyberLab OS não distribui, não instala e não embute ferramenta de terceiros.**
+Todo binário é do operador, resolvido pelo `PATH` do Kali dele. A tabela abaixo existe
+para registrar *o que o CyberLab espera encontrar* e *por que não pode empacotar*.
+
+| Componente | Categoria | Estado | Modo | Observações Críticas |
 | --- | --- | --- | --- | --- |
 | **OpenCode V2 (`2.1.4`)** | Plataforma base | `approved_embed` | Base do monorepo | Licença MIT confirmada no commit `dae4077a96243257ea0a2086068504b791629f10`; avisos preservados. |
-| **CyberLab Native Security Suite (10 Executores)** | Web / Rede / `.pcap` / Reversa / Mobile | `approved_embed` | Embutido (`integrations/*`) | Suíte própria `MIT` em TypeScript/Bun cobrindo Workspace Audit, HTTP Security Headers, HTTP Repeater & Comparer, Decoder/JWT/Sequencer, Surface Discovery, TCP Probe, TLS/X.509 Inspector, PCAP Analyzer, Binary ELF/PE/Mach-O Triage e Mobile APK/Backup Forensics. |
-| **OpenTRAP (`opentrap/opentrap`)** | Avaliação web (Proxy/Repeater GUI) | `plugin_only` | `plugin_only` (`.cyberlab/bin`) | Repositório auditado: Java 17 + OWASP ZAP sob **AGPL-3.0** (incompatível com incorporação de código em projeto MIT). O CyberLab OS já traz equivalentes nativos `MIT` (`http-repeater`, `decoder-sequencer`, `surface-discovery`) e oferece download opcional do AppImage local via `script/bootstrap-local-tools.sh --with-agpl`. |
-| **Nmap** | Avaliação de rede | `license_review` | `internal_process` | A *Nmap Public Source License (NPSL)* restringe incorporação e redistribuição em produtos; usar apenas binário instalado localmente pelo usuário após revisão. |
-| **Burp Suite Community** | Avaliação web | `plugin_only` | `plugin_only` | Software proprietário PortSwigger; proibido incorporar código ou redistribuir binários. |
-| **OWASP ZAP** | Avaliação web | `license_review` | `internal_process` | Verificar Apache-2.0 da versão alvo e licenças de add-ons antes de qualquer empacotamento. |
-| **Wireshark / tshark** | Análise de tráfego | `license_review` | `internal_process` | GPL-2.0+; manter como processo CLI separado (`tshark`) sem linkar código GPL ao core MIT. |
-| **Nuclei** | Varredura baseada em templates | `license_review` | `internal_process` | Avaliar separadamente o binário (MIT) e os repositórios de templates/dependências. |
-| **ffuf** | Fuzzing web | `license_review` | `internal_process` | Conferir licença MIT da tag fixada e dependências Go transitivas. |
-| **Metasploit Framework** | Validação de exploração | `approved_internal_process` | Slot Oficial `metasploit` (WSL2 / Win) | Roda `msfconsole` oficial externamente sob governança de escopo e custódia SHA-256. |
-| **Strix (`usestrix/strix`)** | Agente / automação ofensiva | `approved_internal_process` | Slot Oficial `strix` | Apache-2.0; executa `strix-agent` externamente com validação dinâmica de PoCs. |
-| **Shannon (`KeygraphHQ/shannon`)** | Automação Web/API | `plugin_only` | Slot Oficial `shannon` | AGPL-3.0; zero código embutido — executa `@keygraph/shannon` como ferramenta externa isolada. |
-| **PentAGI (`vxcontrol/pentagi`)** | Agente autônomo | `approved_internal_process` | Slot Oficial `pentagi` (Web Embed) | MIT; stack Docker externo incorporável no palco central (`:8443`). |
-| **PentestGPT & CAI** | Assistente / Framework cyber | `approved_internal_process` | Slot Oficial `pentestgpt-cai` | Executa em `venv` isolado no Kali WSL2 (`/opt/cyberlab-ai-pentest`). |
-| **HexStrike AI (`0x4m4/hexstrike-ai`)** | MCP de 150+ ferramentas | `approved_internal_process` | Slot Oficial `hexstrike-ai` | MIT; ponte MCP/API local em `/opt/hexstrike-ai` conectada às ferramentas do Kali. |
-| **MVT (`mvt-project/mvt`)** | Forense mobile (Android/iOS) | `approved_internal_process` | Slot Oficial `mvt` (WSL2) | Amnesty International Tech (`mvt-android` / `mvt-ios`) em ambiente isolado `/opt/mvt`. |
-| **Mullvad / Signal / GrapheneOS** | OpSec, Privacidade & Mobile | `plugin_only` | Slot Oficial `mullvad-opsec` | Consulta local de túnel Mullvad VPN e auditoria de hardening/Verified Boot via `adb`. |
-| **Tor + Torsocks + OnionShare** | Transporte anônimo & entrega | `approved_internal_process` | Slot Oficial `tor-onionshare` | BSD-3-Clause / GPL-3.0 externos; SOCKS5 `:9050` e compartilhamento seguro OnionShare. |
-| **VeraCrypt** | Cofres criptografados | `approved_internal_process` | Slot Oficial `veracrypt` (GUI) | Abre nativamente no Windows ou dentro do Canvas X11/noVNC para montar cofres de evidências. |
-| **REA (`morluto/rea`)** | Engenharia reversa assistida | `approved_internal_process` | Slot Oficial `rea` (Win / WSL2 + MCP) | MIT (`rea-agents`); conecta Ghidra, JADX e reconstrução JS/Electron/ASAR direto ao MCP nativo do OpenCode V2 (`rea setup --client opencode`). |
+| **CyberLab Core (`cyberlab/`)** | Domínio próprio | `approved_embed` | Embutido | Escopo, execução, evidência `SHA-256`, redação, CDIs e biblioteca curada — todo `MIT`, código próprio. |
+| **Nmap** | Avaliação de rede | `plugin_only` | `PATH` do operador | *NPSL* restringe incorporação e redistribuição. O CyberLab só o invoca por `cyberlab exec`. |
+| **Nuclei / ffuf / sqlmap / dirsearch** | Varredura web | `plugin_only` | `PATH` do operador | Binários do operador; o CyberLab nunca baixa templates nem agenda instalação. |
+| **Wireshark / tshark** | Análise de tráfego | `plugin_only` | `PATH` do operador | GPL-2.0+; mantido como processo externo, sem qualquer link com o core MIT. |
+| **Ghidra / JADX / Rizin** | Engenharia reversa | `plugin_only` | `PATH` do operador | Apache-2.0; usados pelo operador, inclusive por caminho absoluto quando o pacote não publica o binário no `PATH`. |
+| **Burp Suite Community** | Avaliação web | `plugin_only` | `PATH` do operador | Proprietário PortSwigger; o operador aponta o proxy dele para o alvo do laboratório. |
+| **Metasploit / Hashcat / John** | Validação & quebra | `plugin_only` | `PATH` do operador | Executados sob trava de escopo e custódia `SHA-256`. |
 
 ---
 

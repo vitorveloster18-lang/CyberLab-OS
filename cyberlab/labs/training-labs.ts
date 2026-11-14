@@ -800,7 +800,7 @@ detection:
           const flagRow = (label: string, on: boolean) =>
             `<tr><td><code>${label}</code></td><td class="${on ? "on" : "off"}">${on ? "LIGADO (seguro)" : "DESLIGADO (vulnerável)"}</td></tr>`
           const publicHost = String(req.headers.host || `127.0.0.1`)
-          const cmd = `curl.exe -s -i -H "Authorization: Bearer token-user-a-1001" http://${publicHost}/api/v1/accounts/1002`
+          const cmd = `curl -s -i -H "Authorization: Bearer token-user-a-1001" http://${publicHost}/api/v1/accounts/1002`
           const html = [
             "<!doctype html>",
             '<html lang="pt-BR"><head><meta charset="utf-8">',
@@ -830,8 +830,8 @@ detection:
             `<p class='sub'><span class='pill'>${labId}</span><span class='pill'>alvo de treino</span>`,
             "<span class='pill'>API REST — sem interface própria</span></p>",
             '<div class="warn"><strong>Esta porta é o ALVO da investigação, não a aplicação.</strong><br>',
-            "A interface do CyberLab OS (3 colunas: Slots / Ferramenta / Agente) fica em ",
-            '<a href="http://127.0.0.1:4096">http://127.0.0.1:4096</a> e é aberta com <code>bun run cyberlab</code>.<br>',
+            "O CyberLab OS roda no terminal: <code>bun run cyberlab lab status &lt;labId&gt;</code> mostra os próximos ",
+            "passos e <code>bun run cyberlab exec -- curl ...</code> executa ferramentas dentro do escopo.<br>",
             "Este laboratório existe apenas para ser testado (Burp, curl, scanners) dentro do escopo autorizado de loopback.</div>",
             "<h2>1. Controles de segurança (server-config.json)</h2>",
             "<table><tr><th>Controle</th><th>Estado</th></tr>",
@@ -856,12 +856,12 @@ detection:
             '<tr><td>User B (conta 1002)</td><td><code>Authorization: Bearer token-user-b-1002</code></td></tr>',
             `<tr><td>Admin forjado (alg:none)</td><td><code>Authorization: Bearer ${sampleAlgNone}</code></td></tr>`,
             "</table>",
-            "<h2>4. Experimento rápido (Windows PowerShell)</h2>",
+            "<h2>4. Experimento rápido</h2>",
             `<pre>${cmd}</pre>`,
             '<p class="muted">Esperado se vulnerável: <code>200</code> com <code>bob@corp.lab</code>; esperado após ligar ',
             "<code>enforceAccountOwnership</code>: <code>403</code>. O protocolo completo está em <code>EXPERIMENTS.md</code>, ",
             "as hipóteses em <code>HYPOTHESES.md</code> e o modelo em <code>LAB_SYSTEM_MODEL.md</code>, no workspace do lab.</p>",
-            '<p class="muted">Dica: no PowerShell use sempre <code>curl.exe</code> — <code>curl</code> sem extensão é alias de <code>Invoke-WebRequest</code>.</p>',
+            '<p class="muted">Dica: rode por <code>bun run cyberlab exec -- curl ...</code> para gravar a saída como evidência com SHA-256.</p>',
             "</div></body></html>",
           ].join("\n")
           return send(200, html, { ...secHeaders, "Content-Type": "text/html; charset=utf-8" })

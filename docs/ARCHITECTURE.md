@@ -15,8 +15,7 @@ A arquitetura segue o princípio central: **reconstruir o produto como experiên
 - Conecta o CyberLab por pontos de extensão cirúrgicos já previstos pela arquitetura V2:
   - `packages/core/src/plugin/internal.ts` (tools e skills embutidas via Effect);
   - `packages/schema/src/cyberlab.ts` + `packages/protocol/src/groups/cyberlab.ts` + `packages/server/src/handlers/cyberlab.ts` (rotas HTTP tipadas `/api/cyberlab/*`);
-  - `packages/cli/src/commands/commands.ts` (subcomando `opencode cyberlab`);
-  - `packages/gui-plugins/src/cyberlab/` (painel lateral integrado no app web/desktop).
+  - `packages/cli/src/commands/commands.ts` (subcomando `opencode cyberlab`).
 
 ### Nível B — Domínio Próprio (`cyberlab/` — `@cyberlab/core`)
 Concentra toda a inteligência operacional e de segurança que não existe no upstream:
@@ -54,29 +53,27 @@ Regras invariantes:
 
 ---
 
-## 4. Topologia Local: Windows + WSL2 + Docker
+## 4. Topologia Local: Kali nativo
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
-│ Windows Host                                                     │
-│  • Navegador / Cliente Desktop OpenCode + Painel CyberLab        │
-└───────────────────────────────┬──────────────────────────────────┘
-                                │ HTTP local autenticado / IPC
-┌───────────────────────────────▼──────────────────────────────────┐
-│ WSL2 (Linux — ext4 nativo, ex.: ~/src/cyberlab-os)               │
-│  • Bun 1.4.4 + Servidor OpenCode V2 + @cyberlab/core             │
+│ Kali Linux (nativo — sem WSL2, sem VM convidada, sem Windows)    │
+│  • Bun 1.4.4 + OpenCode V2 + @cyberlab/core                      │
 │  • EvidenceStore (SQLite 0600 + artefatos SHA-256)               │
-│  • Ferramentas nativas Linux aprovadas                           │
+│  • cyberlab exec  →  binários que VOCÊ já tem no PATH            │
 └───────────────┬───────────────────────────────┬──────────────────┘
                 │ Rede Docker isolada de lab    │ Ponte autenticada HMAC
 ┌───────────────▼──────────────────┐ ┌──────────▼──────────────────┐
 │ Containers Docker Isolados       │ │ Runtimes de Agentes         │
-│  • Executores em sandbox         │ │ Parceiros Externos          │
-│  • Aplicações/alvos de teste     │ │  • Protocolo v1.0           │
+│  • Aplicações/alvos de teste     │ │ Parceiros Externos          │
 └──────────────────────────────────┘ └─────────────────────────────┘
 ```
 
+**O CyberLab OS não embute, não instala e não alcança ferramentas de outro sistema
+operacional.** O binário é resolvido pelo `PATH` do seu próprio Kali; o CyberLab
+contribui com trava de escopo, redação de segredos e custódia `SHA-256`.
+
 Práticas recomendadas para o ambiente local:
-- Manter o repositório dentro do sistema de arquivos Linux nativo do WSL2 (`~/src/cyberlab-os`) para máximo desempenho de I/O com Bun e SQLite WAL.
+- Manter o repositório em sistema de arquivos `ext4` nativo (`~/src/cyberlab-os`) para máximo desempenho de I/O com Bun e SQLite WAL.
 - Isolar laboratórios vulneráveis em redes Docker internas (`--internal` ou bridge dedicada sem bind público `0.0.0.0` na interface física).
-- Validar a disponibilidade do ambiente Linux antes de acionar executores dependentes de binários POSIX/ELF (ex.: Ghidra/REA, Nmap).
+- Declarar o escopo (`cyberlab scope --set ...`) **antes** de qualquer `cyberlab exec`.

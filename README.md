@@ -1,30 +1,29 @@
-# CyberLab OS — Investigative Security & Real Arsenal Edition (v6.7)
+# CyberLab OS — Investigative Security Edition (v7.0)
 
-Plataforma unificada de **Engenharia de Segurança Ofensiva/Defensiva, Investigação Orientada por Hipóteses, Bug Bounty Autorizado, Engenharia Reversa, DFIR e Laboratórios de Treinamento**, construída sobre o **OpenCode V2 (`2.1.4`)** e projetada nativamente para **Windows 11 (PowerShell) + WSL2 (`kali-linux` 2026.x)** ou Linux nativo.
+Plataforma de **Engenharia de Segurança Ofensiva/Defensiva, Investigação Orientada por Hipóteses, Bug Bounty Autorizado, Engenharia Reversa, DFIR e Laboratórios de Treinamento**, construída sobre o **OpenCode V2 (`2.1.4`)** e feita para rodar **no terminal do seu Kali** — nativo, sem VM convidada, sem ponte de Windows e sem reempacotar ferramenta.
 
-> **Filosofia Central (v6.2)**: O CyberLab OS combina em **uma única janela (`http://127.0.0.1:4096`)**:
+> **Filosofia Central (v7.0)**: o CyberLab OS é a **camada de método, escopo e custódia**. As ferramentas são as que você já tem instaladas.
 > 1. **Investigative Security Orchestrator (`Orchestrator`)**: agente principal em `pt-BR` orientado por hipóteses científicas (Ciclo **Fases A–I**), validação rigorosa de evidências e **6 subagentes especializados sob demanda** com guardrails rígidos de profundidade (`1`), concorrência (`3`) e orçamento por sessão (`12`).
-> 2. **Biblioteca Curada `CyberLab-Knowledge/` no Cofre Obsidian + Memória Investigativa Isolada**: **35** documentos técnicos revisados com metadados verificáveis (fontes primárias, versão, data de revisão, limitações e grafo `[[WikiLinks]]`) servidos via MCP com separação epistemológica estrita em **3 camadas** (Conhecimento Curado vs. Contexto da Sessão vs. Conhecimento Externo).
-> 3. **Hub MCP Unificado (`cyberlab-arsenal`) + 48 Slots Oficiais de Ferramentas Reais**: 1 único processo `stdio` ultraleve conectando **45 ferramentas com `🟢 MCP`** (incluindo pontes ao vivo para **Burp Suite `:9876` SSE**, **GhidraMCP `:8080`** e **JADX-AI-MCP `:8650`**), **Cofre Obsidian Flutuante (`Alt+N`)**, **Topo Retrátil (`28px`)**, **4 Parceiros Cognitivos CDI (`8788–8791`)** e **5 Laboratórios Internos de Treino**.
+> 2. **Biblioteca Curada `CyberLab-Knowledge/` no Cofre Obsidian + Memória Investigativa Isolada**: **40** documentos técnicos revisados com metadados verificáveis (fontes primárias, versão, data de revisão, limitações e grafo `[[WikiLinks]]`), servidos via **MCP** (`cyberlab-knowledge`) com separação epistemológica estrita em **3 camadas**.
+> 3. **`cyberlab exec` + Trava de Escopo + Custódia `SHA-256`**: você roda o binário; o CyberLab garante que o alvo está no escopo autorizado, redige segredos da saída e arquiva tudo como evidência reproduzível.
+
+---
 
 ---
 
 ## Sumário
 
-1. [Inicialização Rápida (Windows PowerShell + WSL2 Kali)](#1-inicialização-rápida-windows-powershell--wsl2-kali)
+1. [Inicialização Rápida (terminal do Kali)](#1-inicialização-rápida-terminal-do-kali)
 2. [Primeira Tarefa Recomendada (Calibração do Orquestrador)](#2-primeira-tarefa-recomendada-calibração-do-orquestrador)
-3. [Investigative Security Orchestrator & 6 Subagentes Especializados (v6.2)](#3-investigative-security-orchestrator--6-subagentes-especializados-v62)
-4. [Biblioteca Curada `CyberLab-Knowledge/` & Cofre Obsidian (`Alt+N`)](#4-biblioteca-curada-cyberlab-knowledge--cofre-obsidian-altn)
-5. [Hub MCP Unificado (`cyberlab-arsenal`), Pontes GUI em Tempo Real & Modelos Gratuitos](#5-hub-mcp-unificado-cyberlab-arsenal-pontes-gui-em-tempo-real--modelos-gratuitos)
-6. [Layout Antigravity de 3 Colunas, Topo Retrátil (`28px`) & `noVNC` Nitidez Real](#6-layout-antigravity-de-3-colunas-topo-retrátil-28px--novnc-nitidez-real)
-7. [Catálogo Completo dos 48 Slots Oficiais + Slots Personalizados](#7-catálogo-completo-dos-48-slots-oficiais--slots-personalizados)
-8. [Laboratórios de Treino Prontos para Investigação (v6.4–v6.5)](#8-laboratórios-de-treino-prontos-para-investigação-v64v65)
-   - [8.9 Diagnóstico do Arsenal — `lab slots` e `lab tools`](#89-diagnóstico-do-arsenal--lab-slots-e-lab-tools-v67)
-   - [8.10 Fase C — Pesquisa: `lab research`](#810-fase-c--pesquisa-lab-research-v67)
-   - [8.11 Fase D — Hipóteses ancoradas + priorização (Fase E)](#811-fase-d--hipóteses-ancoradas-na-fase-c--priorização-fase-e)
-  - [8.12 Fase F — Experimentação controlada: `lab experiment`](#812-fase-f--experimentação-controlada-lab-experiment-v67)
-  - [8.13 Fases G/H/I — Avaliação, Validação e Relatório](#813-fases-ghi--avaliação-validação-e-relatório-reproduzível-v67)
----
+3. [Investigative Security Orchestrator & 6 Subagentes Especializados](#3-investigative-security-orchestrator--6-subagentes-especializados-v62)
+4. [Biblioteca Curada `CyberLab-Knowledge/` & Cofre Obsidian](#4-biblioteca-curada-cyberlab-knowledge--cofre-obsidian)
+5. [Servidor MCP da Biblioteca de Conhecimento (`cyberlab-knowledge`)](#5-servidor-mcp-da-biblioteca-de-conhecimento-cyberlab-knowledge)
+6. [Laboratórios de Treino Prontos para Investigação](#8-laboratórios-de-treino-prontos-para-investigação-v64v65)
+7. [Os 4 Parceiros Cognitivos CDI (`8788–8791`)](#9-os-4-parceiros-cognitivos-cdi-87888791--5-laboratórios-de-treino)
+8. [Governança de Escopo Bug Bounty, Custódia `SHA-256` & Segurança Anti-Prompt-Injection](#10-governança-de-escopo-bug-bounty-custódia-sha-256--segurança-anti-prompt-injection)
+9. [Histórico de Versões, Verificação CI & Licenciamento MIT](#11-histórico-completo-de-versões-v10--v67-verificação-ci--licenciamento-mit)
+
+> ℹ️ **Sumário detalhado dos laboratórios**: veja a seção [6](#8-laboratórios-de-treino-prontos-para-investigação-v64v65).
 
 ## 8. Laboratórios de Treino Prontos para Investigação (v6.4–v6.5)
 
@@ -43,10 +42,10 @@ bun run cyberlab lab status lab-owasp-api-bola
 bun run cyberlab lab stop   lab-owasp-api-bola
 ```
 
-> ℹ️ **Portas**: `http://127.0.0.1:19081` = **alvo de treino** (API REST, sem interface — é isso que você
-> ataca com Burp/curl/scanners). `http://127.0.0.1:4096` = **interface do CyberLab OS** (3 colunas), aberta
-> por `bun run cyberlab`. Abrir a `/` do lab no navegador mostra uma página de orientação com os controles,
-> os endpoints e o comando de teste; o JSON de diagnóstico fica em `/health`.
+> ℹ️ **Porta**: `http://127.0.0.1:19081` = **alvo de treino** (API REST, sem interface — é isso que você
+> ataca com Burp/curl/scanners). A porta real é sempre confirmada por `bun run cyberlab lab status`.
+> Abrir a `/` do lab no navegador mostra uma página de orientação com os controles, os endpoints e o
+> comando de teste; o JSON de diagnóstico fica em `/health`.
 
 > ✅ **Se aparecer "JÁ ESTÁ NO AR", está tudo certo** — não é erro: o lab já está rodando e
 > respondendo. O comando mostra o painel e os próximos passos. Para recomeçar do zero use
@@ -57,7 +56,7 @@ bun run cyberlab lab stop   lab-owasp-api-bola
 > pressionar `Ctrl+C` (ou fechar a janela) o lab é desligado. `seed` e `model` continuam funcionando
 > (eles só leem o Kit em disco), mas o alvo fica fora do ar para execução de experimentos.
 
-Também é possível subir junto da interface: `bun run cyberlab --rebuild --lab lab-owasp-api-bola`.
+O CyberLab OS em si não abre porta: ele é o terminal. O alvo é o único processo de rede.
 
 ### 8.1 Arquivos gerados em `<labs>/lab-owasp-api-bola/`
 
@@ -84,7 +83,7 @@ Também é possível subir junto da interface: `bun run cyberlab --rebuild --lab
 
 9. [Os 4 Parceiros Cognitivos CDI (`8788–8791`) & 5 Laboratórios de Treino](#8-os-4-parceiros-cognitivos-cdi-87888791--5-laboratórios-de-treino)
 10. [Governança de Escopo Bug Bounty, Custódia `SHA-256` & Segurança Anti-Prompt-Injection](#9-governança-de-escopo-bug-bounty-custódia-sha-256--segurança-anti-prompt-injection)
-11. [Histórico Completo de Versões (`v1.0` → `v6.7`), Verificação CI & Licenciamento MIT](#11-histórico-completo-de-versões-v10--v67-verificação-ci--licenciamento-mit)
+9. [Histórico de Versões, Verificação CI & Licenciamento MIT](#11-histórico-de-versões-v10--v70-verificação-ci--licenciamento-mit)
 
 ---
 
@@ -195,79 +194,38 @@ bun run cyberlab lab evidence lab-owasp-api-bola --out evidence\rodada-02 --regi
 Grava os arquivos **e** registra cada requisição no `EvidenceStore` (projeto = `labId`), de
 onde `cyberlab_evidence_list` passa a enxergá-las.
 
-### 8.9 Diagnóstico do Arsenal — `lab slots` e `lab tools` (v6.7)
+### 8.9 Diagnóstico das ferramentas do seu Kali — `lab tools` (v6.7)
 
-Duas perguntas apareceram depois da calibração — *"quais slots estão duplicados?"* e
-*"quais ferramentas faltam instalar?"* — e nenhuma das duas tinha resposta verificável.
-Agora tem, sem abrir a interface:
+A pergunta *"quais ferramentas faltam instalar?"* não tinha resposta verificável.
+O CyberLab responde perguntando ao **seu** `PATH`, sem inventar inventário:
 
-```powershell
-bun run cyberlab lab slots                 # 48 slots: catálogo + personalizados + duplicatas
-bun run cyberlab lab slots --health        # só fantasmas/duplicados/sem binário
-bun run cyberlab lab slots --json          # saída completa p/ o agente (cada slot com .tool)
-
-bun run cyberlab lab tools                 # 12 ferramentas do catálogo: ✔ instalada / ✘ falta
-bun run cyberlab lab tools --missing       # só as que faltam, com a dica de instalação
-bun run cyberlab lab tools --script > install-faltantes.sh
-bun run cyberlab lab tools --json
+```bash
+# cada binário que o laboratório espera, com o status real
+for t in nmap nuclei ffuf tshark sqlmap jadx ghidra; do
+  bun run cyberlab exec -- which $t || echo "$t: AUSENTE"
+done
 ```
 
-- **`lab slots`** agora responde **as duas perguntas numa só saída**. Cada linha mostra
-  o status do slot (`instalado` / `sem-binario`) **e** o status do binário do catálogo
-  que ele governa (`✔ <ferramenta>`, `✘ <binário esperado>` ou `—` quando o slot é
-  GUI/embed web/configuração, sem binário para checar):
+Ou, para um retrato completo de uma vez:
 
-  ```
-  catalogo nmap         instalado   ✔ nmap             Nmap + NSE Vulnerability & Service Engine
-  catalogo ghidra       instalado   ✘ analyzeHeadless  NSA Ghidra (GUI + Decompilador C Headless)
-  catalogo cyberchef    instalado   —                  GCHQ CyberChef Oficial (300+ Operações)
-
-  Binarios governados: 12 · disponiveis 11 · faltando 1
-    ✘ ghidra -> ghidra-headless (esperado: analyzeHeadless / ghidra-analyzeHeadless)
-       WSL2 Kali: sudo apt update && sudo apt install -y ghidra
-  ```
-
-  A distinção importa: **slot `instalado` ≠ binário presente**. O slot diz apenas que o
-  caminho configurado existe (no caso do Ghidra, `/usr/bin/ghidra`, o launcher gráfico);
-  a coluna de binário diz se o executável que o **agente** invoca está no PATH.
-  O vínculo vem do campo `externalToolId` no catálogo de slots, e
-  `tests/cyberlab/arsenal/slot-tool-bindings-v67.test.ts` garante que ele não aponte
-  para uma ferramenta inexistente nem seja repetido em dois slots.
-- **Detecção além do PATH**: algumas distros instalam o binário fora do `PATH`. O caso
-  real é o Ghidra — no Debian/Kali o pacote só põe o launcher gráfico em
-  `/usr/bin/ghidra`, enquanto o `analyzeHeadless` (o que o agente invoca) fica em
-  `/usr/share/ghidra/support/analyzeHeadless`. O catálogo externo agora aceita
-  `posixKnownPaths` por ferramenta e o probe WSL2 testa esses caminhos absolutos com
-  `[ -x ]`, depois de tentar os nomes do `PATH`. Sem isso a ferramenta aparecia como
-  "faltando" estando instalada.
-- **`lab slots`** também compara os slots por **nome normalizado** e lista as duplicatas
-  reais (`"ssti-advanced-payload-list" -> slot-a, slot-b`), mais o diagnóstico de higiene
-  (`ghost_custom_slot`, `duplicate_custom_slot`, `non_executable_target`,
-  `unconfigured_custom_slot`). Num cofre limpo a resposta é
-  `48 slots — 0 personalizados — nenhuma duplicata`: as duplicatas que a calibração
-  relatou vinham de slots personalizados **gravados no disco por execuções anteriores**,
-  não do catálogo.
-- **`lab tools --script`** gera um `bash` com `set -euo pipefail` para o WSL2 Kali. Ele
-  filtra as dicas do catálogo: entram **só as que são comandos de verdade**
-  (`apt`, `pipx`, `cargo`, …). Dicas descritivas — ex.: `See slot installer
-  (OpenTRAP AppImage in WSL2)` — viram **comentário**, porque quebrariam o script.
-  O que depende de **licença** (Burp Collaborator) ou de **configuração** (slots de
-  wordlist) também fica fora: não é instalável por script.
-
-Para rodar o script gerado **dentro do WSL2 Kali** (PowerShell 5.1-safe):
-
-```powershell
-bun run cyberlab lab tools --script > install-faltantes.sh
-wsl -d kali-linux -- bash -s < install-faltantes.sh
+```bash
+bun run cyberlab exec -- bash -lc 'command -v nmap nuclei ffuf tshark sqlmap jadx ghidra'
 ```
 
-> No Windows, se o `>` do PowerShell gravar UTF-16, converta antes:
-> `Get-Content .\install-faltantes.sh | Set-Content -Encoding utf8 install-faltantes-utf8.sh`
+A distinção que importa: **pacote instalado ≠ binário no `PATH`**. O Ghidra do Kali, por
+exemplo, põe o launcher gráfico em `/usr/bin/ghidra`, mas o `analyzeHeadless` (o que um
+agente invocaria) fica em `/usr/share/ghidra/support/analyzeHeadless`. Quando isso
+acontece, chame pelo caminho absoluto — o `cyberlab exec` aceita qualquer binário:
+
+```bash
+bun run cyberlab exec -- /usr/share/ghidra/support/analyzeHeadless /tmp/projeto -import /tmp/alvo.elf
+```
 
 > **Host de escuta do lab**: por padrão o alvo escuta **somente em `127.0.0.1`** — ele é um
 > *alvo de treino* e o escopo autorizado declarado no Kit de Investigação é loopback. Quando o
 > navegador do operador **não** está na mesma máquina (preview remoto, container, sandbox), use
 > `CYBERLAB_LAB_HOST=0.0.0.0 bun run cyberlab lab start lab-owasp-api-bola --port 19081`.
+
 
 ### 8.10 Fase C — Pesquisa: `lab research` (v6.7)
 
@@ -531,92 +489,109 @@ Resultado real encadeado no `lab-owasp-api-bola` (target no ar):
 **As fases do ciclo não aparecem na interface web**: o workbench cobre labs, arsenal,
 escopo e evidências, e o ciclo C→I é todo via CLI. Não é ponta solta — nunca esteve lá.
 
-### 8.5 `cyberlab up` — 1 comando, **1 processo**, alvo embutido (v6.6)
+## 1. Inicialização Rápida (terminal do Kali)
 
-```powershell
-bun run cyberlab up
+### 1.1 Requisitos
+
+| Requisito | Versão | Observação |
+|---|---|---|
+| **Kali Linux** (ou qualquer Debian/Ubuntu) | 2024.x+ | nativo — **sem WSL2, sem VM convidada, sem Windows** |
+| **Bun** | `1.4.4` | `curl -fsSL https://bun.sh/install | bash` |
+| **Git** | 2.x | para clonar e atualizar |
+
+As ferramentas de segurança (`nmap`, `nuclei`, `ffuf`, `tshark`, `sqlmap`, `ghidra`,
+`jadx`, …) **não são instaladas pelo CyberLab**: use as que você já tem. Se faltar
+alguma, instale você mesmo com o `apt` do Kali:
+
+```bash
+sudo apt update && sudo apt install -y nmap nuclei ffuf tshark sqlmap ghidra jadx
 ```
 
-1. `git pull --ff-only` (pule com `--no-pull`; não roda se houver alterações locais)
-2. `bun install` se `node_modules` estiver ausente (`--install` força, `--no-install` nunca roda)
-3. sobe a **interface com o alvo dentro dela** — como o Burp Suite, que embute o próprio
-   Chromium em vez de exigir um segundo programa
+### 1.2 Clonar e instalar
 
-Opções: `--lab <labId>`, `--port <n>` (interface), `--no-open`, e `--daemon` para o modo
-antigo (alvo em processo separado, que sobrevive ao fechar a interface).
-
-**Navegador do alvo embutido.** Na interface, vá em **`5 Labs de Treino`** e clique em
-**`▶ Abrir o alvo aqui dentro`**: o painel mostra `http://127.0.0.1:19081/` num iframe, com
-botões de recarregar e de abrir no navegador do sistema. É o mesmo papel do Chromium do Burp —
-você navega no alvo dentro da ferramenta.
-
-> Se o painel ficar em branco, é porque o lab está com `enableSecurityHeaders: true` — aí ele
-> **se recusa a ser embutido** (`X-Frame-Options: DENY` + `frame-ancestors 'none'`). Isso é o
-> header funcionando, não um bug: use `↗ Abrir no navegador do sistema`.
-
-| Modo | Processos | Alvo sobrevive ao fechar a interface? | Quando usar |
-| --- | --- | --- | --- |
-| `bun run cyberlab up` (padrão) | **1** | Não | Investigar pela interface (recomendado) |
-| `bun run cyberlab up --daemon` | 2 | Sim | Apontar Burp/curl/scan de fora, sem a UI aberta |
-
-Consistência de raiz: interface e CLI agora usam a **mesma** pasta
-(`.cyberlab/training-labs/`), então `bun run cyberlab lab status` enxerga o laboratório que
-está rodando dentro da interface — e avisa `RODANDO em OUTRO processo` em vez de dizer
-"parado".
-
-
-## 1. Inicialização Rápida (Windows PowerShell + WSL2 Kali)
-
-### 1.1 Iniciar o CyberLab OS Unificado (1 Único Comando)
-
-No **Windows PowerShell**, dentro da pasta do repositório:
-
-```powershell
-bun run cyberlab up          # atualiza (git pull) + sobe interface E laboratório
+```bash
+git clone https://github.com/vitorveloster18-lang/CyberLab-OS.git
+cd CyberLab-OS
+bun install --ignore-scripts
+bun run --cwd packages/core fix-node-pty
 ```
 
-Equivalente em passos explícitos, se preferir ver cada etapa:
+### 1.3 Os comandos do dia a dia
 
-```powershell
-git pull
-bun run cyberlab --rebuild
+```bash
+# Estado do workspace (escopo, capacidades, evidências)
+bun run cyberlab status
+
+# Declarar o escopo autorizado ANTES de qualquer execução (tudo ou nada)
+bun run cyberlab scope --set 10.0.0.0/24 exemplo.com
+bun run cyberlab scope            # mostra o escopo vigente
+bun run cyberlab scope --clear
+
+# Rodar uma ferramenta do seu Kali sob guarda do CyberLab
+bun run cyberlab exec -- nmap -sV -p 80,443 10.0.0.10
+bun run cyberlab exec -- nuclei -u https://exemplo.com -t exposures/
+bun run cyberlab exec --timeout 120 -- curl -s -i https://exemplo.com/login
+
+# Evidências, achados e relatório
+bun run cyberlab evidence --verify
+bun run cyberlab findings
+bun run cyberlab report > relatorio.md
 ```
 
-- Na inicialização, o lançador `script/start-cyberlab.ts` automaticamente:
-  1. Semeia de forma idempotente os **36 documentos curados** de `<workspace>/vault/CyberLab-Knowledge/` sem sobrescrever notas existentes;
-  2. Consolida qualquer entrada legada de `opencode.json` em **1 único servidor MCP unificado** (`"cyberlab-arsenal"`, `--slot __hub__`);
-  3. Define `"default_agent": "cyberlab-orchestrator"` caso você ainda não tenha personalizado seu agente padrão;
-  4. Recompila o frontend (`--rebuild`) e sobe o servidor unificado em **`http://127.0.0.1:4096`**.
+`cyberlab exec` faz três coisas que o terminal puro não faz:
 
-### 1.2 Instalação Automática de Todas as Ferramentas Reais no Kali WSL2
+1. **Trava de escopo** — recusa o comando se o alvo não estiver no escopo declarado;
+2. **Redação de segredos** — tokens, senhas e chaves na saída são mascarados antes de
+   irem para o contexto do agente;
+3. **Custódia `SHA-256`** — cada execução vira um registro de evidência com id próprio,
+   referenciado depois no relatório.
 
-Você pode instalar qualquer ferramenta individualmente clicando em **`⬇ Instalar Automaticamente`** dentro do próprio CyberLab OS, ou provisionar o arsenal completo de uma vez pelo **Windows PowerShell** (removendo `\r` para compatibilidade total com `bash` no WSL2):
+Saída crua é repassada integralmente no `stdout`; no `stderr` você recebe um rodapé:
 
-```powershell
-$installCmd = @'
-export DEBIAN_FRONTEND=noninteractive
-sudo apt-get update -qq
-echo "wireshark-common wireshark-common/install-setuid boolean true" | sudo debconf-set-selections
-sudo apt-get install -y -qq xvfb x11vnc websockify novnc openbox xterm dbus-x11 libgtk-3-0 libgbm1 libnss3 libasound2t64 kali-desktop-xfce nmap ncat sqlmap ffuf dirsearch wireshark tshark mitmproxy zaproxy ghidra jadx rizin python3-frida apktool tor torsocks onionshare-cli gitleaks metasploit-framework impacket-scripts hashcat john netexec curl unzip jq python3-pip python3-venv pipx golang-go cargo
-'@.Replace("`r", "")
-$installCmd | wsl -d kali-linux -u root -- bash -s
+```text
+— cyberlab exec · exit=0 · 3.2s · (saída redigida) · evidência=evt_01J...
 ```
+
+### 1.4 Subir um laboratório de treino
+
+```bash
+bun run cyberlab lab list
+bun run cyberlab lab start lab-owasp-api-bola --daemon
+bun run cyberlab lab status lab-owasp-api-bola
+bun run cyberlab lab stop   lab-owasp-api-bola
+```
+
+### 1.5 Biblioteca de conhecimento
+
+```bash
+bun run cyberlab knowledge            # mostra o plano de sincronização
+bun run cyberlab knowledge --apply    # aplica (cria o cofre se não existir)
+```
+
+O cofre é criado em `<workspace>/vault/CyberLab-Knowledge/` na primeira execução,
+sem sobrescrever nada que você tenha escrito.
 
 ---
 
 ## 2. Primeira Tarefa Recomendada (Calibração do Orquestrador)
 
-Assim que abrir o CyberLab OS em **`http://127.0.0.1:4096`**, com o agente **`Orchestrator`** selecionado no painel direito, envie este prompt inicial para calibrar o inventário real de ferramentas e conhecimento do seu ambiente sem tocar em nenhum alvo externo:
+Com o agente **`Orchestrator`** selecionado, envie este prompt inicial para calibrar o
+inventário de conhecimento do seu ambiente **sem tocar em nenhum alvo**:
 
 > **Prompt inicial recomendado:**
-> *"Mapeie o conhecimento técnico e as ferramentas MCP disponíveis. Identifique quais capacidades estão comprovadas, quais ainda não foram validadas e quais lacunas de conhecimento limitam uma investigação orientada por hipóteses."*
+> *"Mapeie o conhecimento técnico disponível. Identifique quais capacidades estão comprovadas, quais ainda não foram validadas e quais lacunas de conhecimento limitam uma investigação orientada por hipóteses."*
 
 O `Orchestrator` irá:
-1. Consultar o catálogo curado em `CyberLab-Knowledge/` (`search_knowledge`, `read_document("00-Index")`, `read_document("tools/mcp-tool-catalog")`);
-2. Auditar em tempo real todas as ferramentas conectadas via `arsenal_mcp_status` (distinguindo binários instalados no Windows/WSL2, servidores GUI ativos em `:9876`/`:8080`/`:8650` e ferramentas ainda não instaladas ou desconectadas);
-3. Entregar um diagnóstico estruturado separando **capacidades comprovadas**, **capacidades pendentes de validação** e **lacunas de conhecimento**, registrando o baseline na memória investigativa (`investigation_memory_update`).
+1. Consultar o catálogo curado em `CyberLab-Knowledge/` (`search_knowledge`,
+   `read_document("00-Index")`);
+2. Listar os binários realmente disponíveis no `PATH` — ele faz isso pedindo para você
+   rodar `cyberlab exec -- which <ferramenta>`, nunca chutando;
+3. Entregar um diagnóstico estruturado separando **capacidades comprovadas**,
+   **capacidades pendentes de validação** e **lacunas de conhecimento**, registrando o
+   baseline na memória investigativa.
 
 ---
+
 
 ## 3. Investigative Security Orchestrator & 6 Subagentes Especializados (v6.2)
 
@@ -732,98 +707,45 @@ O Hub MCP expõe **8 ferramentas dedicadas de Conhecimento e Memória Investigat
 
 ---
 
-## 5. Hub MCP Unificado (`cyberlab-arsenal`), Pontes GUI em Tempo Real & Modelos Gratuitos
+## 5. Servidor MCP da Biblioteca de Conhecimento (`cyberlab-knowledge`)
 
-### 5.1 Arquitetura Hub MCP de Processo Único (`v6.1`–`v6.2`)
+O CyberLab OS **não reempacota ferramenta nenhuma**: quem executa `nmap`, `nuclei`,
+`ffuf`, `tshark`, `ghidra`, `jadx`, `sqlmap` ou qualquer outro binário é você, no
+terminal do seu Kali. O que o CyberLab publica via MCP é a **Biblioteca de
+Conhecimento** — `cyberlab/mcp/knowledge-mcp-stdio.ts`, um servidor `stdio` de
+processo único, sem arsenal, sem ponte GUI e sem probe de WSL.
 
-Em vez de iniciar dezenas de processos `bun.exe` separados no Windows (que causavam timeouts de inicialização e consumo elevado de RAM), o CyberLab OS consolida **todas as 45 ferramentas compatíveis com MCP** em **1 único servidor multiplexado ultrarrápido** (`cyberlab/mcp/arsenal-mcp-stdio.ts --slot __hub__`):
-
-- **Hot-Reload Instantâneo**: clicar em **`🔌 MCP` / `🟢 MCP`** na barra lateral atualiza `.cyberlab/mcp-enabled-slots.json` e emite `notifications/tools/list_changed` imediatamente para o OpenCode sem reiniciar processos.
-- **Resolução Automática Windows + WSL2 Kali**: localiza executáveis automaticamente em `C:\Program Files\...`, `WinGet`, `Scoop`, `PATH` do Windows ou dentro da distro `kali-linux` no WSL2, sempre com `shell=false`, Trava de Escopo Bug Bounty e redação `SHA-256` de segredos.
-- **Tools Centrais do Arsenal**: `arsenal_mcp_status`, `arsenal_tool_help` e `arsenal_run_tool`.
-
-### 5.2 Pontes MCP Nativas em Tempo Real para Suítes Gráficas (GUI)
-
-Quando os slots abaixo estão com **`🟢 MCP`** ativo, o Hub expõe ferramentas dedicadas conectadas diretamente às instâncias gráficas abertas:
-
-1. **Burp Suite (`127.0.0.1:9876` — Ponte Nativa HTTP+SSE `PortSwigger/mcp-server`)**:
-   - Botão de **1 clique** no painel do Burp baixa `burp-mcp-all.jar` em `/opt/cyberlab-burp/` (fora do repositório MIT).
-   - Tools expostas: `burp_suite_status`, `burp_suite_get_proxy_history`, `burp_suite_get_proxy_http_history_regex`, `burp_suite_send_http1_request`, `burp_suite_send_http2_request`, `burp_suite_create_repeater_tab`, `burp_suite_send_to_intruder`, `burp_suite_set_intercept`, `burp_suite_url_encode`, `burp_suite_base64_encode` e `burp_suite_call_tool` (com fallback automático Windows ↔ WSL2).
-2. **NSA Ghidra (`127.0.0.1:8080` — `LaurieWired/GhidraMCP` v2.0)**:
-   - Botão **`🔌 Instalar GhidraMCP (:8080)`** instala automaticamente a release oficial `Apache-2.0`.
-   - Tools expostas: `ghidra_mcp_status`, `ghidra_mcp_decompile` e `ghidra_mcp_call` (funções, strings, imports/exports, xrefs, renomeação de símbolos e modo headless).
-3. **JADX-GUI (`127.0.0.1:8650` — `zinja-coder/jadx-ai-mcp`)**:
-   - Botão **`🔌 Instalar JADX-AI-MCP (:8650)`** instala o plugin oficial via `jadx plugins --install "github:zinja-coder:jadx-ai-mcp"`.
-   - Tools expostas: `jadx_mcp_status`, `jadx_mcp_get_class_source` e `jadx_mcp_call` (`AndroidManifest.xml`, busca de métodos, recursos e xrefs).
-
-### 5.3 Paridade de Runtime WSL2 para Capabilities `external.*` (`v6.3`)
-
-A Fase A de calibração revelou que **7 capabilities `external.*`** (`nuclei`, `tshark`, `ghidra`, `jadx`, `yarax`,
-`dalfox`, `keyhunter`) reportavam `not installed` enquanto os slots MCP correspondentes diziam `INSTALLED`. A causa
-era uma divergência de detecção: o `ArsenalSlotManager` fazia probe dentro do WSL2 Kali, mas o control plane externo
-resolvia binários apenas em `.cyberlab/bin` e no `PATH` do Windows.
-
-Agora a resolução acontece em **4 camadas**, na mesma ordem para slots e capabilities:
-
-| # | Camada | Exemplo |
-|---|---|---|
-| 1 | `config/external-tools.json` → `binaryPaths` | override manual do operador |
-| 2 | `<workspace>/.cyberlab/bin` | bootstrap local (`./script/bootstrap-local-tools.sh`) |
-| 3 | `PATH` do host (Windows / Linux nativo / macOS) | `winget install skylot.jadx` |
-| 4 | **WSL2** (`kali-linux` por padrão) | `sudo apt install -y nuclei` |
-
-- **Probe batido único**: um só `wsl.exe -d kali-linux -u root -- bash -s` (script via **stdin**, com retry
-  automático quando a VM do Hyper-V está fria) resolve **todos** os candidatos de uma vez — sem um processo por binário.
-- **Tradução automática de caminhos**: `C:\ws\out.json` → `/mnt/c/ws/out.json`; flags, URLs e números passam intactos.
-- **Encapsulamento transparente**: `wsl.exe -d kali-linux -u root -- /usr/bin/nuclei <args>`, mantendo `shell=false`,
-  Trava de Escopo Bug Bounty, `AbortSignal` e custódia `SHA-256` da evidência.
-- **Diagnóstico honesto**: `bun run cyberlab external list` agora mostra a origem real
-  (`READY via wsl_distro:kali-linux (/usr/bin/nuclei)`) e a dica de instalação no Kali quando o binário falta.
-
-### 5.4 9 Modelos de IA Gratuitos Nativos do OpenCode Zen
-
-Prontos para uso imediato sem chave paga (`apiKey: "public"`, configurados automaticamente com `--use-system-ca`):
-`Big Pickle`, `DeepSeek V4.1 Flash Free`, `GLM-5.3 Flash Free`, `Nemotron 3.5 Super VL Free`, `Nemotron 3.5 Lightning Free`, `Nemotron 3 Ultra Free`, `MiMo V2.6 Flash Free`, `Flint 40B Free` e `Beam Free` — além de suporte total a qualquer provedor Anthropic, OpenAI, Gemini, OpenRouter, Ollama ou LM Studio local.
-
----
-
-## 6. Layout Antigravity de 3 Colunas, Topo Retrátil (`28px`) & `noVNC` Nitidez Real
-
-```text
-┌───────────────────┬──────────────────────────────────────────────────────┬────────────────────┐
-│ COLUNA ESQUERDA   │                PALCO CENTRAL (100% REAL)             │  COLUNA DIREITA    │
-│ (Retrátil ~230px) │  [▲ Recolher Topo -> fita compacta de 28px (v5.9)]   │ (Retrátil ~330px)  │
-│                   │                                                      │                    │
-│ 📁 Arquivos       │  • GUI Linux Real via Xvfb + noVNC 110 DPI           │ 🤖 Orchestrator    │
-│ 🛠 48 Slots       │    (Burp, OpenTRAP, ZAP, Wireshark, Ghidra, JADX,    │    (v6.2 Hipóteses │
-│    + Custom       │     VeraCrypt, Kali XFCE Desktop Completo)           │     + Subagentes   │
-│    [🔌/🟢 MCP]    │  • Web UIs Reais (Caido, mitmweb, CyberChef,         │     + Knowledge)   │
-│                   │     PentAGI TLS :8443, Pentest Copilot)              │                    │
-│ [📓 Alt+N Cofre]  │  • Scanners CLI Reais + Escopo + Custódia SHA-256    │                    │
-└───────────────────┴──────────────────────────────────────────────────────┴────────────────────┘
+```bash
+bun run cyberlab/mcp/knowledge-mcp-stdio.ts --workspace /caminho/do/projeto
 ```
 
-- **Topo Horizontal Retrátil na Vertical (`v5.9`)**: recolhe automaticamente todas as barras superiores em uma fita enxuta de **`28px`** ao abrir ferramentas gráficas ou Web, entregando quase 100% da altura vertical da tela para a ferramenta e redimensionando o desktop X11 instantaneamente.
-- **Zoom `60%–160%` com Zero Deslocamento do Mouse (`v5.8`)**: usa `Display._scale` + `ExtendedDesktopSize` nativos do `noVNC` (`110 DPI`), mantendo clique cirúrgico em cada botão/menu de Burp, Ghidra, Wireshark e JADX.
-- **Navegador Isolado Pré-Configurado no Proxy em 1 Clique**: abre Microsoft Edge ou Chrome com perfil temporário apontando automaticamente para `127.0.0.1:8080` (ou porta ativa do proxy).
+| Ferramenta MCP | O que faz |
+|---|---|
+| `search_knowledge` | Busca full-text na biblioteca curada (título, resumo, corpo e tags) |
+| `read_document` | Lê um documento por `id`/caminho, com frontmatter e `[[WikiLinks]]` |
+| `list_documents` | Lista a árvore curada por categoria |
+| `get_related_documents` | Navega o grafo `[[WikiLinks]]` a partir de um documento |
+| `record_investigation_note` | Grava nota da sessão na **Camada 2** (contexto da sessão) |
+| `search_investigation_notes` | Recupera notas da sessão por texto/período/projeto |
+| `promote_note_to_curated` | Promove uma nota validada para a **Camada 1** (curada) — exige revisão |
+| `get_knowledge_status` | Estado da biblioteca, contagens por camada e versão do índice |
+
+**Separação epistemológica em 3 camadas (mantida do v6.2)**: *Camada 1* = conhecimento
+curado e versionado; *Camada 2* = contexto da sessão (notas descartáveis); *Camada 3* =
+conhecimento externo (tudo que vem de fora, marcado como não confiável até virar
+evidência).
+
+### 5.1 9 Modelos de IA Gratuitos Nativos do OpenCode Zen
+
+Prontos para uso imediato sem chave paga (`apiKey: "public"`, configurados
+automaticamente com `--use-system-ca`): `Big Pickle`, `DeepSeek V4.1 Flash Free`,
+`GLM-5.3 Flash Free`, `Nemotron 3.5 Super VL Free`, `Nemotron 3.5 Lightning Free`,
+`Nemotron 3 Ultra Free`, `MiMo V2.6 Flash Free`, `Flint 40B Free` e `Beam Free` — além
+de suporte total a qualquer provedor Anthropic, OpenAI, Gemini, OpenRouter, Ollama ou
+LM Studio local.
 
 ---
 
-## 7. Catálogo Completo dos 48 Slots Oficiais + Slots Personalizados
-
-Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab OS (instaladas no sistema do operador):
-
-1. **Proxies, Interceptação & Suítes Web (`5 slots`)**: `burp-suite` (Burp Suite Community + MCP `:9876`), `opentrap`, `mitmweb` (`:8081`), `caido` (`:7000`), `owasp-zap`.
-2. **Auditoria Web, Bug Bounty, Fuzzing & OAST (`9 slots`)**: `nuclei`, `ffuf`, `dirsearch`, `katana`, `httpx`, `interactsh`, `dalfox`, `sqlmap`, `wpprobe`.
-3. **Reconhecimento, Rede, PCAP & Infraestrutura (`8 slots`)**: `subfinder`, `nmap`, `netcat-ncat`, `naabu-dnsx-tlsx`, `wireshark` (GUI + `tshark`), `netexec`, `metasploit`, `impacket-hashcat`.
-4. **Engenharia Reversa, REA, Depuração & Mobile Forensics (`8 slots`)**: `rea` (`morluto/rea` MCP), `ghidra` (+ `GhidraMCP :8080`), `jadx` (+ `JADX-AI-MCP :8650`), `rizin-cutter`, `gef`, `frida-apktool`, `capa`, `mvt`.
-5. **Caça de Segredos, SAST, SCA & Cloud (`5 slots`)**: `keyhunter`, `betterleaks`, `gitleaks-trufflehog`, `semgrep` (OpenGrep), `trivy`.
-6. **Agentes de IA Externos & Metodologia (`6 slots`)**: `strix`, `shannon`, `hexstrike-ai`, `pentagi` (proxy TLS `:8443`), `pentestgpt-cai`, `pentest-copilot`.
-7. **OpSec, Privacidade & Criptografia (`3 slots`)**: `tor-onionshare`, `veracrypt` (GUI/CLI), `mullvad-opsec` *(isolados sem MCP por segurança operacional)*.
-8. **CyberChef, DFIR (Sigma), Purple Team & Kali Desktop (`4 slots`)**: `cyberchef`, `hayabusa-yarax`, `atomic-operator`, `kali-desktop-stream`.
-9. **Slots Personalizados (`+ Slot`)**: adicione qualquer binário CLI, aplicação Web (`iframe`) ou ferramenta Desktop do Windows/WSL2.
-
----
 
 ## 9. Os 4 Parceiros Cognitivos CDI (`8788–8791`) & 5 Laboratórios de Treino
 
@@ -847,15 +769,14 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
 
 ---
 
-## 11. Histórico Completo de Versões (`v1.0` → `v6.7`), Verificação CI & Licenciamento MIT
+## 11. Histórico de Versões (`v1.0` → `v7.0`), Verificação CI & Licenciamento MIT
 
 - **v1.0 – v4.0**: Base OpenCode V2 (`2.1.4`), governança anti-TOCTOU, cofre `SHA-256`, 4 CDIs (`8788–8791`), 5 Labs de Treino e 9 modelos gratuitos OpenCode Zen.
-- **v5.0 – v5.8**: Arquitetura **Real Arsenal Edition** (3 colunas Antigravity, motor `X11/noVNC` 110 DPI sem deslocamento de mouse no zoom, navegador proxy em 1 clique, Burp oficial, REA MCP, PentAGI TLS `:8443` e ferramentas Kali 2026.1).
+- **v5.0 – v5.8**: Arquitetura **Real Arsenal Edition** (3 colunas Antigravity, motor `X11/noVNC` 110 DPI, navegador proxy em 1 clique e empacotamento de ferramentas).
 - **v5.9**: Topo horizontal retrátil na vertical (`28px`) + resiliência a boot frio do WSL2 `kali-linux`.
-- **v6.0 – v6.0.2**: Cofre nativo flutuante/acoplável compatível com Obsidian (`Alt+N`) com fundo sólido opaco, slots `netcat-ncat` e `dirsearch` (**48 slots oficiais**) e ponte nativa `stdio <-> SSE` para o **Burp Suite MCP (`:9876`)**.
-- **v6.1**: **Hub MCP Unificado (`cyberlab-arsenal` `--slot __hub__`)** consolidando todos os slots em 1 único processo (~3,5 GB de RAM economizados no Windows), resolução completa de caminhos Windows (`Program Files`/WinGet/Scoop) + WSL2 e instaladores/pontes de 1 clique para **`GhidraMCP (:8080)`** e **`JADX-AI-MCP (:8650)`**.
+- **v6.0 – v6.1**: Cofre nativo flutuante/acoplável compatível com Obsidian (`Alt+N`) e **Hub MCP Unificado (`cyberlab-arsenal`)** consolidando os slots num único processo.
 - **v6.2**: **Investigative Security Orchestrator** em `pt-BR` (Ciclo Fases A–I + validação em 5 níveis), **6 Subagentes Especializados sob demanda** com limites rígidos de profundidade (`1`), concorrência (`3`) e quantidade por sessão (`12`), biblioteca curada **`CyberLab-Knowledge/`** integrada ao Cofre Obsidian com **8 tools MCP de Conhecimento e Memória Investigativa** (preservando resultados negativos e imutabilidade dos documentos curados) e atualização integral da documentação.
-- **v6.3**: **Paridade de Runtime WSL2 + Expansão da Biblioteca Curada (34 docs)** — correção da divergência crítica reportada na Fase A: as 7 capabilities `external.*` (`nuclei`, `tshark`, `ghidra`, `jadx`, `yarax`, `dalfox`, `keyhunter`) que diziam `not installed` enquanto os slots MCP diziam `INSTALLED`. O control plane agora resolve binários em **4 camadas** (`external-tools.json` → `.cyberlab/bin` → `PATH` Windows → **WSL2**), com probe batido único (`wsl.exe -d kali-linux -u root -- bash -s`, retry para VM fria), tradução automática de caminhos Windows → `/mnt/...` e encapsulamento transparente em `wsl.exe`. Biblioteca curada expandida de 20 → **34 documentos** cobrindo JWT/OAuth, CSRF/CORS/SameSite, TLS & cripto, SSRF, desserialização/XXE/upload, GraphQL/WebSocket, cache poisoning/deception, race conditions (protocolo concorrente N=20), mass assignment/BOPLA/rate limiting, mobile, engenharia reversa, cloud/IAM/contêineres, logging/forense e fluxos com IA orientados por hipótese.
+- **v6.3**: **Paridade de Runtime WSL2 + Expansão da Biblioteca Curada (34 docs)** — correção da divergência entre o status dos slots MCP e o das capabilities `external.*`. Biblioteca curada expandida de 20 → **34 documentos** cobrindo JWT/OAuth, CSRF/CORS/SameSite, TLS & cripto, SSRF, desserialização/XXE/upload, GraphQL/WebSocket, cache poisoning/deception, race conditions (protocolo concorrente N=20), mass assignment/BOPLA/rate limiting, mobile, engenharia reversa, cloud/IAM/contêineres, logging/forense e fluxos com IA orientados por hipótese.
 
 - **v6.3.1**: **Higiene de Slots Personalizados** — resolve os 3 slots ativos sem binário encontrados pela Fase A
   (`custom-metasploit-framework-c421`, `custom-metasploit-framework-ce52`, `custom-ssti-advanced-payload-list-9b27`).
@@ -886,9 +807,10 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
 - **v6.4.2**: **Porta do lab vs. porta da aplicação** — `http://127.0.0.1:19081` é o **alvo** da investigação
   (uma API REST sem interface), não o CyberLab OS. Abrir essa URL devolvia JSON cru e dava a impressão de que
   "não abria como antes". Agora `GET /` exibe uma página HTML legível: avisa que esta porta é apenas o alvo,
-  aponta para a interface em `http://127.0.0.1:4096`, mostra o estado real dos 4 controles de
-  `server-config.json`, lista os endpoints clicáveis com o invariante esperado e traz o comando `curl.exe`
-  pronto. `GET /health` continua JSON (usado por scripts e pela sonda TCP do `lab status`).
+  aponta para o fluxo de terminal (`lab status` / `cyberlab exec`), mostra o estado real dos 4
+  controles de `server-config.json`, lista os endpoints clicáveis com o invariante esperado e traz o
+  comando `curl` pronto. `GET /health` continua JSON (usado por scripts e pela sonda TCP do
+  `lab status`). *(A referência à porta `4096` vale só até a v6.7; na v7.0 não há interface web.)*
 
 - **v6.4.3**: **`lab start` quando o lab já está no ar** — rodar `lab start ... --daemon` duas vezes
   devolvia apenas "Já existe um daemon ativo" + "use `lab stop`", o que parecia um erro e não dizia
@@ -908,8 +830,7 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
     `*.web-security-academy.net` e `*.h1-web-security-academy.net`, com hosts permitidos,
     proibições, limites de taxa, regras de evidência e a ponte H1–H4 → tópicos da Academy.
   - `bun run cyberlab up`: um comando para atualizar (`git pull --ff-only`), instalar se
-    preciso, subir o laboratório em segundo plano e abrir a interface. `Ctrl+C` derruba só
-    a interface — o laboratório continua no ar.
+    preciso e subir o laboratório em segundo plano. *(Removido na v7.0 — veja abaixo.)*
   - Biblioteca curada: **36 documentos** (novo `targets/portswigger-web-security-academy.md`).
 
 - **v6.6**: **Processo único + navegador do alvo embutido (estilo Burp Suite).**
@@ -945,14 +866,36 @@ Todas as ferramentas abaixo residem **fora** do repositório `MIT` do CyberLab O
     `vault/delete` avisa no `window.confirm` que **não há lixeira**. Coberto por
     `tests/cyberlab/safety/ui-confirmation-wiring-v67.test.ts`, que varre
     `packages/app/src` e falha se qualquer chamada a rota protegida esquecer o `confirm`.
-  - **`cyberlab lab tools`**: mostra as 12 ferramentas do catálogo (✔/✘), a origem
-    esperada e a dica de instalação; `--missing`, `--json` e `--script` (este gera um
-    bash para o WSL2 Kali filtrando dicas que não são comandos).
-  - **`cyberlab lab slots`**: lista os 48 slots, separa catálogo de personalizados,
+  - **`cyberlab lab tools`**: mostra as ferramentas do catálogo (✔/✘), a origem
+    esperada e a dica de instalação; `--missing`, `--json` e `--script`.
+  - **`cyberlab lab slots`**: lista os slots, separa catálogo de personalizados,
     aponta duplicatas por nome normalizado e mostra os problemas de higiene
-    (`--health`, `--json`).
-  - Teste de integridade das dicas (`tests/cyberlab/arsenal/tool-catalog-hints-v67.test.ts`):
-    garante que nenhuma dica não-executável vire linha de script.
+    (`--health`, `--json`). *(Ambos removidos na v7.0.)*
+
+### v7.0 — Kali nativo: método, escopo e custódia sem reempacotar ferramenta
+
+A v7.0 remove tudo o que existia só para **embutir ou alcançar** ferramentas de outro
+sistema operacional. O CyberLab passa a ser a camada de método, escopo e custódia — as
+ferramentas são as que você já tem no Kali.
+
+- **Removidos**: workbench web do CyberLab (`packages/app/src/cyberlab-workbench/`),
+  Arsenal de 48 slots (`cyberlab/arsenal/`), ponte de VM e runtime WSL2
+  (`cyberlab/external/`), servidor MCP do arsenal, proxy embutido e CA local
+  (`cyberlab/proxy/`), e os comandos `cyberlab up`, `cyberlab studio`, `cyberlab
+  external` e `cyberlab app/start/serve`.
+- **Mantidos**: Orquestrador Investigativo e os 6 subagentes, trava de escopo, pipeline
+  de evidência `SHA-256`, redação de segredos, guarda de operações destrutivas, hub dos
+  4 CDIs, biblioteca curada e o pacote `reporting/`.
+- **Novo transporte MCP da biblioteca**: `cyberlab/mcp/knowledge-mcp-stdio.ts`
+  (`cyberlab-knowledge`, 8 ferramentas) substitui o hub do arsenal, para que a
+  `CyberLab-Knowledge/` continue acessível via MCP sem carregar nenhuma ponte de
+  ferramenta.
+- **`cyberlab exec`**: roda qualquer binário do seu Kali sob trava de escopo, redação e
+  custódia de evidência — o comando é seu, a governança é do CyberLab.
+- **`cyberlab knowledge`** passa a semear o cofre sozinho (antes isso só acontecia
+  quando a interface subia).
+- **Nada de servidor escondido**: `bun run cyberlab` sem argumentos mostra a ajuda no
+  terminal, em vez de subir uma aplicação web.
 
 ### Verificação Local Completa (Idêntica ao GitHub Actions Linux + Windows)
 
@@ -968,7 +911,7 @@ bun --cwd packages/cli typecheck
 bun --cwd packages/gui-plugins typecheck
 bun --cwd cyberlab typecheck
 
-# 3. Suíte automatizada de testes (211 testes / 1.954+ asserções)
+# 3. Suíte automatizada de testes (193+ testes)
 bun --cwd cyberlab test
 ```
 
@@ -988,7 +931,7 @@ bun --cwd cyberlab test
 > `winget install Python.Python.3.12` (e reabra o PowerShell).
 
 ### Documentação Complementar
-- [`docs/PLAYBOOK_POWERSHELL_WSL2_ARSENAL.md`](docs/PLAYBOOK_POWERSHELL_WSL2_ARSENAL.md) — Operação híbrida Windows PowerShell + WSL2 Kali Linux.
+- [`docs/PLAYBOOK_KALI_NATIVO.md`](docs/PLAYBOOK_KALI_NATIVO.md) — **Playbook oficial**: todos os comandos prontos para o terminal do Kali.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Arquitetura de governança, execução e custódia criptográfica.
 - [`docs/SECURITY_MODEL.md`](docs/SECURITY_MODEL.md) — Modelo de ameaças, anti-TOCTOU, redação e protocolo `HMAC-SHA256`.
 - [`docs/LICENSE_POLICY.md`](docs/LICENSE_POLICY.md) — Política de conformidade `MIT` e isolamento de ferramentas externas.

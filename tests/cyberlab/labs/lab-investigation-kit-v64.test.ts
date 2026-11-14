@@ -197,15 +197,15 @@ describe("CyberLab OS v6.4 — Kit de Investigação do Laboratório (Fases B/D/
     const html = await indexRes.text()
     expect(html).toContain("<!doctype html>")
     expect(html).toContain("Laboratório OWASP API Security")
-    // Deixa claro que esta porta é o ALVO e aponta para a interface em 4096
-    expect(html).toContain("127.0.0.1:4096")
-    expect(html).toContain("bun run cyberlab")
+    // Deixa claro que esta porta é o ALVO e aponta para o fluxo de terminal
+    expect(html).toContain("bun run cyberlab lab status")
+    expect(html).toContain("cyberlab exec")
     // Mostra o estado real dos 4 controles
     expect(html).toContain("enforceAccountOwnership")
     expect(html).toContain("DESLIGADO (vulnerável)")
-    // Endpoints clicáveis + comando pronto para PowerShell
+    // Endpoints clicáveis + comando pronto para o terminal
     expect(html).toContain("/api/v1/accounts/1002")
-    expect(html).toContain("curl.exe")
+    expect(html).toContain("curl -s -i")
     },
     60_000, // Windows CI lento: sobe servidor do lab
   )

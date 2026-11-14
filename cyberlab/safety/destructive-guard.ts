@@ -61,28 +61,6 @@ export interface DestructiveOperationSpec {
  * nova operação que apague/substitua precisa ser registrada nesta lista.
  */
 export const DESTRUCTIVE_OPERATIONS: Record<string, DestructiveOperationSpec> = {
-  "cyberlab.arsenal.prune": {
-    risk: "destructive",
-    verb: "remover slots personalizados quebrados e duplicados",
-    targetOf: () => "slots personalizados do arsenal",
-    consequences: () => [
-      { item: "Slots fantasmas (sem executável nem URL) são apagados da config", recoverable: false },
-      { item: "Slots duplicados são apagados, mantendo uma única entrada", recoverable: false },
-      { item: "Slots OFICIAIS nunca são removidos (48 slots do catálogo)", recoverable: true },
-    ],
-  },
-  "cyberlab.arsenal.custom.remove": {
-    risk: "destructive",
-    verb: "remover um slot personalizado",
-    targetOf: (args) => String(args.slotId ?? "(slotId não informado)"),
-    consequences: (args) => [
-      {
-        item: `A entrada \`${String(args.slotId ?? "?")}\` sai da config: o caminho/URL precisam ser digitados de novo`,
-        recoverable: false,
-      },
-      { item: "Nenhum binário em disco é apagado — apenas o registro do slot", recoverable: true },
-    ],
-  },
   "cyberlab.vault.delete": {
     risk: "irreversible",
     verb: "apagar uma nota do cofre",
