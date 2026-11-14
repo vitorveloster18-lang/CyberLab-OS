@@ -9,7 +9,6 @@ import { createHomeScrollController } from "./scroll"
 import { createHomeSessionSearchController } from "./sessions/search"
 import { createHomeSessionsController } from "./sessions/controller"
 import { HomeSessions } from "./sessions/region"
-import { CyberLabHomeQuickBar } from "@/cyberlab-workbench/composer-bar"
 
 export function Home() {
   const mobile = createMediaQuery("(max-width: 767px)")
@@ -32,7 +31,6 @@ export function Home() {
           <HomeProjects projects={projects} scroll={scroll} dropdown />
         </div>
       </Show>
-      <CyberLabHomeQuickBar />
       <ScrollView
         class="min-h-0 flex-1 [container-type:size]"
         thumbContainer={scroll.viewport.thumbTrack()}
