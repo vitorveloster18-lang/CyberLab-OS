@@ -31,6 +31,7 @@
     "build": "bun ./packages/app/script/vite-cli.mjs build",
     "cyberlab": "bun run script/cyberlab-cli.ts",
     "cyberlab:cli": "bun run script/cyberlab-cli.ts",
+    "cyberlab:tui": "bun run --cwd packages/cli src/index.ts",
     "cyberlab:lab": "bun run script/cyberlab-lab.ts",
     "cyberlab:typecheck": "bun --cwd cyberlab typecheck",
     "cyberlab:test": "bun --cwd cyberlab test",

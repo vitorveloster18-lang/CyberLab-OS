@@ -2,6 +2,7 @@ import type { ThemeV1Json } from "@opencode/theme/tui/v1"
 import aura from "./assets/aura.json" with { type: "json" }
 import ayu from "./assets/ayu.json" with { type: "json" }
 import carbonfox from "./assets/carbonfox.json" with { type: "json" }
+import cyberlab from "./assets/cyberlab.json" with { type: "json" }
 import catppuccinFrappe from "./assets/catppuccin-frappe.json" with { type: "json" }
 import catppuccinMacchiato from "./assets/catppuccin-macchiato.json" with { type: "json" }
 import catppuccin from "./assets/catppuccin.json" with { type: "json" }
@@ -42,6 +43,7 @@ export const DEFAULT_THEMES: Record<string, ThemeV1Json> = {
   ["catppuccin-macchiato"]: catppuccinMacchiato,
   cobalt2,
   cursor,
+  cyberlab,
   dracula,
   everforest,
   flexoki,

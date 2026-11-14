@@ -554,6 +554,30 @@ Saída crua é repassada integralmente no `stdout`; no `stderr` você recebe um 
 — cyberlab exec · exit=0 · 3.2s · (saída redigida) · evidência=evt_01J...
 ```
 
+### 1.3.1 Interface do OpenCode no terminal (TUI)
+
+O CyberLab OS é o **OpenCode com as customizações do CyberLab** — a mesma interface
+interativa de terminal do OpenCode original, com o agente `Orchestrator`, as ferramentas
+do workspace e a identidade visual do CyberLab. Para abrir:
+
+```bash
+bun run cyberlab:tui
+```
+
+Isso sobe o TUI (terminal UI) do OpenCode dentro da pasta do projeto. Dentro dele:
+
+- **Agente `Orchestrator`** — aperte `Tab` para alternar para o orquestrador de
+  segurança do CyberLab (investigação orientada por hipóteses, biblioteca
+  `CyberLab-Knowledge`, validação de evidências);
+- **Tema `cyberlab`** — digite `/theme` e escolha `cyberlab` para a paleta esmeralda
+  do CyberLab (ou defina no config do TUI: `"theme": { "name": "cyberlab" }`);
+- **Ferramentas do workspace** — o agente enxerga as capacidades registradas
+  (`cyberlab_status`, `cyberlab_execute`, `cyberlab_evidence`, …) e o escopo
+  declarado em `.cyberlab/scope.json`.
+
+> Não existe mais servidor web nem `cyberlab up`/`studio`: a interface é o próprio
+> terminal. Feche com `Ctrl+C` ou `/exit`.
+
 ### 1.4 Subir um laboratório de treino
 
 ```bash
