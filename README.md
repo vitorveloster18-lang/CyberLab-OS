@@ -564,17 +564,19 @@ do workspace e a identidade visual do CyberLab. Para abrir:
 bun run cyberlab:tui
 ```
 
-Isso sobe o TUI (terminal UI) do OpenCode dentro da pasta do projeto, **já com o
-tema `cyberlab` e o agente `Orchestrator` ativos por padrão**. Dentro dele:
+Isso sobe o TUI (terminal UI) do OpenCode dentro da pasta do projeto — a **interface
+original do OpenCode**, com as funcionalidades do CyberLab disponíveis por baixo:
 
-- **Agente `Orchestrator`** — já é o agente padrão ao abrir (investigação orientada
-  por hipóteses, biblioteca `CyberLab-Knowledge`, validação de evidências). Aperte
-  `Tab` se quiser alternar para outro agente;
-- **Tema `cyberlab`** — paleta esmeralda ativa por padrão. Para trocar, digite
-  `/theme` ou defina no config do TUI: `"theme": { "name": "opencode" }`;
+- **Interface original do OpenCode** — logo, tema e comandos padrão do OpenCode,
+  sem alterações visuais;
+- **Agentes do CyberLab disponíveis** — aperte `Tab` para alternar para o
+  `Orchestrator` (investigação orientada por hipóteses, biblioteca
+  `CyberLab-Knowledge`, validação de evidências) ou outro subagente;
 - **Ferramentas do workspace** — o agente enxerga as capacidades registradas
   (`cyberlab_status`, `cyberlab_execute`, `cyberlab_evidence`, …) e o escopo
-  declarado em `.cyberlab/scope.json`.
+  declarado em `.cyberlab/scope.json`;
+- **Modelo gratuito padrão** — o config do projeto (`.opencode/opencode.jsonc`) já
+  define um modelo free, então o TUI funciona logo após o clone, sem API key.
 
 > Não existe mais servidor web nem `cyberlab up`/`studio`: a interface é o próprio
 > terminal. Feche com `Ctrl+C` ou `/exit`.

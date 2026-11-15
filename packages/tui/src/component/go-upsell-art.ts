@@ -9,7 +9,7 @@ import {
 import { extend } from "@opentui/solid"
 import { go } from "../logo"
 
-// Ported from the v1 TUI's Go upsell (bg-pulse-render.ts): rings radiate from the CyberLab mark while a shimmer crosses it.
+// Ported from the v1 TUI's Go upsell (bg-pulse-render.ts): rings radiate from the GO logo while a shimmer crosses it.
 const PERIOD = 4600
 const RINGS = 3
 const WIDTH = 3.8
@@ -18,7 +18,7 @@ const AMP = 0.55
 const TAIL_AMP = 0.16
 const BREATH_AMP = 0.05
 const BREATH_SPEED = 0.0008
-// Offset so the background ring emits from the CyberLab mark center when the logo shimmer peaks.
+// Offset so the background ring emits from the GO center when the logo shimmer peaks.
 const PHASE_OFFSET = 0.29
 // The frame shown when animations are off.
 const STILL = PERIOD * 0.5

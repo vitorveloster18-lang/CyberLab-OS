@@ -206,9 +206,6 @@ export const Plugin = define({
   id: "opencode.agent",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.agent.transform((editor) => {
-      // CyberLab OS: o Orchestrator é o agente padrão ao abrir o TUI.
-      editor.default("cyberlab-orchestrator")
-
       editor.update(Agent.defaultID, (item) => {
         item.name = Agent.Name.make("Build")
         item.description = "The default agent. Executes tools based on configured permissions."
