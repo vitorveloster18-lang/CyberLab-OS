@@ -1,5 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  // CyberLab OS: modelo gratuito padrão (sem API key) para o TUI funcionar
+  // logo após o clone, sem configuração manual.
+  "model": "opencode/deepseek-v4.1-flash-free",
   "provider": {},
   "permission": {},
   "references": {
