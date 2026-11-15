@@ -49,6 +49,12 @@ const errorResponseLogger = HttpMiddleware.make((app) =>
   ),
 )
 
+/** Loopback apenas: 127.0.0.1, ::1 ou localhost. Qualquer outro host é "externo". */
+function isLoopbackHostname(hostname: string): boolean {
+  const host = hostname.trim().toLowerCase()
+  return host === "127.0.0.1" || host === "::1" || host === "localhost"
+}
+
 export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   options: ServerOptions,
   lifecycle?: Lifecycle<E, R>,
@@ -59,6 +65,16 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   const password = options.password
   if (!password && !allowNoAuth) return yield* Effect.fail(new Error("Missing server password"))
   const hostname = options.hostname ?? "127.0.0.1"
+  // OBS-1 (CyberLab): CYBERLAB_NO_SERVER_AUTH só é permitido em loopback.
+  // Sem autenticação, um bind em interface não-loopback (ex.: 0.0.0.0) exporia
+  // a API inteira sem credencial. Recusa explícita em vez de falhar silencioso.
+  if (allowNoAuth && !isLoopbackHostname(hostname)) {
+    return yield* Effect.fail(
+      new Error(
+        `CYBERLAB_NO_SERVER_AUTH requer bind em loopback (127.0.0.1/::1/localhost); hostname "${hostname}" recusado sem autenticação.`,
+      ),
+    )
+  }
   const port = Option.fromNullishOr(options.port)
   const shutdown = yield* Latch.make()
   const status = yield* Status.make()
