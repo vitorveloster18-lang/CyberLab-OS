@@ -1,5 +1,8 @@
 import { spawnSync } from "node:child_process"
 import { randomUUID } from "node:crypto"
+import { readFileSync, statSync } from "node:fs"
+import net from "node:net"
+import path from "node:path"
 
 import type { EvidenceDraft } from "../contracts/evidence.js"
 import { redactSensitiveContent } from "../evidence/provenance.js"
@@ -82,62 +85,369 @@ export class GuardedRunUsageError extends Error {}
  * - IPv4 exige 4 octetos válidos, então `1.2.3` (número de versão) não casa
  * - domínio exige ponto e TLD alfabético, então `wordlist.txt` não casa
  */
-export function extractTargetsFromArgv(argv: readonly string[]): ExtractedTargets {
+/** Binários que falam com a rede: sem alvo verificável, não podem rodar. */
+const NETWORK_TOOLS = new Set([
+  "nmap",
+  "masscan",
+  "nuclei",
+  "naabu",
+  "httpx",
+  "ffuf",
+  "feroxbuster",
+  "gobuster",
+  "dirb",
+  "dirsearch",
+  "nikto",
+  "sqlmap",
+  "curl",
+  "wget",
+  "dig",
+  "host",
+  "nslookup",
+  "whois",
+  "ping",
+  "nc",
+  "ncat",
+  "netcat",
+  "ssh",
+  "scp",
+  "sftp",
+  "smbclient",
+  "smbmap",
+  "crackmapexec",
+  "nxc",
+  "hydra",
+  "medusa",
+  "wpscan",
+  "subfinder",
+  "amass",
+  "dnsx",
+  "katana",
+  "zap",
+  "zaproxy",
+])
+
+/** Invólucros que precedem o binário real (`sudo nmap ...`). */
+const WRAPPER_COMMANDS = new Set(["sudo", "doas", "env", "nice", "ionice", "timeout", "time", "command", "stdbuf"])
+
+/** Intérpretes que recebem o comando real dentro de um único argumento. */
+const SHELL_WRAPPERS = new Set([
+  "sh",
+  "bash",
+  "dash",
+  "zsh",
+  "ksh",
+  "fish",
+  "busybox",
+  "cmd",
+  "cmd.exe",
+  "powershell",
+  "powershell.exe",
+  "pwsh",
+  "pwsh.exe",
+])
+
+/** Flags que apontam para um arquivo cujo conteúdo são alvos, por ferramenta. */
+const TARGET_LIST_FLAGS: Record<string, readonly string[]> = {
+  nmap: ["-iL", "--input-file"],
+  masscan: ["-iL", "--includefile"],
+  nuclei: ["-l", "-list", "--list"],
+  httpx: ["-l", "-list", "--list"],
+  sqlmap: ["-r", "--request-file"],
+}
+
+/** Flags que não geram tráfego de rede: pedir ajuda/versão não precisa de alvo. */
+const INFORMATIONAL_FLAGS = new Set(["-h", "--help", "-help", "--version", "-version", "-V"])
+
+const MAX_TARGET_LIST_BYTES = 4 * 1024 * 1024
+const MAX_TARGET_LIST_LINES = 5000
+
+const ipv4Source = "(?:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)"
+const cidrRe = new RegExp(`^(${ipv4Source})/(\\d{1,2})$`)
+const cidr6Re = /^(.+)\/(\d{1,3})$/
+const hostPortRe = new RegExp(`^(${ipv4Source}):(\\d{1,5})$`)
+const genericHostPortRe = /^([^:/]+):(\d{1,5})$/
+const urlRe = /^[a-z][a-z0-9+.-]*:\/\//i
+const domainRe = /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/i
+const FILE_LIKE_RE =
+  /\.(txt|json|ya?ml|xml|csv|md|log|conf|cfg|ini|sh|bash|py|js|mjs|cjs|ts|tsx|jsx|exe|dll|bin|tar|tgz|gz|bz2|xz|zip|7z|rar|pdf|png|jpe?g|gif|svg|html?|css|bak|old|tmp|lock|toml|sql|db|sqlite|key|pem|crt|cer|der|p12|pfx|pcap|cap|lst|list|wordlist|gz|iso|img|ova|vdi|qcow2|deb|rpm|apk|jar|war|so|o|a|class|go|rs|c|h|cpp|hpp|rb|pl|php|lua|swift|kt|java|scala|clj|ex|exs|erl|beam)$/i
+
+export interface TargetInspection extends ExtractedTargets {
+  /** Arquivos de lista citados no comando que não puderam ser lidos. */
+  unresolvedTargetSources?: string[]
+}
+
+export function extractTargetsFromArgv(argv: readonly string[]): TargetInspection {
   const found = new Set<string>()
+  const unresolved: string[] = []
+  const cwd = process.cwd()
 
-  const ipv4Source = "(?:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)"
-  const ipv4Re = new RegExp(`^${ipv4Source}$`)
-  const cidrRe = new RegExp(`^(${ipv4Source})/(\\d{1,2})$`)
-  const hostPortRe = new RegExp(`^(${ipv4Source}):(\\d{1,5})$`)
-  const urlRe = /^[a-z][a-z0-9+.-]*:\/\//i
-  const domainRe = /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/i
-  const FILE_LIKE_RE =
-    /\.(txt|json|ya?ml|xml|csv|md|log|conf|cfg|ini|sh|bash|py|js|mjs|cjs|ts|tsx|jsx|exe|dll|bin|tar|tgz|gz|bz2|xz|zip|7z|rar|pdf|png|jpe?g|gif|svg|html?|css|bak|old|tmp|lock|toml|sql|db|sqlite|key|pem|crt|cer|der|p12|pfx|pcap|cap|lst|list|wordlist|gz|iso|img|ova|vdi|qcow2|deb|rpm|apk|jar|war|so|o|a|class|go|rs|c|h|cpp|hpp|rb|pl|php|lua|swift|kt|java|scala|clj|ex|exs|erl|beam)$/i
+  collectTargets(argv, detectTool(argv), found, unresolved, cwd)
+  // `sh -c "nmap 10.0.0.5"` esconde o comando real dentro de um argumento só.
+  for (const payload of shellPayloads(argv)) {
+    collectTargets(payload.split(/\s+/), detectTool([payload]), found, unresolved, cwd)
+  }
 
-  for (const raw of argv) {
-    if (typeof raw !== "string" || raw.length === 0) continue
-    // Flag de ferramenta nunca é alvo.
-    if (raw.startsWith("-")) continue
+  return {
+    networkTargets: [...found],
+    workspacePaths: [],
+    ...(unresolved.length > 0 ? { unresolvedTargetSources: [...new Set(unresolved)] } : {}),
+  }
+}
 
-    let candidate = raw
+/** Nome do binário efetivo, ignorando invólucros como `sudo`/`timeout`. */
+export function detectTool(argv: readonly string[]): string | undefined {
+  const first = basenameOf(argv[0] ?? "")
+  if (NETWORK_TOOLS.has(first)) return first
+  if (!WRAPPER_COMMANDS.has(first)) return undefined
+  for (const token of argv.slice(1)) {
+    const candidate = basenameOf(token)
+    if (NETWORK_TOOLS.has(candidate)) return candidate
+  }
+  return undefined
+}
 
-    // URL: pega só o host, descartando caminho, query e porta.
-    if (urlRe.test(candidate)) {
-      const withoutScheme = candidate.replace(urlRe, "")
-      candidate = withoutScheme.split(/[/?#]/)[0] ?? ""
-      // Remove credenciais embutidas (http://user:pass@host).
-      const at = candidate.lastIndexOf("@")
-      if (at >= 0) candidate = candidate.slice(at + 1)
-      // Remove porta.
-      const colon = candidate.indexOf(":")
-      if (colon > 0) candidate = candidate.slice(0, colon)
+function basenameOf(value: string): string {
+  const clean = stripQuotes(value).replace(/\\/g, "/")
+  return clean.slice(clean.lastIndexOf("/") + 1).toLowerCase()
+}
+
+function stripQuotes(value: string): string {
+  return value.replace(/^["'`]+|["'`]+$/g, "")
+}
+
+/** Payload de `sh -c`, `/bin/sh -c`, `powershell -Command`, `cmd /c`. */
+function shellPayloads(argv: readonly string[]): string[] {
+  if (!SHELL_WRAPPERS.has(basenameOf(argv[0] ?? ""))) return []
+  const payload: string[] = []
+  for (let index = 1; index < argv.length; index++) {
+    const token = stripQuotes(argv[index] ?? "").toLowerCase()
+    if (token === "-c" || token === "/c" || token === "-command") {
+      const rest = argv.slice(index + 1).join(" ").trim()
+      if (rest) payload.push(rest)
+      break
     }
+  }
+  return payload
+}
 
-    if (candidate.length === 0) continue
+function collectTargets(
+  tokens: readonly string[],
+  tool: string | undefined,
+  found: Set<string>,
+  unresolved: string[],
+  cwd: string,
+): void {
+  const listFlags = tool !== undefined ? (TARGET_LIST_FLAGS[tool] ?? []) : []
 
-    if (ipv4Re.test(candidate) || cidrRe.test(candidate) || hostPortRe.test(candidate)) {
-      // host:porta → guarda o IP puro, que é o que o escopo compara.
-      const asHostPort = hostPortRe.exec(candidate)
-      found.add(asHostPort ? asHostPort[1]! : candidate)
+  for (let index = 0; index < tokens.length; index++) {
+    const token = stripQuotes(tokens[index] ?? "")
+    if (!token) continue
+
+    const equalsAt = token.indexOf("=")
+    const flagToken = equalsAt > 0 ? token.slice(0, equalsAt) : token
+    const inlineValue = equalsAt > 0 ? token.slice(equalsAt + 1) : undefined
+
+    if (listFlags.includes(flagToken)) {
+      const reference = inlineValue ?? stripQuotes(tokens[index + 1] ?? "")
+      if (inlineValue === undefined && reference) index++
+      if (!reference) {
+        unresolved.push(flagToken)
+        continue
+      }
+      const listed = readTargetList(reference, cwd)
+      if (!listed.ok) unresolved.push(reference)
+      for (const listed_target of listed.targets) found.add(listed_target)
       continue
     }
 
-    // Extensões de arquivo que parecem TLD. Sem isto, `wordlist.txt` viraria
-    // alvo de rede e o comando seria bloqueado por engano.
-    if (FILE_LIKE_RE.test(candidate)) continue
+    const target = classifyToken(token)
+    if (target !== undefined) found.add(target)
+  }
+}
 
-    if (domainRe.test(candidate)) {
-      found.add(candidate)
-    }
+function classifyToken(raw: string): string | undefined {
+  const candidate = stripQuotes(raw).trim()
+  if (!candidate || candidate.startsWith("-")) return undefined
+
+  if (urlRe.test(candidate)) return classifyHost(hostFromUrl(candidate))
+
+  const ipv4Cidr = cidrRe.exec(candidate)
+  if (ipv4Cidr) {
+    const base = classifyHost(ipv4Cidr[1]!)
+    return base !== undefined ? `${base}/${ipv4Cidr[2]}` : undefined
   }
 
-  return { networkTargets: [...found], workspacePaths: [] }
+  const anyCidr = cidr6Re.exec(candidate)
+  if (anyCidr) {
+    const base = classifyHost(anyCidr[1]!)
+    const prefix = Number(anyCidr[2])
+    if (base !== undefined && net.isIP(base) === 6 && prefix >= 0 && prefix <= 128) return `${base}/${prefix}`
+    return undefined
+  }
+
+  const ipv4HostPort = hostPortRe.exec(candidate)
+  if (ipv4HostPort) return classifyHost(ipv4HostPort[1]!)
+
+  // IPv6 entre colchetes, com porta opcional: [2001:db8::1]:8443
+  const bracketed = /^\[([^\]]+)\](?::(\d{1,5}))?$/.exec(candidate)
+  if (bracketed) return classifyHost(bracketed[1]!)
+
+  const genericHostPort = genericHostPortRe.exec(candidate)
+  if (genericHostPort) return classifyHost(genericHostPort[1]!)
+
+  return classifyHost(candidate)
+}
+
+function hostFromUrl(value: string): string {
+  try {
+    return new URL(value.replace(/§[^§]*§/g, "marker")).hostname
+  } catch {
+    // URL malformada: parser manual, que não exige URL completa.
+    const withoutScheme = value.replace(urlRe, "")
+    const hostPart = withoutScheme.split(/[/?#]/)[0] ?? ""
+    const at = hostPart.lastIndexOf("@")
+    return at >= 0 ? hostPart.slice(at + 1) : hostPart
+  }
+}
+
+function classifyHost(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined
+  const host = stripQuotes(raw).replace(/^\[|\]$/g, "").replace(/\.$/, "").trim().toLowerCase()
+  if (!host) return undefined
+
+  // IPv6 literal (o escopo compara a forma canônica do `net`).
+  if (net.isIP(host) === 6) return host
+
+  // IPv4 em representação não canônica: decimal/hex inteiro ou octetos hex/octal.
+  const normalized = normalizeIpv4Octets(host) ?? normalizeIpv4Literal(host)
+  if (normalized !== undefined) return normalized
+  if (net.isIP(host) === 4) return host
+
+  if (host === "localhost") return host
+
+  // Extensões de arquivo que parecem TLD. Sem isto, `wordlist.txt` viraria
+  // alvo de rede e o comando seria bloqueado por engano.
+  if (FILE_LIKE_RE.test(host)) return undefined
+
+  return domainRe.test(host) ? host : undefined
+}
+
+/** `0xc0a80101` ou `3232235521` → `192.168.1.1`. */
+function normalizeIpv4Literal(candidate: string): string | undefined {
+  if (/^\d{1,10}$/.test(candidate)) return dottedFromNumber(Number(candidate))
+  if (/^0x[0-9a-f]{1,8}$/i.test(candidate)) return dottedFromNumber(Number.parseInt(candidate.slice(2), 16))
+  return undefined
+}
+
+function dottedFromNumber(value: number): string | undefined {
+  // Abaixo de 0x1000000 são valores comuns (portas, timeouts), não endereços.
+  if (!Number.isInteger(value) || value <= 0xffffff || value > 0xffffffff) return undefined
+  return [(value >>> 24) & 255, (value >>> 16) & 255, (value >>> 8) & 255, value & 255].join(".")
+}
+
+/** `010.0.0.1`, `0x0a.0.0.1`, `10.0.0.1` → forma canônica. */
+function normalizeIpv4Octets(candidate: string): string | undefined {
+  const parts = candidate.split(".")
+  if (parts.length !== 4) return undefined
+
+  const octets: number[] = []
+  for (const part of parts) {
+    const octet = parseOctet(part)
+    if (octet === undefined) return undefined
+    octets.push(octet)
+  }
+  return octets.join(".")
+}
+
+function parseOctet(part: string): number | undefined {
+  if (/^0x[0-9a-f]{1,2}$/i.test(part)) return Number.parseInt(part.slice(2), 16)
+  if (/^0[0-7]{1,3}$/.test(part)) return Number.parseInt(part, 8)
+  if (/^\d{1,3}$/.test(part)) {
+    const value = Number(part)
+    return value <= 255 ? value : undefined
+  }
+  return undefined
+}
+
+/** Lê um arquivo de lista de alvos (`-iL`, `-l`, `-r`) sem estourar memória. */
+function readTargetList(reference: string, cwd: string): { targets: string[]; ok: boolean } {
+  const resolved = path.isAbsolute(reference) ? reference : path.resolve(cwd, reference)
+  try {
+    const stat = statSync(resolved, { throwIfNoEntry: false })
+    if (!stat || !stat.isFile() || stat.size > MAX_TARGET_LIST_BYTES) return { targets: [], ok: false }
+
+    const lines = readFileSync(resolved, "utf8").split(/\r?\n/).slice(0, MAX_TARGET_LIST_LINES)
+    const targets: string[] = []
+    for (const line of lines) {
+      const text = line.trim()
+      if (!text || text.startsWith("#")) continue
+      // Arquivo de requisição HTTP (sqlmap -r): o alvo está no Host.
+      const hostHeader = /^host\s*:\s*(\S+)/i.exec(text)
+      const target = classifyToken(hostHeader ? hostHeader[1]! : text)
+      if (target !== undefined) targets.push(target)
+    }
+    return { targets, ok: true }
+  } catch {
+    return { targets: [], ok: false }
+  }
 }
 
 function formatCommand(argv: readonly string[]): string {
   return argv
     .map((part) => (/\s/.test(part) ? JSON.stringify(part) : part))
     .join(" ")
+}
+
+function blockedResult(command: string, reason: string, startedAt: number): GuardedRunResult {
+  return {
+    blocked: true,
+    blockReason: reason,
+    command,
+    exitCode: null,
+    stdout: "",
+    stderr: "",
+    redacted: false,
+    evidenceId: null,
+    durationMs: Date.now() - startedAt,
+    timedOut: false,
+  }
+}
+
+/**
+ * Falha fechada para binários de rede.
+ *
+ * O escopo só pode julgar o que consegue enxergar. Quando o alvo não está no
+ * argv em forma reconhecível (lista em arquivo, `sh -c`, endereço não
+ * canônico), "nenhum alvo extraído" NÃO significa "nada vai sair da máquina":
+ * significa que a checagem não teve o que checar. Nesse caso a execução é
+ * recusada em vez de liberada.
+ */
+function describeUnverifiableTargets(
+  networkTool: string | undefined,
+  targets: TargetInspection,
+  informational: boolean,
+  command: string,
+  startedAt: number,
+): GuardedRunResult | undefined {
+  if (networkTool === undefined || informational) return undefined
+
+  const unresolved = targets.unresolvedTargetSources ?? []
+  if (unresolved.length > 0) {
+    return blockedResult(
+      command,
+      `A lista de alvos (${unresolved.join(", ")}) não pôde ser lida; o escopo não pode ser verificado. Corrija o caminho ou declare os alvos diretamente.`,
+      startedAt,
+    )
+  }
+  if (targets.networkTargets.length === 0) {
+    return blockedResult(
+      command,
+      `"${networkTool}" é um binário de rede e nenhum alvo verificável foi extraído do comando. Declare o alvo explicitamente (ex.: ${networkTool} <host|CIDR>) para que o escopo seja checado.`,
+      startedAt,
+    )
+  }
+  return undefined
 }
 
 /**
@@ -173,20 +483,21 @@ export function runGuardedNative(options: GuardedRunOptions): GuardedRunResult {
   // seja objeto estruturado, e usar a string aqui faria o escopo não ver alvo
   // nenhum e liberar a execução (falha silenciosa, o oposto do objetivo).
   const targets = extractTargetsFromArgv(argv)
+  const networkTool =
+    detectTool(argv) ?? shellPayloads(argv).map((payload) => detectTool([payload])).find((tool) => tool !== undefined)
+  const informational = argv.some((token) => INFORMATIONAL_FLAGS.has(stripQuotes(token)))
+  const unverifiable = describeUnverifiableTargets(
+    networkTool,
+    targets,
+    informational,
+    command,
+    startedAt,
+  )
+  if (unverifiable !== undefined) return unverifiable
+
   const verdict = scope.verifyTargets(projectId, targets)
   if (!verdict.allowed) {
-    return {
-      blocked: true,
-      blockReason: verdict.reason ?? "Alvo fora do escopo autorizado.",
-      command,
-      exitCode: null,
-      stdout: "",
-      stderr: "",
-      redacted: false,
-      evidenceId: null,
-      durationMs: Date.now() - startedAt,
-      timedOut: false,
-    }
+    return blockedResult(command, verdict.reason ?? "Alvo fora do escopo autorizado.", startedAt)
   }
 
   // --- 2. Execução nativa ---

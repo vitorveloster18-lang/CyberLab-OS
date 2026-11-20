@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "bun:test"
@@ -214,5 +214,107 @@ describe("extractTargetsFromArgv: extração de alvos do argv cru", () => {
   it("não duplica o mesmo alvo repetido", () => {
     const out = extractTargetsFromArgv(["tool", "10.0.0.5", "10.0.0.5"])
     expect(out.networkTargets).toEqual(["10.0.0.5"])
+  })
+
+  it("normaliza IPv4 em decimal e hexadecimal", () => {
+    // inet_aton aceita estas formas e as ferramentas de rede também.
+    expect(extractTargetsFromArgv(["curl", "http://3232235777/"]).networkTargets).toEqual(["192.168.1.1"])
+    expect(extractTargetsFromArgv(["curl", "http://0xc0a80101/"]).networkTargets).toEqual(["192.168.1.1"])
+    expect(extractTargetsFromArgv(["nmap", "0xA000005"]).networkTargets).toEqual(["10.0.0.5"])
+  })
+
+  it("reconhece IPv6 literal, com colchetes e dentro de URL", () => {
+    expect(extractTargetsFromArgv(["nmap", "-6", "2001:db8::1"]).networkTargets).toEqual(["2001:db8::1"])
+    expect(extractTargetsFromArgv(["curl", "[2001:db8::1]:8443"]).networkTargets).toEqual(["2001:db8::1"])
+    expect(extractTargetsFromArgv(["curl", "http://[2001:db8::1]:8080/x"]).networkTargets).toEqual([
+      "2001:db8::1",
+    ])
+    expect(extractTargetsFromArgv(["nmap", "-6", "2001:db8::/32"]).networkTargets).toEqual(["2001:db8::/32"])
+  })
+
+  it("expande lista de alvos de arquivo (-iL/-l) e marca arquivo ilegível", () => {
+    const listFile = path.join(artifactsDir, "targets.txt")
+    writeFileSync(listFile, "# alvos\n192.168.56.10\n8.8.8.8\n")
+    const out = extractTargetsFromArgv(["nmap", "-iL", listFile])
+    expect(out.networkTargets.sort()).toEqual(["192.168.56.10", "8.8.8.8"])
+    expect(out.unresolvedTargetSources).toBeUndefined()
+
+    const missing = extractTargetsFromArgv(["nmap", "-iL", path.join(artifactsDir, "nao-existe.txt")])
+    expect(missing.networkTargets).toEqual([])
+    expect(missing.unresolvedTargetSources).toEqual([path.join(artifactsDir, "nao-existe.txt")])
+  })
+
+  it("não confunde wordlist (-w) com lista de alvos", () => {
+    const out = extractTargetsFromArgv(["ffuf", "-w", "wordlist.txt", "-u", "http://192.168.56.10/FUZZ"])
+    expect(out.networkTargets).toEqual(["192.168.56.10"])
+    expect(out.unresolvedTargetSources).toBeUndefined()
+  })
+})
+
+describe("native-run: falha fechada para binários de rede", () => {
+  it("recusa binário de rede sem alvo verificável", () => {
+    const r = run(["nmap", "-sV"])
+    expect(r.blocked).toBe(true)
+    expect(r.exitCode).toBeNull()
+    expect(r.blockReason).toContain("binário de rede")
+  })
+
+  it("recusa lista de alvos ilegível em vez de liberar", () => {
+    const r = run(["nmap", "-iL", path.join(artifactsDir, "inexistente.txt")])
+    expect(r.blocked).toBe(true)
+    expect(r.blockReason).toContain("não pôde ser lida")
+  })
+
+  it("bloqueia alvo fora do escopo vindo de arquivo de lista", () => {
+    const listFile = path.join(artifactsDir, "fora.txt")
+    writeFileSync(listFile, "8.8.8.8\n")
+    const r = run(["nmap", "-iL", listFile])
+    expect(r.blocked).toBe(true)
+    expect(r.blockReason).toContain("allowExternalTargets is false")
+  })
+
+  it("enxerga o comando escondido em sh -c", () => {
+    const r = run(["sh", "-c", "nmap -sV 8.8.8.8"])
+    expect(r.blocked).toBe(true)
+    expect(r.blockReason).toContain("8.8.8.8")
+
+    const disguised = run(["sh", "-c", "curl http://3232235777/"])
+    expect(disguised.blocked).toBe(true)
+  })
+
+  it("permite pedido de ajuda sem alvo", () => {
+    const r = run(["nmap", "--help"])
+    expect(r.blocked).toBe(false)
+  })
+
+  it("não afeta binário local sem alvo", () => {
+    const r = run(["echo", "sem-alvo"])
+    expect(r.blocked).toBe(false)
+  })
+})
+
+describe("ScopeController: IPv6", () => {
+  it("faz match de CIDR IPv6", () => {
+    const scope = new ScopeController()
+    scope.setProjectScope(
+      makeScope({
+        allowedTargets: [{ kind: "cidr", value: "2001:db8::/32" }],
+        allowExternalTargets: true,
+      }),
+    )
+    expect(scope.verifyTargets("proj-test", { networkTargets: ["2001:db8::1"], workspacePaths: [] }).allowed).toBe(
+      true,
+    )
+    expect(scope.verifyTargets("proj-test", { networkTargets: ["2001:db9::1"], workspacePaths: [] }).allowed).toBe(
+      false,
+    )
+  })
+
+  it("trata ::1 e a forma expandida como o mesmo endereço", () => {
+    const scope = new ScopeController()
+    scope.setProjectScope(
+      makeScope({ allowedTargets: [{ kind: "ip", value: "0:0:0:0:0:0:0:1" }] }),
+    )
+    expect(scope.verifyTargets("proj-test", { networkTargets: ["::1"], workspacePaths: [] }).allowed).toBe(true)
   })
 })
