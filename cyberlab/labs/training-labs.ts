@@ -3,6 +3,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import http from "node:http"
 import type { AddressInfo } from "node:net"
 import path from "node:path"
+import {
+  buildLabInvestigationKit,
+  buildMemorySeed,
+  labInvestigationKitExists,
+  writeLabInvestigationKit,
+} from "./investigation-kit.js"
 
 export type TrainingLabCategory =
   | "web_api_security"
@@ -770,7 +776,7 @@ detection:
             }
           : {}
 
-        if (u.pathname === "/" || u.pathname === "/health") {
+        if (u.pathname === "/health") {
           const sampleAlgNone = `${Buffer.from('{"alg":"none","typ":"JWT"}').toString("base64url")}.${Buffer.from('{"sub":"user-1001","role":"admin"}').toString("base64url")}.`
           return send(
             200,
@@ -785,6 +791,80 @@ detection:
             },
             secHeaders,
           )
+        }
+
+        // v6.4.2 — `/` agora abre uma página HTML legível no navegador (o lab é uma API REST:
+        // abrir a URL no browser devolvia JSON cru e parecia "quebrado"). /health segue JSON p/ scripts.
+        if (u.pathname === "/") {
+          const sampleAlgNone = `${Buffer.from('{"alg":"none","typ":"JWT"}').toString("base64url")}.${Buffer.from('{"sub":"user-1001","role":"admin"}').toString("base64url")}.`
+          const flagRow = (label: string, on: boolean) =>
+            `<tr><td><code>${label}</code></td><td class="${on ? "on" : "off"}">${on ? "LIGADO (seguro)" : "DESLIGADO (vulnerável)"}</td></tr>`
+          const publicHost = String(req.headers.host || `127.0.0.1`)
+          const cmd = `curl -s -i -H "Authorization: Bearer token-user-a-1001" http://${publicHost}/api/v1/accounts/1002`
+          const html = [
+            "<!doctype html>",
+            '<html lang="pt-BR"><head><meta charset="utf-8">',
+            '<meta name="viewport" content="width=device-width, initial-scale=1">',
+            "<title>CyberLab OS — Laboratório OWASP API Security</title>",
+            "<style>",
+            "  :root { color-scheme: dark; }",
+            "  body { margin:0; background:#0b0f14; color:#e6edf3; font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }",
+            "  .wrap { max-width: 980px; margin:0 auto; padding:28px 22px 60px; }",
+            "  h1 { font-size:20px; margin:0 0 4px; color:#7ee787; }",
+            "  h2 { font-size:15px; margin:26px 0 8px; color:#79c0ff; border-bottom:1px solid #21262d; padding-bottom:6px; }",
+            "  .sub { color:#8b949e; margin:0 0 18px; }",
+            "  .pill { display:inline-block; background:#1f6feb22; border:1px solid #1f6feb66; color:#79c0ff;",
+            "          padding:2px 8px; border-radius:999px; font-size:12px; margin-right:6px; }",
+            "  table { border-collapse:collapse; width:100%; margin-top:8px; }",
+            "  th,td { border:1px solid #21262d; padding:6px 9px; text-align:left; vertical-align:top; }",
+            "  th { background:#161b22; color:#8b949e; font-weight:600; }",
+            "  code { background:#161b22; padding:1px 5px; border-radius:4px; color:#ffa657; }",
+            "  .on { color:#7ee787; } .off { color:#ff7b72; }",
+            "  a { color:#79c0ff; }",
+            "  .warn { background:#3d1d00; border:1px solid #9e6a03; color:#f2cc60; padding:10px 12px; border-radius:8px; margin-top:18px; }",
+            "  pre { background:#161b22; border:1px solid #21262d; padding:10px 12px; border-radius:8px; overflow-x:auto; }",
+            "  .muted { color:#8b949e; }",
+            "</style></head><body>",
+            '<div class="wrap">',
+            "<h1>CyberLab OS — Laboratório OWASP API Security</h1>",
+            `<p class='sub'><span class='pill'>${labId}</span><span class='pill'>alvo de treino</span>`,
+            "<span class='pill'>API REST — sem interface própria</span></p>",
+            '<div class="warn"><strong>Esta porta é o ALVO da investigação, não a aplicação.</strong><br>',
+            "O CyberLab OS roda no terminal: <code>bun run cyberlab lab status &lt;labId&gt;</code> mostra os próximos ",
+            "passos e <code>bun run cyberlab exec -- curl ...</code> executa ferramentas dentro do escopo.<br>",
+            "Este laboratório existe apenas para ser testado (Burp, curl, scanners) dentro do escopo autorizado de loopback.</div>",
+            "<h2>1. Controles de segurança (server-config.json)</h2>",
+            "<table><tr><th>Controle</th><th>Estado</th></tr>",
+            flagRow("enforceAccountOwnership", cfg.enforceAccountOwnership),
+            flagRow("rejectAlgNoneJwt", cfg.rejectAlgNoneJwt),
+            flagRow("sanitizeSqlQuery", cfg.sanitizeSqlQuery),
+            flagRow("enableSecurityHeaders", cfg.enableSecurityHeaders),
+            "</table>",
+            '<p class="muted">Edite <code>server-config.json</code> no workspace do lab e recarregue — o servidor relê o arquivo a cada requisição.</p>',
+            "<h2>2. Endpoints</h2>",
+            "<table><tr><th>Método</th><th>Rota</th><th>Invariante esperado</th></tr>",
+            '<tr><td>GET</td><td><a href="/health">/health</a></td><td>Diagnóstico JSON (usado por scripts e sondas)</td></tr>',
+            '<tr><td>GET</td><td><a href="/openapi.json">/openapi.json</a></td><td>Especificação não revela rotas administrativas</td></tr>',
+            '<tr><td>GET</td><td><a href="/api/v1/accounts/1001">/api/v1/accounts/1001</a></td><td>Somente o titular lê a própria conta</td></tr>',
+            '<tr><td>GET</td><td><a href="/api/v1/accounts/1002">/api/v1/accounts/1002</a></td><td>Qualquer leitura cruzada deve retornar <code>403</code></td></tr>',
+            '<tr><td>GET</td><td><a href="/api/v1/admin/debug">/api/v1/admin/debug</a></td><td>Exige assinatura JWT válida + <code>role=admin</code></td></tr>',
+            '<tr><td>GET</td><td><a href="/api/v1/search?q=test">/api/v1/search?q=</a></td><td>Erro genérico, sem ecoar a consulta SQL</td></tr>',
+            "</table>",
+            "<h2>3. Identidades de teste</h2>",
+            "<table><tr><th>Identidade</th><th>Credencial</th></tr>",
+            '<tr><td>User A (conta 1001)</td><td><code>Authorization: Bearer token-user-a-1001</code></td></tr>',
+            '<tr><td>User B (conta 1002)</td><td><code>Authorization: Bearer token-user-b-1002</code></td></tr>',
+            `<tr><td>Admin forjado (alg:none)</td><td><code>Authorization: Bearer ${sampleAlgNone}</code></td></tr>`,
+            "</table>",
+            "<h2>4. Experimento rápido</h2>",
+            `<pre>${cmd}</pre>`,
+            '<p class="muted">Esperado se vulnerável: <code>200</code> com <code>bob@corp.lab</code>; esperado após ligar ',
+            "<code>enforceAccountOwnership</code>: <code>403</code>. O protocolo completo está em <code>EXPERIMENTS.md</code>, ",
+            "as hipóteses em <code>HYPOTHESES.md</code> e o modelo em <code>LAB_SYSTEM_MODEL.md</code>, no workspace do lab.</p>",
+            '<p class="muted">Dica: rode por <code>bun run cyberlab exec -- curl ...</code> para gravar a saída como evidência com SHA-256.</p>',
+            "</div></body></html>",
+          ].join("\n")
+          return send(200, html, { ...secHeaders, "Content-Type": "text/html; charset=utf-8" })
         }
 
         if (u.pathname === "/openapi.json") {
@@ -994,11 +1074,22 @@ detection:
     const handler = this.createHttpHandlerForLab(def.labId, wsRoot, tracker)
     let stateObj: RunningLabServerState | null = null
 
+    /**
+     * Host de escuta. O padrão continua sendo `127.0.0.1`: o lab é um ALVO de
+     * treino e não deve ser exposto em interface de rede (a modelagem do Kit de
+     * Investigação declara escopo autorizado somente em loopback).
+     *
+     * `CYBERLAB_LAB_HOST=0.0.0.0` é a válvula de escape para ambientes onde o
+     * navegador do operador NÃO roda na mesma máquina (preview remoto, container
+     * de sandbox): aí o loopback do servidor é inalcançável de fora.
+     */
+    const listenHost = process.env.CYBERLAB_LAB_HOST || "127.0.0.1"
+
     const listenOn = (port: number) =>
       new Promise<{ server: http.Server; port: number }>((resolve, reject) => {
         const srv = http.createServer(handler)
         srv.once("error", (err) => reject(err))
-        srv.listen(port, "127.0.0.1", () => {
+        srv.listen(port, listenHost, () => {
           const addr = srv.address() as AddressInfo
           resolve({ server: srv, port: addr.port })
         })
@@ -1021,7 +1112,41 @@ detection:
       recentRequests,
     }
     this.runningServers.set(def.labId, stateObj)
+
+    // v6.4: gera imediatamente o Kit de Investigação (Fases B/D/F) já com a porta REAL
+    if (buildLabInvestigationKit(def.labId, bound.port)) {
+      writeLabInvestigationKit(def.labId, wsRoot, bound.port)
+    }
+
     return this.getLabStatus(def.labId)
+  }
+
+  /**
+   * v6.4 — Garante que o Kit de Investigação existe (mesmo sem subir o servidor).
+   * Usa a porta real se o lab já estiver rodando; caso contrário, o hint do catálogo.
+   */
+  ensureInvestigationKit(labId: string): string[] | null {
+    const def = BUILTIN_TRAINING_LABS.find((l) => l.labId === labId)
+    if (!def) throw new Error(`Unknown training lab "${labId}"`)
+    const wsRoot = this.getLabWorkspacePath(labId)
+    const running = this.runningServers.get(labId)
+    const port = running?.port ?? def.defaultPortHint ?? null
+    const files = writeLabInvestigationKit(labId, wsRoot, port)
+    return files ? Object.values(files) : null
+  }
+
+  hasInvestigationKit(labId: string): boolean {
+    return labInvestigationKitExists(this.getLabWorkspacePath(labId))
+  }
+
+  /** Patch pronto para `CyberLabKnowledgeEngine.updateInvestigationMemory()`. */
+  buildInvestigationMemorySeed(labId: string) {
+    const def = BUILTIN_TRAINING_LABS.find((l) => l.labId === labId)
+    if (!def) throw new Error(`Unknown training lab "${labId}"`)
+    const running = this.runningServers.get(labId)
+    const kit = buildLabInvestigationKit(labId, running?.port ?? def.defaultPortHint ?? null)
+    if (!kit) return null
+    return buildMemorySeed(kit)
   }
 
   async resetLab(labId: string): Promise<TrainingLabStatus> {
@@ -1031,6 +1156,10 @@ detection:
     }
     const wsRoot = this.getLabWorkspacePath(def.labId)
     this.writeLabFiles(def.labId, wsRoot)
+    const running = this.runningServers.get(def.labId)
+    if (buildLabInvestigationKit(def.labId, running?.port ?? def.defaultPortHint ?? null)) {
+      writeLabInvestigationKit(def.labId, wsRoot, running?.port ?? def.defaultPortHint ?? null)
+    }
     return this.getLabStatus(def.labId)
   }
 

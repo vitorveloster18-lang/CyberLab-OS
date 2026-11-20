@@ -89,17 +89,31 @@ export interface FindingDto {
   proposedRemediation?: string
 }
 
+export interface ArsenalSlotHealthIssueDto {
+  slotId: string
+  name: string
+  kind: "ghost_custom_slot" | "duplicate_custom_slot" | "non_executable_target" | "unconfigured_custom_slot"
+  severity: "warning" | "error"
+  message: string
+  configuredPath: string | null
+  suggestion: string
+  duplicateOfSlotId: string | null
+}
+
 export interface ExternalToolStatusDto {
   toolId: string
   displayName: string
   available: boolean
   resolvedPath: string | null
-  sourceLocation: "workspace_local_bin" | "system_path" | "custom_config" | "missing"
+  sourceLocation: "workspace_local_bin" | "system_path" | "custom_config" | "wsl_distro" | "missing"
   licenseSpdx: string
   integrationMode: "plugin_only" | "approved_internal_process" | "mcp"
   governedCapabilityId: string | null
   installHint: string
   description: string
+  installHintWsl?: string
+  wslDistro?: string | null
+  wslPath?: string | null
 }
 
 export interface ExternalToolsOverviewDto {

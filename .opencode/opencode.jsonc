@@ -1,5 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  // CyberLab OS: modelo gratuito padrão (sem API key) para o TUI funcionar
+  // logo após o clone, sem configuração manual.
+  "model": "opencode/deepseek-v4.1-flash-free",
   "provider": {},
   "permission": {},
   "references": {
@@ -12,7 +15,37 @@
       "description": "Contains opencode logs and data",
     },
   },
-  "mcp": {},
+  // CyberLab OS: skills operacionais vivem em skills/ (raiz do repo), que é
+  // também o diretório lido pelo CyberLabSkillCatalog. Sem isto o agente
+  // não enxerga as skills de cybersegurança.
+  "skills": ["../skills"],
+  // NOTA: opencode-session-handoff NÃO é usado. O pacote npm (1.1.6) é
+  // formato OpenCode 1.x (exporta função solta) e o OpenCode 2.x exige
+  // { id, setup } — o carregamento falha com "Plugin must export a
+  // default definition with an id and an effect or setup function".
+  // Para investigações longas, use a memória investigativa do CyberLab
+  // (investigation_memory_update/read via MCP), que persiste o estado
+  // na vault entre sessões — mecanismo nativo e estruturado.
+  // CyberLab OS: servidor MCP da Biblioteca de Conhecimento + memória
+  // investigativa (search_knowledge, read_document, investigation_memory_*).
+  // Sem isto o Orchestrator não acessa a biblioteca nem a memória.
+  //
+  // "cwd": "../.." — o OpenCode spawna o servidor com cwd = diretório da
+  // sessão (packages/cli no launch padrão `bun run cyberlab:tui`), e o
+  // caminho do script é relativo. Sem o cwd, o spawn falha com
+  // "Module not found cyberlab/mcp/knowledge-mcp-stdio.ts". O servidor
+  // também usa process.cwd() como workspaceRoot (vault em <repo>/vault),
+  // então o cwd precisa ser a raiz do repo. Se abrir o TUI a partir da
+  // raiz do repo, troque para ".".
+  "mcp": {
+    "servers": {
+      "cyberlab-knowledge": {
+        "type": "local",
+        "command": ["bun", "run", "cyberlab/mcp/knowledge-mcp-stdio.ts"],
+        "cwd": "../.."
+      }
+    }
+  },
   "tools": {
     "github-pr-search": false,
   },

@@ -53,7 +53,10 @@ const ProposeFindingInput = Schema.Struct({
   severity: Schema.Literals(["info", "low", "medium", "high", "critical"]),
   confidence: Schema.Number,
   evidenceIds: Schema.Array(Schema.String),
-  affectedAssets: Schema.Array(Schema.String),
+  // Opcional: nem todo finding tem ativos afetados triviais de listar (ex.:
+  // bypass de guard, falha de processo). O schema do finding aceita lista
+  // vazia; exigir o campo só atrapalhava o agente.
+  affectedAssets: Schema.optionalKey(Schema.Array(Schema.String)),
   proposedRemediation: Schema.optionalKey(Schema.String),
 })
 
@@ -80,19 +83,6 @@ const DelegatePartnerOutput = Schema.Struct({
   status: Schema.String,
   summary: Schema.String,
   unreviewedFindingCount: Schema.Number,
-})
-
-const ExternalControlInput = Schema.Struct({
-  operation: Schema.Literals(["list_tools", "list_arsenal_slots", "sync_inbox"]).annotate({
-    description:
-      "Inspect externally installed tools & v5.0 Real Arsenal Slots (Windows PowerShell + WSL2 Kali + Web UIs) or sync manual external tool outputs from .cyberlab/inbox/",
-  }),
-})
-
-const ExternalControlOutput = Schema.Struct({
-  availableTools: Schema.Array(Schema.String),
-  ingestedEvidenceIds: Schema.Array(Schema.String),
-  summary: Schema.String,
 })
 
 const failTool = (label: string, error?: unknown) =>
@@ -235,7 +225,7 @@ export const Plugin = {
                     severity: input.severity,
                     confidence: input.confidence,
                     evidenceIds: [...input.evidenceIds],
-                    affectedAssets: [...input.affectedAssets],
+                    affectedAssets: [...(input.affectedAssets ?? [])],
                     ...(input.proposedRemediation !== undefined
                       ? { proposedRemediation: input.proposedRemediation }
                       : {}),
@@ -332,64 +322,6 @@ export const Plugin = {
             }),
         })
 
-        editor.add({
-          name: "cyberlab_external_control",
-          options: { codemode: false },
-          description:
-            "Unified Control Plane for external security tools and manual operator runs: inspect installed external tools or synchronize .cyberlab/inbox/ artifacts into SHA-256 evidence.",
-          input: ExternalControlInput,
-          output: ExternalControlOutput,
-          execute: (input) =>
-            Effect.gen(function* () {
-              const ws = yield* getWorkspace()
-              const tools = yield* Effect.tryPromise({
-                try: () => ws.listExternalTools(),
-                catch: (e) => failTool("cyberlab_external_control", e),
-              })
-              const availableTools = tools.filter((t) => t.available).map((t) => t.toolId)
-
-              if (input.operation === "sync_inbox") {
-                const synced = yield* Effect.tryPromise({
-                  try: () => ws.syncExternalInbox("assistant:external-control"),
-                  catch: (e) => failTool("cyberlab_external_control", e),
-                })
-                const ids = synced.ingested.map((i) => i.evidenceId)
-                const summary = `Synced .cyberlab/inbox: ${ids.length} artifact(s) ingested [${ids.join(", ") || "none"}]; available external tools: ${availableTools.join(", ") || "none"}.`
-                return {
-                  output: { availableTools, ingestedEvidenceIds: ids, summary },
-                  content: summary,
-                }
-              }
-
-              if (input.operation === "list_arsenal_slots") {
-                const arsenal = yield* Effect.tryPromise({
-                  try: () => ws.getArsenalOverview(false),
-                  catch: (e) => failTool("cyberlab_external_control", e),
-                })
-                const installedIds = arsenal.slots.filter((s) => s.installed).map((s) => s.slotId)
-                const lines = arsenal.slots.map(
-                  (s) =>
-                    `${s.slotId} (${s.name}) [${s.kind}]: ${s.installed ? `INSTALLED via ${s.activeRuntime} (${s.resolvedPath ?? s.embedUrl ?? ""})` : "NOT INSTALLED"}`,
-                )
-                const summary = `WSL2=${arsenal.environment.preferredWslDistro || "none"} | Installed Slots (${installedIds.length}/${arsenal.slots.length}):\n${lines.join("\n")}`
-                return {
-                  output: { availableTools: installedIds, ingestedEvidenceIds: [], summary },
-                  content: summary,
-                }
-              }
-
-              const summary = tools
-                .map(
-                  (t) =>
-                    `${t.toolId}: ${t.available ? `READY (${t.resolvedPath})` : "not installed"}${t.governedCapabilityId ? ` -> ${t.governedCapabilityId}` : ""}`,
-                )
-                .join("\n")
-              return {
-                output: { availableTools, ingestedEvidenceIds: [], summary },
-                content: summary,
-              }
-            }),
-        })
       })
       .pipe(Effect.orDie)
   }),

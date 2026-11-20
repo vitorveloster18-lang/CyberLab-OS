@@ -21,10 +21,15 @@ describe("CyberLab Native Skills & Policy Separation", () => {
 
     expect(skills.map((s) => s.id)).toEqual([
       "code-audit",
+      "digital-forensics",
       "evidence-review",
+      "incident-response",
       "mobile-forensics",
       "network-assessment",
+      "network-recon",
+      "pentest-methodology",
       "reverse-engineering",
+      "web-appsec",
       "web-assessment",
     ])
 

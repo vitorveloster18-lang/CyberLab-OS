@@ -44,7 +44,16 @@ const REDACTION_PATTERNS: ReadonlyArray<{ category: string; regex: RegExp; repla
   },
   {
     category: "authorization_header",
-    regex: /((?:Authorization|Proxy-Authorization)\s*:\s*(?:Bearer|Basic|Token)\s+)(?!\[REDACTED:)[^\r\n"'\\\s]+/gi,
+    // Aspas opcionais ao redor do separador: dentro de JSON o header vem como
+    // `"authorization":"Bearer x"` e o padrao anterior (dois-pontos limpos) nao
+    // casava — o token vazava inteiro no corpo de resposta arquivado.
+    regex: /((?:Authorization|Proxy-Authorization)["']?\s*[=:]\s*["']?\s*(?:Bearer|Basic|Token)\s+)(?!\[REDACTED:)[^\r\n"'\\\s]+/gi,
+    replacement: "$1[REDACTED:AUTH_TOKEN]",
+  },
+  {
+    category: "bearer_token",
+    // Token solto no corpo/prosa, sem o prefixo `Authorization:`.
+    regex: /\b((?:Bearer|Basic|Token)\s+)(?!\[REDACTED:)([A-Za-z0-9\-._~+/=]{8,})/g,
     replacement: "$1[REDACTED:AUTH_TOKEN]",
   },
   {
@@ -79,7 +88,7 @@ const REDACTION_PATTERNS: ReadonlyArray<{ category: string; regex: RegExp; repla
   },
   {
     category: "secret_assignment",
-    regex: /((?:password|passwd|secret|client_secret|access_token|refresh_token)\s*[=:]\s*["']?)(?!\[REDACTED:)([^"'\s&;,\r\n\\]{4,})(["']?)/gi,
+    regex: /((?:password|passwd|secret|client_secret|access_token|refresh_token|auth_token|api_key|apikey)["']?\s*[=:]\s*["']?)(?!\[REDACTED:)([^"'\s&;,\r\n\\]{4,})(["']?)/gi,
     replacement: "$1[REDACTED:SECRET]$3",
   },
 ]
@@ -100,6 +109,9 @@ export function redactSensitiveContent(input: string): RedactionResult {
       }
       if (rule.replacement === "$1[REDACTED:SECRET]$3") {
         return `${args[1]}[REDACTED:SECRET]${args[3]}`
+      }
+      if (rule.replacement === "$1[REDACTED:AUTH_TOKEN]") {
+        return `${args[1]}[REDACTED:AUTH_TOKEN]`
       }
       return `${args[1]}${rule.replacement.slice(2)}`
     })

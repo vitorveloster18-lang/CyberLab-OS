@@ -1,0 +1,9 @@
+selo_do_lote : c159b2ab5680deca87805a29ca8d7988c51ba0a29824a6ec8f2903580763e75e
+algoritmo    : SHA-256(manifest.json)
+gerado_em    : 2026-11-04T12:59:04.868Z
+lab          : lab-owasp-api-bola @ http://127.0.0.1:35021
+requisicoes  : 19
+
+Para verificar:
+  sha256sum manifest.json      # Linux/WSL2
+  (Get-FileHash .\manifest.json -Algorithm SHA256).Hash.ToLower()   # PowerShell

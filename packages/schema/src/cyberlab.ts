@@ -237,58 +237,6 @@ export namespace CyberLab {
     markdown: Schema.String,
   })
 
-  export const ExternalToolInfo = Schema.Struct({
-    toolId: Schema.String,
-    displayName: Schema.String,
-    available: Schema.Boolean,
-    resolvedPath: Schema.NullOr(Schema.String),
-    sourceLocation: Schema.Literals(["workspace_local_bin", "system_path", "custom_config", "missing"]),
-    licenseSpdx: Schema.String,
-    integrationMode: Schema.Literals(["plugin_only", "approved_internal_process", "mcp"]),
-    governedCapabilityId: Schema.NullOr(Schema.String),
-    installHint: Schema.String,
-    description: Schema.String,
-  })
-
-  export const ExternalToolsOverview = Schema.Struct({
-    pendingInboxCount: Schema.Number,
-    inboxDirectory: Schema.String,
-    tools: Schema.Array(ExternalToolInfo),
-  })
-
-  export const IngestExternalActionInput = Schema.Struct({
-    toolId: Schema.String,
-    title: optional(Schema.String),
-    origin: optional(Schema.Literals(["manual_external", "external_plugin", "mcp_bridge", "inbox_drop"])),
-    target: optional(Schema.String),
-    commandSummary: optional(Schema.String),
-    rawOutput: Schema.String,
-    mediaType: optional(Schema.String),
-  })
-
-  export const IngestExternalActionOutput = Schema.Struct({
-    evidenceId: Schema.String,
-    sha256: Schema.String,
-    redactionStatus: Schema.Literals(["not_checked", "checked", "redacted"]),
-    scopeAuditStatus: Schema.Literals(["in_scope", "out_of_scope_flagged", "no_target_declared"]),
-    scopeReason: Schema.String,
-    origin: Schema.Literals(["manual_external", "external_plugin", "mcp_bridge", "inbox_drop"]),
-    toolId: Schema.String,
-  })
-
-  export const InboxSyncOutput = Schema.Struct({
-    scannedCount: Schema.Number,
-    ingested: Schema.Array(
-      Schema.Struct({
-        fileName: Schema.String,
-        archivedTo: Schema.String,
-        evidenceId: Schema.String,
-        sha256: Schema.String,
-      }),
-    ),
-    skippedReasons: Schema.Array(Schema.String),
-  })
-
   export const ReadEvidenceInput = Schema.Struct({
     evidenceId: Schema.String,
   })
@@ -320,6 +268,14 @@ export namespace CyberLab {
     message: Schema.String,
     manualPowershellCommand: Schema.String,
     manualBashCommand: Schema.String,
+    /**
+     * `false` quando nada respondia na porta do proxy no momento do lançamento.
+     * O navegador abre mesmo assim, e `message` já vem com o diagnóstico do
+     * `ERR_PROXY_CONNECTION_FAILED` que o Chrome exibiria sem contexto nenhum.
+     */
+    proxyReachable: optional(Schema.Boolean),
+    /** Endereços testados — diferenciam "Burp parado" de "Burp rodando no WSL2". */
+    triedHosts: optional(Schema.Array(Schema.String)),
   })
 
   export const ArsenalCategoryInfo = Schema.Struct({
@@ -398,12 +354,37 @@ export namespace CyberLab {
     lastProbedAt: Schema.NullOr(Schema.String),
   })
 
+  export const ArsenalSlotHealthInfo = Schema.Struct({
+    slotId: Schema.String,
+    name: Schema.String,
+    kind: Schema.Literals([
+      "ghost_custom_slot",
+      "duplicate_custom_slot",
+      "non_executable_target",
+      "unconfigured_custom_slot",
+      "requires_real_kernel",
+    ]),
+    severity: Schema.Literals(["warning", "error"]),
+    message: Schema.String,
+    configuredPath: Schema.NullOr(Schema.String),
+    suggestion: Schema.String,
+    duplicateOfSlotId: Schema.NullOr(Schema.String),
+  })
+
   export const ArsenalOverview = Schema.Struct({
     environment: ArsenalEnvironmentSummaryInfo,
     categories: Schema.Array(ArsenalCategoryInfo),
     slots: Schema.Array(ArsenalSlotStatusInfo),
     runs: Schema.Array(ArsenalLiveRunInfo),
     availableBrowsers: optional(Schema.Array(ProxyBrowserInfo)),
+    health: Schema.Array(ArsenalSlotHealthInfo),
+  })
+
+  export const ArsenalPruneCustomSlotsInput = Schema.Struct({
+    removeGhosts: optional(Schema.Boolean),
+    removeDuplicates: optional(Schema.Boolean),
+    /** v6.7: confirmação humana exigida pela guarda de ações destrutivas. */
+    confirm: optional(Schema.Boolean),
   })
 
   export const ArsenalConfigPatchInput = Schema.Struct({
@@ -429,6 +410,8 @@ export namespace CyberLab {
 
   export const ArsenalCustomSlotRemoveInput = Schema.Struct({
     slotId: Schema.String,
+    /** v6.7: confirmação humana exigida pela guarda de ações destrutivas. */
+    confirm: optional(Schema.Boolean),
   })
 
   export const ArsenalLaunchInput = Schema.Struct({
@@ -639,6 +622,8 @@ export namespace CyberLab {
     preferredPort: optional(Schema.Number),
     resetFiles: optional(Schema.Boolean),
     setActive: optional(Schema.Boolean),
+    /** v6.7: confirmação humana para `reset` e `stop` (destrutivos). */
+    confirm: optional(Schema.Boolean),
   })
 
   export const ManagedProjectInfo = Schema.Struct({
@@ -684,6 +669,59 @@ export namespace CyberLab {
     evidenceIds: optional(Schema.Array(Schema.String)),
     contextText: optional(Schema.String),
     timeoutMs: optional(Schema.Number),
+  })
+
+  export const VaultNoteSummaryInfo = Schema.Struct({
+    relativePath: Schema.String,
+    title: Schema.String,
+    folder: Schema.String,
+    tags: Schema.Array(Schema.String),
+    wikiLinks: Schema.Array(Schema.String),
+    snippet: Schema.String,
+    sizeBytes: Schema.Number,
+    updatedAt: Schema.String,
+  })
+
+  export const VaultOverviewInfo = Schema.Struct({
+    vaultRootDir: Schema.String,
+    isCustomPath: Schema.Boolean,
+    notes: Schema.Array(VaultNoteSummaryInfo),
+    allTags: Schema.Array(Schema.String),
+  })
+
+  export const VaultNoteDocumentInfo = Schema.Struct({
+    relativePath: Schema.String,
+    title: Schema.String,
+    content: Schema.String,
+    tags: Schema.Array(Schema.String),
+    wikiLinks: Schema.Array(Schema.String),
+    backlinks: Schema.Array(Schema.String),
+    updatedAt: Schema.String,
+  })
+
+  export const VaultReadInput = Schema.Struct({
+    relativePath: Schema.String,
+  })
+
+  export const VaultWriteInput = Schema.Struct({
+    relativePath: Schema.String,
+    content: Schema.String,
+  })
+
+  export const VaultWriteResult = Schema.Struct({
+    note: VaultNoteDocumentInfo,
+    overview: VaultOverviewInfo,
+  })
+
+  export const VaultDeleteInput = Schema.Struct({
+    relativePath: Schema.String,
+    /** v6.7: confirmação humana (risco `irreversible`). */
+    confirm: optional(Schema.Boolean),
+    confirmPhrase: optional(Schema.String),
+  })
+
+  export const VaultConfigInput = Schema.Struct({
+    customVaultRootDir: optional(Schema.NullOr(Schema.String)),
   })
 }
 

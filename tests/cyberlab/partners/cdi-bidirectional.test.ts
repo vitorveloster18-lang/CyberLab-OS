@@ -6,6 +6,67 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { CyberLabWorkspace, CyberLabWorkspaceManager } from "../../../cyberlab/index.js"
+import type { CyberLabExecutor } from "../../../cyberlab/contracts/execution.js"
+import { hasPython, pythonInvocation } from "../helpers/env-gates.js"
+
+/**
+ * Estes testes sobem parceiros CDI reais em Python. Sem interpretador no PATH eles sao
+ * PULADOS com motivo: no Windows o atalho da Microsoft Store devolvia exit 49 e o teste
+ * morria por timeout, o que parecia falha de produto e nao era.
+ */
+/**
+ * O CDI precisa de uma capability de risco moderado para exercitar o caminho de
+ * aprovacao humana. As bridges de ferramentas externas sairam do CyberLab (o operador
+ * usa as ferramentas do proprio Kali), entao o teste registra a sua propria capability
+ * de laboratorio em vez de depender de um wrapper de binario.
+ */
+const MOCK_SCAN_CAPABILITY_ID = "cdi-test.mock-network-scan"
+const MOCK_SCAN_INPUT_SCHEMA_ID = "cyberlab.cdi-test.mock-scan.input.v1"
+
+function registerMockScanCapability(ws: CyberLabWorkspace): void {
+  ws.schemas.registerValidator(MOCK_SCAN_INPUT_SCHEMA_ID, (value) => {
+    const input = value as { url?: unknown }
+    if (typeof input?.url !== "string" || input.url.length === 0) {
+      throw new Error("mock scan requer uma url")
+    }
+    return value
+  })
+  ws.executors.registerExecutor({
+    id: "cdi-test-mock-scan-executor",
+    version: "1.0.0",
+    async checkAvailability() {
+      return { available: true }
+    },
+    async validate(input) {
+      const value = input as { url?: unknown }
+      return typeof value?.url === "string" && value.url.length > 0
+        ? { valid: true, errors: [] }
+        : { valid: false, errors: ["url obrigatoria"] }
+    },
+    async execute() {
+      return { status: "succeeded", evidenceIds: [], summary: "mock scan executado" }
+    },
+  } satisfies CyberLabExecutor)
+  void ws.capabilities.register({
+    id: MOCK_SCAN_CAPABILITY_ID,
+    version: "1.0.0",
+    title: "Mock Network Scan (teste do hub CDI)",
+    description: "Capability sintetica de risco moderado usada apenas pelos testes do hub CDI.",
+    inputSchemaId: MOCK_SCAN_INPUT_SCHEMA_ID,
+    outputSchemaId: "cyberlab.cdi-test.mock-scan.output.v1",
+    risk: "moderate",
+    supportedModes: ["manual", "proposed", "approved"],
+    requiredPermissions: ["cyberlab:read", "cyberlab:network-probe"],
+    requiredScope: ["url_origin"],
+    executorId: "cdi-test-mock-scan-executor",
+    skillIds: ["web-assessment", "evidence-review"],
+    licenseRefs: ["MIT"],
+    enabled: true,
+  })
+}
+
+const PY = pythonInvocation()
+const pyTest = hasPython() ? test : test.skip
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url))
 const bridgeScriptPath = path.join(repoRoot, "integrations", "partners", "chat_py_bridge.py")
@@ -21,7 +82,9 @@ async function getFreePort(): Promise<number> {
   })
 }
 
-async function waitForHealth(port: number, timeoutMs = 6_000): Promise<void> {
+// 6s era pouco em runner carregado (o bridge Python sobe devagar no Windows).
+// Precisa ficar abaixo do timeout por teste (CI roda com --timeout 60000).
+async function waitForHealth(port: number, timeoutMs = 15_000): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
@@ -36,7 +99,7 @@ async function waitForHealth(port: number, timeoutMs = 6_000): Promise<void> {
 }
 
 describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", () => {
-  test("supports auto-generated or user-defined secrets, parallel multi-CDI dispatch (Salem + Kairos), and autonomous CDI -> CyberLab OS actions", async () => {
+  pyTest("supports auto-generated or user-defined secrets, parallel multi-CDI dispatch (Salem + Kairos), and autonomous CDI -> CyberLab OS actions", async () => {
     const tmpDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-cdi-bidir-"))
     mkdirSync(path.join(tmpDir, "logs"), { recursive: true })
     writeFileSync(
@@ -52,6 +115,7 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
       inMemoryDb: false,
     })
     await ws.ensureInitialized()
+    registerMockScanCapability(ws)
 
     // Expose CyberLab OS's bidirectional gateway over local HTTP
     const gatewayServer = Bun.serve({
@@ -120,9 +184,10 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
         "    affected_assets=['10.10.5.9']",
         ")",
         "",
-        "# Initiate a read_only capability directly + propose an external Nuclei check (queued for human approval)",
+        "# Initiate a read_only capability directly + propose a moderate-risk check (queued for human approval)",
+        `MOCK_SCAN_CAPABILITY_ID = "${MOCK_SCAN_CAPABILITY_ID}"`,
         "ro_exec = client.initiate_action('code-analysis.workspace-audit', {'subpath': 'logs', 'maxFiles': 5})",
-        "act_exec = client.initiate_action('external.nuclei-template-scan', {'url': 'http://127.0.0.1:8080'})",
+        "act_exec = client.initiate_action(MOCK_SCAN_CAPABILITY_ID, {'url': 'http://127.0.0.1:8080'})",
         "",
         "print(json.dumps({",
         "    'status': 'completed',",
@@ -157,13 +222,13 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
     )
 
     const salemProc = spawn(
-      "python3",
-      [bridgeScriptPath, "--partner-id", "salem", "--port", String(salemPort), "--mode", "arg", "--script", salemScript],
+      PY![0]!,
+      [...PY!.slice(1), bridgeScriptPath, "--partner-id", "salem", "--port", String(salemPort), "--mode", "arg", "--script", salemScript],
       { env: { ...process.env, CYBERLAB_PARTNER_SECRET: customSecret }, stdio: ["ignore", "pipe", "pipe"] },
     )
     const kairosProc = spawn(
-      "python3",
-      [bridgeScriptPath, "--partner-id", "kairos", "--port", String(kairosPort), "--mode", "arg", "--script", kairosScript],
+      PY![0]!,
+      [...PY!.slice(1), bridgeScriptPath, "--partner-id", "kairos", "--port", String(kairosPort), "--mode", "arg", "--script", kairosScript],
       { env: { ...process.env, CYBERLAB_PARTNER_SECRET: customSecret }, stdio: ["ignore", "pipe", "pipe"] },
     )
 
@@ -209,7 +274,7 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
 
       const salemRes = parallelReport.results.find((r) => r.partnerId === "salem")!
       expect(salemRes.ok).toBe(true)
-      expect(salemRes.outcome?.result?.summary).toContain("caps=11")
+      expect(salemRes.outcome?.result?.summary).toContain("caps=2")
       expect(salemRes.outcome?.result?.summary).toContain("dotenv_blocked=True")
       expect(salemRes.outcome?.result?.summary).toContain("ro=succeeded")
       expect(salemRes.outcome?.result?.summary).toContain("act=awaiting_approval")
@@ -221,7 +286,7 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
       expect(allFindings.some((f) => f.title.includes("Kairos"))).toBe(true)
 
       const pendingApprovals = await ws.listPendingApprovals()
-      expect(pendingApprovals.some((a) => a.capabilityId === "external.nuclei-template-scan")).toBe(true)
+      expect(pendingApprovals.some((a) => a.capabilityId === MOCK_SCAN_CAPABILITY_ID)).toBe(true)
 
       const hubOverview = ws.cdiHub.getOverview()
       expect(hubOverview.inboundActivity.length).toBeGreaterThanOrEqual(6)
@@ -274,7 +339,7 @@ describe("Bidirectional Multi-CDI Partner Hub & Python CyberLabOSClient SDK", ()
     }
   })
 
-  test("autonomous peer CDIs execute all 9 canonical gateway actions (including action.status & autonomous_in_scope) with individual profiles", async () => {
+  pyTest("autonomous peer CDIs execute all 9 canonical gateway actions (including action.status & autonomous_in_scope) with individual profiles", async () => {
     const tmpDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-cdi-peer-9actions-"))
     writeFileSync(path.join(tmpDir, "architecture-notes.md"), "# Curated Lab Notes\nTarget API v2 on loopback.\n", "utf8")
 
@@ -411,7 +476,7 @@ print(json.dumps({
         "utf8",
       )
 
-      const proc = Bun.spawn(["python3", novaAutonomousScript], { stdout: "pipe", stderr: "pipe" })
+      const proc = Bun.spawn([...PY!, novaAutonomousScript], { stdout: "pipe", stderr: "pipe" })
       const [stdoutText, stderrText, exitCode] = await Promise.all([
         new Response(proc.stdout).text(),
         new Response(proc.stderr).text(),
@@ -461,7 +526,7 @@ print(json.dumps({
     }
   })
 
-  test("unshackled CDI full autonomy: project creation, live training labs, code authoring/patching, and full runtime source inspection", async () => {
+  pyTest("unshackled CDI full autonomy: project creation, live training labs, code authoring/patching, and full runtime source inspection", async () => {
     const tmpRoot = mkdtempSync(path.join(os.tmpdir(), "cyberlab-cdi-full-autonomy-"))
     const baseProjectDir = path.join(tmpRoot, "initial-workspace")
     mkdirSync(baseProjectDir, { recursive: true })
@@ -607,7 +672,7 @@ print(json.dumps({
         "utf8",
       )
 
-      const proc = Bun.spawn(["python3", kairosScript], { stdout: "pipe", stderr: "pipe" })
+      const proc = Bun.spawn([...PY!, kairosScript], { stdout: "pipe", stderr: "pipe" })
       const [stdoutText, stderrText, exitCode] = await Promise.all([
         new Response(proc.stdout).text(),
         new Response(proc.stderr).text(),

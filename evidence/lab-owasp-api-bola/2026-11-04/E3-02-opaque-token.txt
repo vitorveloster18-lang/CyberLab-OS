@@ -1,0 +1,23 @@
+# E3 — E3-02-opaque-token: Baseline — token opaco não-JWT
+capturado_em : 2026-11-04T12:59:04.862Z
+duracao_ms   : 1
+expectativa  : 401 (token sem role=admin não deve bastar).
+
+$ curl -s -i -H "Authorization: Bearer token-user-a-1001" http://127.0.0.1:35021/api/v1/admin/debug
+
+>>> REQUISICAO
+GET /api/v1/admin/debug HTTP/1.1
+Host: 127.0.0.1:35021
+Authorization: Bearer token-user-a-1001
+
+<<< RESPOSTA
+HTTP/1.1 401 Unauthorized
+connection: keep-alive
+content-type: application/json; charset=utf-8
+date: Wed, 04 Nov 2026 12:59:04 GMT
+keep-alive: timeout=5
+transfer-encoding: chunked
+
+{
+  "error": "Valid signed admin JWT required"
+}

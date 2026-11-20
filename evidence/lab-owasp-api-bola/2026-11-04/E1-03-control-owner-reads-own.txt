@@ -1,0 +1,25 @@
+# E1 — E1-03-control-owner-reads-own: Controle — User B lendo a PRÓPRIA conta (isola o token como variável)
+capturado_em : 2026-11-04T12:59:04.860Z
+duracao_ms   : 0
+expectativa  : 200 — prova que a diferença em E1-02 vem do token, não do ID.
+
+$ curl -s -i -H "Authorization: Bearer token-user-b-1002" http://127.0.0.1:35021/api/v1/accounts/1002
+
+>>> REQUISICAO
+GET /api/v1/accounts/1002 HTTP/1.1
+Host: 127.0.0.1:35021
+Authorization: Bearer token-user-b-1002
+
+<<< RESPOSTA
+HTTP/1.1 200 OK
+connection: keep-alive
+content-type: application/json; charset=utf-8
+date: Wed, 04 Nov 2026 12:59:04 GMT
+keep-alive: timeout=5
+transfer-encoding: chunked
+
+{
+  "accountId": "1002",
+  "owner": "bob@corp.lab",
+  "balanceUsd": 94500
+}

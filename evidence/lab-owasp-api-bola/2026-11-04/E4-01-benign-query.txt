@@ -1,0 +1,29 @@
+# E4 — E4-01-benign-query: Baseline — consulta benigna
+capturado_em : 2026-11-04T12:59:04.862Z
+duracao_ms   : 0
+expectativa  : 200 com resultados.
+
+$ curl -s -i "http://127.0.0.1:35021/api/v1/search?q=test"
+
+>>> REQUISICAO
+GET /api/v1/search?q=test HTTP/1.1
+Host: 127.0.0.1:35021
+
+<<< RESPOSTA
+HTTP/1.1 200 OK
+connection: keep-alive
+content-type: application/json; charset=utf-8
+date: Wed, 04 Nov 2026 12:59:04 GMT
+keep-alive: timeout=5
+transfer-encoding: chunked
+
+{
+  "query": "test",
+  "results": [
+    {
+      "id": "tx-01",
+      "memo": "Lab transfer",
+      "amount": 42
+    }
+  ]
+}

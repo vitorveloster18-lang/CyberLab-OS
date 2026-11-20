@@ -1,4 +1,4 @@
-import { createSignal, Show, startTransition, Suspense, type ParentProps } from "solid-js"
+import { Show, startTransition, Suspense, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
@@ -26,9 +26,6 @@ import {
 import { createPanelMotion, guardClosingFocus, panelOpacity } from "@/shell/panel-motion"
 import { createSidebarPeek } from "@/shell/sidebar-peek"
 import { windowDragEnabled } from "@/session/header/drag-area"
-import { Icon } from "@opencode/ui/icon"
-import { useCyberLabWorkbench } from "@/cyberlab-workbench/state"
-import { CyberLabCenterStage, CyberLabLeftExplorer } from "@/cyberlab-workbench/workbench"
 
 // How far Home steps along a peek's header to clear the collapsed toggle: to the toggle's end, from the sidebar's 18px
 // start padding.
@@ -206,13 +203,10 @@ export default function Layout(props: ParentProps) {
   const bottomTitlebar = () => mobile() && preferences.general.mobileTitlebarPosition() === "bottom"
   const dragInset = () => windowDragEnabled(platform) && !mobile()
 
-  const wbShell = useCyberLabWorkbench()
-  const antigravityActive = () => Boolean(wbShell?.ui.open) && !settings.active() && !mobile()
 
   return (
     <div
       class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
-      classList={{ "h-dvh max-h-dvh overflow-hidden": antigravityActive() }}
       style={{
         // Mobile panels only need clearance for their outer border.
         "--shell-inline-inset": mobile() ? "1px" : "8px",
@@ -229,7 +223,7 @@ export default function Layout(props: ParentProps) {
       }}
     >
       <Titlebar verticalTabs={verticalTabs() ? { mount: state.tabsMount } : undefined} />
-      <div class="relative flex flex-1 min-h-0 min-w-0 flex-row" classList={{ "overflow-hidden": antigravityActive() }}>
+      <div class="relative flex flex-1 min-h-0 min-w-0 flex-row">
         {/* The empty inset above the panels moves the window, as the titlebar does. */}
         <Show when={dragInset()}>
           <div
@@ -248,8 +242,7 @@ export default function Layout(props: ParentProps) {
             style={{ "--sidebar-peek-width": `${state.tabsWidth}px` }}
             ref={(element) => setState("tabsAside", element)}
             class="relative z-10 h-full min-h-0 shrink-0"
-            classList={{ hidden: antigravityActive() }}
-          >
+                      >
             {/* Skipped rather than display: none or inert, so neither direction restyles the sidebar's contents and
                   a reopen reuses their layout. */}
             <div
@@ -297,8 +290,7 @@ export default function Layout(props: ParentProps) {
         {/* Size containment collapses percentage-height descendants in WebKit. */}
         <main
           class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-content"
-          classList={{ "overflow-y-hidden items-stretch": antigravityActive() }}
-          style={{
+                    style={{
             "padding-top": bottomTitlebar() ? "env(safe-area-inset-top, 0px)" : "0px",
             "padding-bottom":
               bottomTitlebar() || settings.active()
@@ -310,173 +302,14 @@ export default function Layout(props: ParentProps) {
           }}
         >
           <PluginServerCover>
-            <CyberLabMainSplit mobile={mobile} settingsActive={settings.active}>
-              <Suspense>{props.children}</Suspense>
-            </CyberLabMainSplit>
+            <Suspense>{props.children}</Suspense>
           </PluginServerCover>
         </main>
-        <Show when={!antigravityActive()}>
-          <CollapsedSidebarToggle />
-        </Show>
+        <CollapsedSidebarToggle />
       </div>
       <PluginSlot at="window.bottom" input={{}} />
       <ToastRegion />
       <UploadToastHost />
     </div>
-  )
-}
-
-function CyberLabMainSplit(
-  props: ParentProps<{ mobile: () => boolean; settingsActive: () => boolean }>,
-) {
-  const wb = useCyberLabWorkbench()
-  const active = () => Boolean(wb?.ui.open) && !props.settingsActive()
-  const [draggingDivider, setDraggingDivider] = createSignal(false)
-
-  const startHorizontalDrag = (
-    e: MouseEvent,
-    initialWidth: number,
-    min: number,
-    max: number,
-    invertDelta: boolean,
-    onUpdate: (nextWidth: number) => void,
-  ) => {
-    if (e.button !== 0) return
-    e.preventDefault()
-    const startX = e.clientX
-    setDraggingDivider(true)
-    document.body.style.userSelect = "none"
-    document.body.style.cursor = "col-resize"
-
-    const onMove = (ev: MouseEvent) => {
-      const rawDelta = ev.clientX - startX
-      const delta = invertDelta ? -rawDelta : rawDelta
-      onUpdate(Math.min(max, Math.max(min, initialWidth + delta)))
-    }
-    const onUp = () => {
-      setDraggingDivider(false)
-      document.body.style.userSelect = ""
-      document.body.style.cursor = ""
-      window.removeEventListener("mousemove", onMove)
-      window.removeEventListener("mouseup", onUp)
-    }
-    window.addEventListener("mousemove", onMove)
-    window.addEventListener("mouseup", onUp)
-  }
-
-  return (
-    <Show when={active() && wb} fallback={props.children}>
-      {(service) => (
-        <div
-          data-slot="cyberlab-antigravity-workspace"
-          class="relative flex h-full max-h-full w-full min-h-0 min-w-0 flex-1 flex-row overflow-hidden rounded-t-lg border-t border-v2-border-border-base bg-v2-background-bg-base"
-        >
-          {/* Escudo transparente durante redimensionamento de colunas para iframes nunca engolirem o mouseup */}
-          <Show when={draggingDivider()}>
-            <div class="fixed inset-0 z-50 cursor-col-resize" />
-          </Show>
-
-          {/* 1. COLUNA ESQUERDA RETRÁTIL: Pastas, Outputs (.cyberlab/outputs) & Slots do Arsenal */}
-          <Show when={!props.mobile()}>
-            <div class="flex h-full max-h-full min-h-0 shrink-0 overflow-hidden">
-              <CyberLabLeftExplorer />
-            </div>
-            {/* Divisor dedicado FORA da barra de rolagem esquerda para nunca bloquear a rolagem vertical! */}
-            <Show when={service().ui.leftSidebarOpen}>
-              <div
-                title="Arraste para ajustar a largura da barra esquerda"
-                class="h-full w-[5px] shrink-0 cursor-col-resize bg-v2-border-border-base/40 hover:bg-emerald-500/70 transition-colors"
-                onMouseDown={(e) =>
-                  startHorizontalDrag(
-                    e,
-                    service().ui.leftSidebarWidth,
-                    210,
-                    440,
-                    false,
-                    (w) => service().setLeftSidebarWidth(w),
-                  )
-                }
-              />
-            </Show>
-          </Show>
-
-          {/* 2. COLUNA CENTRAL (TELA CHEIA): A Ferramenta Real Ocupa Tudo no Centro! */}
-          <div class="flex h-full max-h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            <CyberLabCenterStage />
-          </div>
-
-          {/* Divisor dedicado à esquerda do Agente OpenCode */}
-          <Show when={service().ui.rightAgentOpen && !props.mobile()}>
-            <div
-              title="Arraste para ajustar a largura do Agente OpenCode"
-              class="h-full w-[5px] shrink-0 cursor-col-resize bg-v2-border-border-base/40 hover:bg-emerald-500/70 transition-colors"
-              onMouseDown={(e) =>
-                startHorizontalDrag(
-                  e,
-                  service().ui.rightAgentWidth,
-                  300,
-                  620,
-                  true,
-                  (w) => service().setRightAgentWidth(w),
-                )
-              }
-            />
-          </Show>
-
-          {/* 3. COLUNA DIREITA ESTREITA & RETRÁTIL: Agente OpenCode IA (Mantém sessão viva sem desmontar!) */}
-          <aside
-            data-slot="cyberlab-right-agent-panel"
-            style={{
-              width: service().ui.rightAgentOpen && !props.mobile()
-                ? `${service().ui.rightAgentWidth}px`
-                : "38px",
-            }}
-            class="relative flex h-full max-h-full min-h-0 shrink-0 flex-col overflow-hidden border-l border-v2-border-border-base bg-v2-background-bg-deep/70"
-          >
-            {/* Barra colapsada de 38px quando o Agente IA está recolhido */}
-            <Show when={!service().ui.rightAgentOpen || props.mobile()}>
-              <div class="flex h-full w-[38px] flex-col items-center justify-between py-2 select-none">
-                <button
-                  type="button"
-                  title="Expandir Agente OpenCode IA"
-                  class="inline-flex size-7 items-center justify-center rounded-md border border-v2-border-border-base bg-v2-background-bg-base text-emerald-500 hover:border-emerald-500 cursor-pointer"
-                  onClick={() => service().toggleRightAgent(true)}
-                >
-                  <Icon name="chevron-left" class="size-3.5" />
-                </button>
-                <div class="text-[9px] font-medium tracking-widest text-emerald-500 [writing-mode:vertical-rl]">
-                  AGENTE OPENCODE IA
-                </div>
-                <span class="size-2 rounded-full bg-emerald-500" />
-              </div>
-            </Show>
-
-            {/* Conteúdo real do Agente OpenCode mantido montado (sem perder stream/histórico ao recolher!) */}
-            <div
-              class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-              classList={{ hidden: !service().ui.rightAgentOpen || props.mobile() }}
-            >
-              <div class="flex items-center justify-between border-b border-v2-border-border-base bg-v2-background-bg-deep px-2.5 py-1.5 shrink-0">
-                <span class="text-[11.5px] font-semibold text-emerald-500">
-                  🤖 Agente OpenCode IA
-                </span>
-                <button
-                  type="button"
-                  title="Recolher barra do Agente IA"
-                  class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] text-v2-text-text-muted hover:bg-v2-background-bg-base hover:text-v2-text-text-strong cursor-pointer"
-                  onClick={() => service().toggleRightAgent(false)}
-                >
-                  <span>Recolher</span>
-                  <Icon name="chevron-right" class="size-3" />
-                </button>
-              </div>
-              <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                {props.children}
-              </div>
-            </div>
-          </aside>
-        </div>
-      )}
-    </Show>
   )
 }

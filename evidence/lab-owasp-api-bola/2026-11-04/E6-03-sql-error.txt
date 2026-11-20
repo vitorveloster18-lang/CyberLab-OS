@@ -1,0 +1,33 @@
+# E6 — E6-03-sql-error: H3 — erro SQL (remediado)
+capturado_em : 2026-11-04T12:59:04.865Z
+duracao_ms   : 1
+expectativa  : Após ligar sanitizeSqlQuery: 200 SEM SQLITE_ERROR esperado.
+
+$ curl -s -o NUL -w "%{http_code}" "http://127.0.0.1:35021/api/v1/search?q=%27"
+
+>>> REQUISICAO
+GET /api/v1/search?q=%27 HTTP/1.1
+Host: 127.0.0.1:35021
+
+<<< RESPOSTA
+HTTP/1.1 200 OK
+connection: keep-alive
+content-security-policy: default-src 'none'; frame-ancestors 'none'
+content-type: application/json; charset=utf-8
+date: Wed, 04 Nov 2026 12:59:04 GMT
+keep-alive: timeout=5
+strict-transport-security: max-age=63072000; includeSubDomains; preload
+transfer-encoding: chunked
+x-content-type-options: nosniff
+x-frame-options: DENY
+
+{
+  "query": "'",
+  "results": [
+    {
+      "id": "tx-01",
+      "memo": "Lab transfer",
+      "amount": 42
+    }
+  ]
+}

@@ -13,8 +13,23 @@ import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
 import { SubagentCompletion } from "../../session/subagent-completion.js"
 import { SubagentJob } from "../../session/subagent-job.js"
+import {
+  SUBAGENT_GUARDRAIL_DEFAULTS,
+  checkSubagentGuardrails,
+  getSubagentGuardrailLimits,
+} from "./subagent-guardrails.js"
+
+export { SUBAGENT_GUARDRAIL_DEFAULTS, checkSubagentGuardrails, getSubagentGuardrailLimits }
 
 export const name = "subagent"
+
+const foregroundActiveByParent = new Map<string, number>()
+const spawnedChildSessionsByParent = new Map<string, Set<string>>()
+
+export function resetSubagentGuardrailTrackersForTest() {
+  foregroundActiveByParent.clear()
+  spawnedChildSessionsByParent.clear()
+}
 
 const backgroundResult = (sessionID: SessionSchema.ID) => ({
   sessionID,
@@ -126,11 +141,7 @@ export const Plugin = {
                     ),
                   )
               }
-              const limit = Config.latest(yield* config.entries(), "experimental")?.subagent_depth ?? 1
-              if (depth >= limit)
-                return yield* new ToolFailure({
-                  message: `Subagent depth limit reached (${limit}). Increase "experimental.subagent_depth" to allow nested subagents.`,
-                })
+              const experimentalDepth = Config.latest(yield* config.entries(), "experimental")?.subagent_depth
               const agent = yield* agents.resolve(input.agent)
               if (agent === undefined) return yield* new ToolFailure({ message: `Unknown agent: ${input.agent}` })
               if (agent.mode === "primary")
@@ -165,6 +176,25 @@ export const Plugin = {
                 return yield* new ToolFailure({
                   message: `Session ${existing.id} is not a child of the current session`,
                 })
+
+              const runningBg = yield* jobs.runningBackground
+              const bgCountForParent = runningBg.filter(
+                (r) => r.kind === "subagent" && r.parentSessionID === context.sessionID,
+              ).length
+              const fgCountForParent = foregroundActiveByParent.get(context.sessionID) ?? 0
+              const spawnedForParent = spawnedChildSessionsByParent.get(context.sessionID)?.size ?? 0
+
+              const guardrailVerdict = checkSubagentGuardrails({
+                depth,
+                activeConcurrentCount: fgCountForParent + bgCountForParent,
+                totalSpawnedInSession: spawnedForParent,
+                isExistingChildSession: existing !== undefined,
+                experimentalSubagentDepth: experimentalDepth,
+              })
+              if (!guardrailVerdict.allowed) {
+                return yield* new ToolFailure({ message: guardrailVerdict.reason })
+              }
+
               const override = input.model === undefined ? undefined : yield* resolveModel(input.model)
               // Continuing with a different agent switches the child, mirroring create semantics
               // where an explicit model wins over the agent's configured model, which wins over the inherited one.
@@ -196,6 +226,12 @@ export const Plugin = {
                       (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
                     ),
                   ))
+
+              if (existing === undefined) {
+                const set = spawnedChildSessionsByParent.get(context.sessionID) ?? new Set<string>()
+                set.add(child.id)
+                spawnedChildSessionsByParent.set(context.sessionID, set)
+              }
 
               const background = input.background === true
               yield* context.progress({ sessionID: child.id, status: "running" })
@@ -231,13 +267,27 @@ export const Plugin = {
                 return backgroundResult(child.id)
               }
 
-              const result = yield* jobs.block({ id: child.id, sessionID: context.sessionID }).pipe(
-                Effect.onInterrupt(() =>
-                  Effect.all([sessions.interrupt(child.id), jobs.cancel(child.id)], {
-                    discard: true,
-                  }),
-                ),
+              foregroundActiveByParent.set(
+                context.sessionID,
+                (foregroundActiveByParent.get(context.sessionID) ?? 0) + 1,
               )
+
+              const result = yield* jobs
+                .block({ id: child.id, sessionID: context.sessionID })
+                .pipe(
+                  Effect.onInterrupt(() =>
+                    Effect.all([sessions.interrupt(child.id), jobs.cancel(child.id)], {
+                      discard: true,
+                    }),
+                  ),
+                  Effect.ensuring(
+                    Effect.sync(() => {
+                      const cur = foregroundActiveByParent.get(context.sessionID) ?? 0
+                      if (cur <= 1) foregroundActiveByParent.delete(context.sessionID)
+                      else foregroundActiveByParent.set(context.sessionID, cur - 1)
+                    }),
+                  ),
+                )
               if (result?.type === "backgrounded") {
                 yield* subagents.notify(recovery, result.info.started_at)
                 return backgroundResult(child.id)

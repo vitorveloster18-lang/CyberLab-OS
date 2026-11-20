@@ -46,7 +46,11 @@ export const load = Effect.fn("cli.app-assets.load")(function* () {
 const sourceAssets = Effect.fnUntraced(function* () {
   const fs = yield* FileSystem.FileSystem
   const root = path.resolve(import.meta.dirname, "../../app/dist")
-  const files = yield* fs.readDirectory(root, { recursive: true })
+  // CyberLab OS: o web app é opcional (interface é o terminal). Se `dist` não foi
+  // compilado, serve a API normalmente e deixa as rotas web com 404 — em vez de
+  // derrubar o servidor inteiro com 500 (que quebrava o TUI).
+  const exists = yield* fs.exists(root)
+  const files = exists ? yield* fs.readDirectory(root, { recursive: true }) : []
   const assets: Record<string, string> = Object.fromEntries(
     (yield* Effect.forEach(
       files.filter((file) => !file.endsWith(".map") && !path.basename(file).startsWith(".cyberlab-")),

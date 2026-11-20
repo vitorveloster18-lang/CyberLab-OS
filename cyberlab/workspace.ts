@@ -19,13 +19,15 @@ import { EvidenceStore, type IntegrityCheckResult } from "./evidence/store.js"
 import { CyberLabExecutionDispatcher } from "./execution/dispatcher.js"
 import { TrainingLabManager, type TrainingLabStatus } from "./labs/training-labs.js"
 import {
-  ArsenalSlotManager,
-  type ArsenalLiveRun,
-  type ArsenalOverview,
-  type SlotUserOverride,
+  listWorkspaceFiles as listWorkspaceFilesImpl,
+  readWorkspaceFilePreview as readWorkspaceFilePreviewImpl,
   type WorkspaceFileEntry,
-} from "./arsenal/slot-manager.js"
-import type { ArsenalRuntimePreference, ArsenalSlotKind } from "./arsenal/catalog.js"
+} from "./workspace-files.js"
+import {
+  CyberLabObsidianVault,
+  type VaultNoteDocument,
+  type VaultOverview,
+} from "./vault/obsidian-vault.js"
 import { PartnerAuthenticator } from "./partners/authentication.js"
 import { PartnerBridge, type PartnerDispatchOutcome } from "./partners/bridge.js"
 import {
@@ -35,58 +37,6 @@ import {
   type MultiCdiDispatchReport,
 } from "./partners/cdi-hub.js"
 import { HttpPartnerTransport } from "./partners/transport.js"
-import {
-  EXTERNAL_DALFOX_INPUT_SCHEMA_ID,
-  EXTERNAL_FFUF_INPUT_SCHEMA_ID,
-  EXTERNAL_GHIDRA_INPUT_SCHEMA_ID,
-  EXTERNAL_JADX_INPUT_SCHEMA_ID,
-  EXTERNAL_KEYHUNTER_INPUT_SCHEMA_ID,
-  EXTERNAL_NMAP_INPUT_SCHEMA_ID,
-  EXTERNAL_NUCLEI_INPUT_SCHEMA_ID,
-  EXTERNAL_TRIVY_INPUT_SCHEMA_ID,
-  EXTERNAL_TSHARK_INPUT_SCHEMA_ID,
-  EXTERNAL_YARAX_INPUT_SCHEMA_ID,
-  ExternalControlPlane,
-  ExternalDalfoxCapability,
-  ExternalDalfoxExecutor,
-  ExternalDalfoxInputSchema,
-  ExternalFfufCapability,
-  ExternalFfufExecutor,
-  ExternalFfufInputSchema,
-  ExternalGhidraCapability,
-  ExternalGhidraExecutor,
-  ExternalGhidraInputSchema,
-  ExternalJadxCapability,
-  ExternalJadxExecutor,
-  ExternalJadxInputSchema,
-  ExternalKeyHunterCapability,
-  ExternalKeyHunterExecutor,
-  ExternalKeyHunterInputSchema,
-  ExternalNmapCapability,
-  ExternalNmapExecutor,
-  ExternalNmapInputSchema,
-  ExternalNucleiCapability,
-  ExternalNucleiExecutor,
-  ExternalNucleiInputSchema,
-  ExternalTrivyCapability,
-  ExternalTrivyExecutor,
-  ExternalTrivyInputSchema,
-  ExternalTsharkCapability,
-  ExternalTsharkExecutor,
-  ExternalTsharkInputSchema,
-  ExternalYaraXCapability,
-  ExternalYaraXExecutor,
-  ExternalYaraXInputSchema,
-  type ExternalToolRuntimeStatus,
-  type InboxSyncResult,
-  type IngestExternalActionInput,
-  type IngestExternalActionResult,
-} from "./external/control-plane.js"
-import {
-  detectInstalledProxyBrowsers,
-  launchPreconfiguredProxyBrowser,
-  type LaunchProxyBrowserResult,
-} from "./proxy/browser-launcher.js"
 import { ApprovalManager } from "./policy/approval.js"
 import { PolicyEngine } from "./policy/authorize.js"
 import { ScopeController, parseBugBountyScopeImport } from "./policy/scope.js"
@@ -139,9 +89,9 @@ export class CyberLabWorkspace {
   readonly partnerAuth: PartnerAuthenticator
   readonly partnerBridge: PartnerBridge
   readonly cdiHub: CdiPartnerHub
-  readonly externalControl: ExternalControlPlane
-  readonly arsenal: ArsenalSlotManager
+  readonly vault: CyberLabObsidianVault
   private readonly scopePersistencePath: string | null
+  private scopeFileMtimeMs = 0
   private readonly ownedManager?: CyberLabWorkspaceManager
   private initialized = false
 
@@ -187,16 +137,9 @@ export class CyberLabWorkspace {
       dispatcher: this.dispatcher,
       maxEnvelopeBytes: cfg.maxPartnerEnvelopeBytes,
     })
-    this.externalControl = new ExternalControlPlane({
+    this.vault = new CyberLabObsidianVault({
       projectId: this.projectId,
       workspaceRoot: this.workspaceRoot,
-      scopes: this.scopes,
-      evidenceStore: this.evidenceStore,
-    })
-    this.arsenal = new ArsenalSlotManager({
-      projectId: this.projectId,
-      workspaceRoot: this.workspaceRoot,
-      scopes: this.scopes,
       ...(options.inMemoryDb ? { globalConfigDir: path.join(this.workspaceRoot, ".cyberlab") } : {}),
     })
 
@@ -204,7 +147,11 @@ export class CyberLabWorkspace {
     if (!envBridge) {
       this.ownedManager = new CyberLabWorkspaceManager({
         projectsRootDir: path.join(this.workspaceRoot, ".cyberlab", "projects"),
-        labsRootDir: path.join(this.workspaceRoot, ".cyberlab", "training-labs"),
+        // v6.6: permite alinhar o servidor (UI) com o CLI — antes cada um usava
+        // uma raiz diferente e um não enxergava o laboratório do outro.
+        labsRootDir:
+          process.env.CYBERLAB_LABS_ROOT?.trim() ||
+          path.join(this.workspaceRoot, ".cyberlab", "training-labs"),
         inMemoryChildren: Boolean(options.inMemoryDb),
       })
       this.ownedManager.registerExistingWorkspace(this, {
@@ -237,6 +184,11 @@ export class CyberLabWorkspace {
     try {
       mkdirSync(path.dirname(this.scopePersistencePath), { recursive: true })
       writeFileSync(this.scopePersistencePath, `${JSON.stringify(scope, null, 2)}\n`, "utf8")
+      try {
+        this.scopeFileMtimeMs = statSync(this.scopePersistencePath).mtimeMs
+      } catch {
+        // mtime best-effort
+      }
     } catch {
       // Non-fatal best-effort persistence
     }
@@ -247,6 +199,11 @@ export class CyberLabWorkspace {
     try {
       const parsed = JSON.parse(readFileSync(this.scopePersistencePath, "utf8")) as ProjectScope
       if (!parsed || typeof parsed !== "object") return null
+      try {
+        this.scopeFileMtimeMs = statSync(this.scopePersistencePath).mtimeMs
+      } catch {
+        // mtime best-effort
+      }
       return this.scopes.setProjectScope({
         ...parsed,
         projectId: this.projectId,
@@ -257,9 +214,43 @@ export class CyberLabWorkspace {
     }
   }
 
+  /**
+   * Recarrega o escopo do disco se o arquivo mudou desde a última leitura.
+   *
+   * O CLI (`cyberlab scope`) é um processo separado do servidor: ele grava
+   * `.cyberlab/scope.json`, mas o servidor já inicializado guardava o escopo
+   * antigo em memória até o restart. Sem isto, "escopo não persiste" na
+   * prática — o operador definia e o TUI continuava com o escopo anterior.
+   */
+  refreshScopeFromDiskIfChanged(): void {
+    if (!this.scopePersistencePath || !this.initialized) return
+    let mtimeMs = 0
+    try {
+      if (!existsSync(this.scopePersistencePath)) return
+      mtimeMs = statSync(this.scopePersistencePath).mtimeMs
+    } catch {
+      return
+    }
+    if (mtimeMs === this.scopeFileMtimeMs) return
+    this.tryLoadScopeFromDisk()
+  }
+
   async ensureInitialized(): Promise<this> {
     if (this.initialized) return this
     this.initialized = true
+
+    // Migração de identidade: o CLI antigo gravava evidências/findings sob
+    // `proj-<basename do workspaceRoot>`; o ID unificado (OpenCode) é outro.
+    // Sem isto, os dados legados ficariam órfãos e invisíveis ao MCP.
+    // No-op quando já estão unificados ou quando não há dados legados.
+    try {
+      const legacyProjectId = `proj-${path.basename(this.workspaceRoot).replace(/[^a-zA-Z0-9._-]/g, "-") || "workspace"}`
+      if (legacyProjectId !== this.projectId) {
+        this.evidenceStore.reassignProjectId(legacyProjectId, this.projectId)
+      }
+    } catch {
+      // Migração best-effort: nunca impede a abertura do workspace.
+    }
 
     const restoredScope = this.tryLoadScopeFromDisk()
     if (!restoredScope) {
@@ -287,47 +278,6 @@ export class CyberLabWorkspace {
     this.schemas.registerEffectSchema(WORKSPACE_AUDIT_INPUT_SCHEMA_ID, WorkspaceAuditInputSchema)
     this.executors.registerExecutor(new WorkspaceAuditExecutor())
     await this.capabilities.register(WorkspaceAuditCapability)
-
-    // Register governed External Tool Control Plane bridges (Nmap, Nuclei, ffuf, tshark, dalfox, ghidra, jadx, yarax, trivy, keyhunter)
-    this.schemas.registerEffectSchema(EXTERNAL_NMAP_INPUT_SCHEMA_ID, ExternalNmapInputSchema)
-    this.executors.registerExecutor(new ExternalNmapExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalNmapCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_NUCLEI_INPUT_SCHEMA_ID, ExternalNucleiInputSchema)
-    this.executors.registerExecutor(new ExternalNucleiExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalNucleiCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_FFUF_INPUT_SCHEMA_ID, ExternalFfufInputSchema)
-    this.executors.registerExecutor(new ExternalFfufExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalFfufCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_TSHARK_INPUT_SCHEMA_ID, ExternalTsharkInputSchema)
-    this.executors.registerExecutor(new ExternalTsharkExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalTsharkCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_DALFOX_INPUT_SCHEMA_ID, ExternalDalfoxInputSchema)
-    this.executors.registerExecutor(new ExternalDalfoxExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalDalfoxCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_GHIDRA_INPUT_SCHEMA_ID, ExternalGhidraInputSchema)
-    this.executors.registerExecutor(new ExternalGhidraExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalGhidraCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_JADX_INPUT_SCHEMA_ID, ExternalJadxInputSchema)
-    this.executors.registerExecutor(new ExternalJadxExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalJadxCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_YARAX_INPUT_SCHEMA_ID, ExternalYaraXInputSchema)
-    this.executors.registerExecutor(new ExternalYaraXExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalYaraXCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_TRIVY_INPUT_SCHEMA_ID, ExternalTrivyInputSchema)
-    this.executors.registerExecutor(new ExternalTrivyExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalTrivyCapability)
-
-    this.schemas.registerEffectSchema(EXTERNAL_KEYHUNTER_INPUT_SCHEMA_ID, ExternalKeyHunterInputSchema)
-    this.executors.registerExecutor(new ExternalKeyHunterExecutor(() => this.workspaceRoot))
-    await this.capabilities.register(ExternalKeyHunterCapability)
 
     // Load CyberLab skills
     this.skills.loadFromDirectory(repoSkillsDir)
@@ -365,7 +315,9 @@ export class CyberLabWorkspace {
       activeScope: this.scopes.getProjectScope(this.projectId),
       capabilityCount: caps.length,
       skillCount: this.skills.list().length,
-      executionCount: this.dispatcher.list(this.projectId).length,
+      // Execuções persistidas (evidência por execution_id). O dispatcher é
+      // em memória e fica em 0 num processo CLI novo — não serve pro status.
+      executionCount: this.evidenceStore.countExecutions(this.projectId),
       pendingApprovalCount: this.approvals.listPending(this.projectId).length,
       evidenceCount: this.evidenceStore.listEvidence(this.projectId).length,
       findingCount: this.evidenceStore.listFindings(this.projectId).length,
@@ -633,90 +585,12 @@ export class CyberLabWorkspace {
     }
   }
 
-  async getArsenalOverview(forceRefresh = false): Promise<ArsenalOverview> {
-    await this.ensureInitialized()
-    return this.arsenal.getOverview(forceRefresh)
-  }
-
-  async configureArsenal(params: {
-    toolsRootDir?: string
-    preferredWslDistro?: string
-    enforceScopeOnCliRuns?: boolean
-    slotId?: string
-    slotOverride?: SlotUserOverride
-  }): Promise<ArsenalOverview> {
-    await this.ensureInitialized()
-    return this.arsenal.configureSettings(params)
-  }
-
-  async upsertCustomArsenalSlot(params: {
-    slotId?: string
-    name: string
-    shortLabel?: string
-    kind: ArsenalSlotKind
-    tagline?: string
-    description?: string
-    executableOrUrl: string
-    preferredRuntime?: ArsenalRuntimePreference
-    companionProxyPort?: number
-    defaultArgsTemplate?: string
-  }): Promise<ArsenalOverview> {
-    await this.ensureInitialized()
-    return this.arsenal.upsertCustomSlot(params)
-  }
-
-  async removeCustomArsenalSlot(slotId: string): Promise<ArsenalOverview> {
-    await this.ensureInitialized()
-    return this.arsenal.removeCustomSlot(slotId)
-  }
-
-  async launchArsenalSlot(params: {
-    slotId: string
-    action: "run_cli" | "launch_desktop" | "start_web" | "stop_web" | "install_tool"
-    target?: string
-    rawArgs?: string
-    runtimeOverride?: "windows" | "wsl" | "linux_mac"
-  }): Promise<{
-    ok: boolean
-    message: string
-    embedUrl?: string
-    run?: ArsenalLiveRun
-    overview: ArsenalOverview
-  }> {
-    await this.ensureInitialized()
-    return this.arsenal.launchSlot(params)
-  }
-
-  async stopArsenalRun(runId: string): Promise<ArsenalLiveRun | null> {
-    await this.ensureInitialized()
-    return this.arsenal.stopRun(runId)
-  }
-
-  async launchCompanionProxyBrowser(params: {
-    proxyPort?: number
-    startUrl?: string
-    preferredBrowserId?: string
-  }): Promise<LaunchProxyBrowserResult> {
-    await this.ensureInitialized()
-    return launchPreconfiguredProxyBrowser({
-      proxyPort: params.proxyPort ?? 8080,
-      workspaceRoot: this.workspaceRoot,
-      ...(params.startUrl ? { startUrl: params.startUrl } : {}),
-      ...(params.preferredBrowserId ? { preferredBrowserId: params.preferredBrowserId } : {}),
-    })
-  }
-
-  async listAvailableBrowsers() {
-    await this.ensureInitialized()
-    return detectInstalledProxyBrowsers()
-  }
-
   async listWorkspaceFiles(relativeDir = "."): Promise<{
     currentDir: string
     entries: WorkspaceFileEntry[]
   }> {
     await this.ensureInitialized()
-    return this.arsenal.listWorkspaceFiles(relativeDir)
+    return listWorkspaceFilesImpl(this.workspaceRoot, relativeDir)
   }
 
   async readWorkspaceFilePreview(relativeFilePath: string): Promise<{
@@ -726,10 +600,38 @@ export class CyberLabWorkspace {
     content: string
   }> {
     await this.ensureInitialized()
-    return this.arsenal.readWorkspaceFilePreview(relativeFilePath)
+    return readWorkspaceFilePreviewImpl(this.workspaceRoot, relativeFilePath)
   }
 
-  async persistArsenalOutputToEvidence(params: {
+  async getVaultOverview(): Promise<VaultOverview> {
+    await this.ensureInitialized()
+    return this.vault.getOverview()
+  }
+
+  async readVaultNote(relativePath: string): Promise<VaultNoteDocument> {
+    await this.ensureInitialized()
+    return this.vault.readNote(relativePath)
+  }
+
+  async writeVaultNote(
+    relativePath: string,
+    content: string,
+  ): Promise<{ note: VaultNoteDocument; overview: VaultOverview }> {
+    await this.ensureInitialized()
+    return this.vault.writeNote(relativePath, content)
+  }
+
+  async deleteVaultNote(relativePath: string): Promise<VaultOverview> {
+    await this.ensureInitialized()
+    return this.vault.deleteNote(relativePath)
+  }
+
+  async configureVaultRoot(customDir?: string | null): Promise<VaultOverview> {
+    await this.ensureInitialized()
+    return this.vault.setCustomVaultRoot(customDir)
+  }
+
+  async persistOutputToEvidence(params: {
     title: string
     content: string
     slotId?: string
@@ -742,9 +644,9 @@ export class CyberLabWorkspace {
         kind: "stdout",
         title: params.title,
         source: {
-          toolId: params.slotId ?? "arsenal-slot",
-          executorId: "arsenal-slot-manager",
-          executionId: `ars-${crypto.randomUUID().slice(0, 8)}`,
+          toolId: params.slotId ?? "manual-ingest",
+          executorId: "cyberlab-workspace",
+          executionId: `ing-${crypto.randomUUID().slice(0, 8)}`,
         },
         content: {
           mediaType: "text/plain",
@@ -798,34 +700,6 @@ export class CyberLabWorkspace {
       evidence: this.evidenceStore.listEvidence(this.projectId),
       findings: this.evidenceStore.listFindings(this.projectId),
     })
-  }
-
-  async listExternalTools(): Promise<ExternalToolRuntimeStatus[]> {
-    await this.ensureInitialized()
-    return this.externalControl.listTools()
-  }
-
-  async ingestExternalAction(input: IngestExternalActionInput): Promise<IngestExternalActionResult> {
-    await this.ensureInitialized()
-    return this.externalControl.ingestExternalAction(input)
-  }
-
-  async syncExternalInbox(actor?: string): Promise<InboxSyncResult> {
-    await this.ensureInitialized()
-    return this.externalControl.syncInbox(actor)
-  }
-
-  async runSupervisedExternalCommand(params: {
-    toolId: string
-    binary: string
-    args: readonly string[]
-    target: string
-    signal?: AbortSignal
-    onStdoutChunk?: (chunk: string) => void
-    onStderrChunk?: (chunk: string) => void
-  }) {
-    await this.ensureInitialized()
-    return this.externalControl.runSupervisedExternalCommand(params)
   }
 
   async delegateToPartner(params: {
@@ -901,7 +775,6 @@ export class CyberLabWorkspace {
   close(): void {
     if (this.closed) return
     this.closed = true
-    this.arsenal.close()
     if (this.ownedManager) {
       this.ownedManager.closeAll()
     }
@@ -1025,6 +898,9 @@ export class CyberLabWorkspaceManager {
     const existing = this.instances.get(key)
     if (existing) {
       if (markActive) this.lastActiveKey = key
+      // O CLI pode ter alterado o escopo em disco (processo separado):
+      // recarrega antes de devolver para o chamador (servidor/MCP).
+      existing.refreshScopeFromDiskIfChanged()
       return existing.ensureInitialized()
     }
 

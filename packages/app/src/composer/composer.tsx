@@ -18,7 +18,6 @@ import { createModelUsage } from "@/usage/model"
 import { DialogSelectModelUnpaid } from "@/providers/models/unpaid"
 import { formatKeybind, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
-import { CyberLabComposerToolbar } from "@/cyberlab-workbench/composer-bar"
 import type { ComposerModel } from "./model"
 
 export function Composer(props: {
@@ -75,9 +74,6 @@ export function Composer(props: {
           />
         }
       />
-      <Show when={!props.readOnly}>
-        <CyberLabComposerToolbar model={props.model} />
-      </Show>
     </div>
   )
 }

@@ -609,6 +609,44 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             json: Flag.Boolean("json").pipe(Flag.withDescription("Output execution record as JSON"), Flag.withDefault(false)),
           },
         }),
+        Spec.make("exec", {
+          description:
+            "Run a native command under CyberLab scope guard, secret redaction and SHA-256 evidence capture",
+          params: {
+            command: Argument.String("command").pipe(
+              Argument.withDescription("Command and arguments, passed after -- (e.g. nmap -sV 10.0.0.5)"),
+              Argument.variadic({ min: 0 }),
+            ),
+            timeout: Flag.String("timeout").pipe(
+              Flag.withDescription("Timeout in seconds (default 1800)"),
+              Flag.optional,
+            ),
+            label: Flag.String("label").pipe(
+              Flag.withDescription("Human-readable label for the evidence title (e.g. \"Guard pos-correcao\")"),
+              Flag.optional,
+            ),
+            json: Flag.Boolean("json").pipe(Flag.withDescription("Output as JSON"), Flag.withDefault(false)),
+          },
+        }),
+        Spec.make("scope", {
+          description:
+            "Show, set or clear the authorized engagement scope used by `cyberlab exec`",
+          params: {
+            targets: Argument.String("targets").pipe(
+              Argument.withDescription("Allowed targets (e.g. 10.0.0.0/24 exemplo.com)"),
+              Argument.variadic({ min: 0 }),
+            ),
+            clear: Flag.Boolean("clear").pipe(
+              Flag.withDescription("Deactivate the scope (cyberlab exec then refuses network targets)"),
+              Flag.withDefault(false),
+            ),
+            external: Flag.Boolean("external").pipe(
+              Flag.withDescription("Allow public/routable external targets when setting a scope"),
+              Flag.withDefault(false),
+            ),
+            json: Flag.Boolean("json").pipe(Flag.withDescription("Output as JSON"), Flag.withDefault(false)),
+          },
+        }),
         Spec.make("evidence", {
           description: "List or verify SHA-256 evidence records in the CyberLab workspace",
           params: {
@@ -622,6 +660,22 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         Spec.make("findings", {
           description: "List CyberLab security findings and review statuses",
           params: {
+            review: Flag.String("review").pipe(
+              Flag.withDescription("Finding ID to review (records the review decision)"),
+              Flag.optional,
+            ),
+            decision: Flag.String("decision").pipe(
+              Flag.withDescription("Review decision: accept | reject | needs_more_evidence"),
+              Flag.optional,
+            ),
+            by: Flag.String("by").pipe(
+              Flag.withDescription("Reviewer identity recorded in the finding revision"),
+              Flag.optional,
+            ),
+            notes: Flag.String("notes").pipe(
+              Flag.withDescription("Review notes (evidence, remediation commit, rationale)"),
+              Flag.optional,
+            ),
             json: Flag.Boolean("json").pipe(Flag.withDescription("Output findings as JSON"), Flag.withDefault(false)),
           },
         }),
@@ -673,59 +727,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             json: Flag.Boolean("json").pipe(Flag.withDescription("Output full outcome as JSON"), Flag.withDefault(false)),
           },
         }),
-        Spec.make("external", {
-          description:
-            "Unified Control Plane for external tools (nmap, nuclei, ffuf, tshark, opentrap, mvt, ghidra), manual ingest, and .cyberlab/inbox sync",
-          params: {
-            action: Flag.String("action").pipe(
-              Flag.withAlias("a"),
-              Flag.withDescription("Operation: tools | sync | ingest | wrap (defaults to tools)"),
-              Flag.optional,
-            ),
-            tool: Flag.String("tool").pipe(
-              Flag.withDescription("External tool identifier (e.g. opentrap, nmap, burp, wireshark, nuclei)"),
-              Flag.optional,
-            ),
-            target: Flag.String("target").pipe(
-              Flag.withAlias("t"),
-              Flag.withDescription("Target host, URL, IP, or workspace path for ScopeController audit"),
-              Flag.optional,
-            ),
-            file: Flag.String("file").pipe(
-              Flag.withAlias("f"),
-              Flag.withDescription("File containing raw output from an external tool run (for --action ingest)"),
-              Flag.optional,
-            ),
-            binary: Flag.String("binary").pipe(
-              Flag.withDescription("External binary name or path (for --action wrap)"),
-              Flag.optional,
-            ),
-            args: Flag.String("args").pipe(
-              Flag.withDescription("JSON array of CLI arguments passed with shell=false (for --action wrap)"),
-              Flag.optional,
-            ),
-            json: Flag.Boolean("json").pipe(Flag.withDescription("Output as JSON"), Flag.withDefault(false)),
-          },
-        }),
-        Spec.make("studio", {
-          description:
-            "Launch the full-screen browser Security Studio workbench (Proxy, Repeater, Decoder, Web/Nuclei/ffuf, Nmap/TLS, PCAP, Forensics, Custody)",
-          params: {
-            port: Flag.Int("port").pipe(
-              Flag.withAlias("p"),
-              Flag.withDescription("HTTP port to bind (default: 4180)"),
-              Flag.optional,
-            ),
-            host: Flag.String("host").pipe(
-              Flag.withDescription("Hostname/interface to bind (default: 0.0.0.0)"),
-              Flag.optional,
-            ),
-            demoLab: Flag.Boolean("demo-lab").pipe(
-              Flag.withDescription("Spin up an isolated localhost HTTP/TLS/PCAP/ELF/APK demo lab target"),
-              Flag.withDefault(false),
-            ),
-          },
-        }),
+
       ],
     }),
   ],

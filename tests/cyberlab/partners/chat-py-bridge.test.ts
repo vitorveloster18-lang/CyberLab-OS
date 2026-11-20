@@ -6,6 +6,15 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { CyberLabWorkspace } from "../../../cyberlab/index.js"
+import { hasPython, pythonInvocation } from "../helpers/env-gates.js"
+
+/**
+ * O teste executa o `chat_py_bridge.py` de verdade e por isso precisa de interpretador.
+ * `test.skip` (em vez de um `return` no começo) garante que, sem Python, o teste
+ * apareça como PULADO — nunca como aprovado sem ter testado nada.
+ */
+const PY = pythonInvocation()
+const pyTest = hasPython() ? test : test.skip
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url))
 const bridgeScriptPath = path.join(repoRoot, "integrations", "partners", "chat_py_bridge.py")
@@ -36,7 +45,7 @@ async function waitForHealth(port: number, timeoutMs = 5_000): Promise<void> {
 }
 
 describe("Python chat_py_bridge.py <-> CyberLab OS HMAC-SHA256 Interoperability", () => {
-  test("bridges external chat.py script over signed HTTP envelope, redacts secrets, and records unreviewed findings", async () => {
+  pyTest("bridges external chat.py script over signed HTTP envelope, redacts secrets, and records unreviewed findings", async () => {
     const tmpDir = mkdtempSync(path.join(os.tmpdir(), "cyberlab-chatpy-"))
     const port = await getFreePort()
     const secret = "chat-py-bridge-shared-secret-key-2026"
@@ -65,8 +74,8 @@ describe("Python chat_py_bridge.py <-> CyberLab OS HMAC-SHA256 Interoperability"
     )
 
     const proc = spawn(
-      "python3",
-      [
+      PY![0]!,
+      [...PY!.slice(1),
         bridgeScriptPath,
         "--partner-id",
         "chat-py-agent",

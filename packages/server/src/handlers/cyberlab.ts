@@ -5,6 +5,7 @@ import {
   type EvidenceRecord,
   type ExecutionRecord,
   type SecurityFinding,
+  guardDestructive,
 } from "@cyberlab/core"
 import { Location } from "@opencode/core/location"
 import { Project } from "@opencode/core/project"
@@ -15,6 +16,31 @@ import { HttpServerRequest } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 import { response } from "../location"
+
+/**
+ * v6.7 — Bloqueia operação destrutiva SEM confirmação do operador.
+ * Usa `InvalidRequestError` (400) de propósito: é um erro declarado no contrato do
+ * endpoint, então a MENSAGEM chega ao chamador. Um erro genérico virava 500 com corpo
+ * vazio e o agente ficava sem saber o que pedir ao operador.
+ */
+const guardDestructiveEffect = (
+  operation: string,
+  payload: unknown,
+): Effect.Effect<void, InvalidRequestError> =>
+  Effect.suspend(() => {
+    const approval = guardDestructive(operation, (payload ?? {}) as Record<string, unknown>)
+    if (!approval) return Effect.void
+    // Falha TIPADA (não defect): `InvalidRequestError` está no contrato do endpoint,
+    // então a mensagem chega ao chamador. Lançar dentro de Effect.sync virava defect,
+    // que o HttpApi responde como 500 com corpo vazio — inútil para quem precisa ler.
+    return Effect.fail(
+      new InvalidRequestError({
+        message: approval.message,
+        kind: "destructive_action_blocked",
+        field: "confirm",
+      }),
+    )
+  })
 
 function toCapabilityInfo(cap: CapabilityDefinition) {
   return {
@@ -458,46 +484,6 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
         }),
       ),
     )
-    .handle("cyberlab.external.tools", () =>
-      response(
-        Effect.gen(function* () {
-          const ws = yield* resolveWorkspace
-          const tools = yield* Effect.promise(() => ws.listExternalTools())
-          return {
-            pendingInboxCount: ws.externalControl.countPendingInboxFiles(),
-            inboxDirectory: ws.externalControl.inboxDir,
-            tools,
-          }
-        }),
-      ),
-    )
-    .handle("cyberlab.external.ingest", ({ payload }) =>
-      response(
-        Effect.gen(function* () {
-          const ws = yield* resolveWorkspace
-          return yield* runBadRequest(() =>
-            ws.ingestExternalAction({
-              toolId: payload.toolId,
-              ...(payload.title !== undefined ? { title: payload.title } : {}),
-              ...(payload.origin !== undefined ? { origin: payload.origin } : {}),
-              ...(payload.target !== undefined ? { target: payload.target } : {}),
-              ...(payload.commandSummary !== undefined ? { commandSummary: payload.commandSummary } : {}),
-              rawOutput: payload.rawOutput,
-              ...(payload.mediaType !== undefined ? { mediaType: payload.mediaType } : {}),
-              actor: "http-control-plane",
-            }),
-          )
-        }),
-      ),
-    )
-    .handle("cyberlab.external.sync", () =>
-      response(
-        Effect.gen(function* () {
-          const ws = yield* resolveWorkspace
-          return yield* runBadRequest(() => ws.syncExternalInbox("http-control-plane"))
-        }),
-      ),
-    )
     .handle("cyberlab.evidence.read", ({ payload }) =>
       response(
         Effect.gen(function* () {
@@ -506,163 +492,16 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
         }),
       ),
     )
-    .handle("cyberlab.arsenal.overview", () =>
-      response(
-        Effect.gen(function* () {
-          const ws = yield* resolveWorkspace
-          const [raw, availableBrowsers] = yield* Effect.promise(() =>
-            Promise.all([ws.getArsenalOverview(false), ws.listAvailableBrowsers()]),
-          )
-          const clean = JSON.parse(JSON.stringify(raw)) as typeof raw
-          return { ...clean, availableBrowsers }
-        }),
-      ),
-    )
-    .handle("cyberlab.arsenal.probe", () =>
-      response(
-        Effect.gen(function* () {
-          const ws = yield* resolveWorkspace
-          const [raw, availableBrowsers] = yield* Effect.promise(() =>
-            Promise.all([ws.getArsenalOverview(true), ws.listAvailableBrowsers()]),
-          )
-          const clean = JSON.parse(JSON.stringify(raw)) as typeof raw
-          return { ...clean, availableBrowsers }
-        }),
-      ),
-    )
-    .handle("cyberlab.arsenal.config", ({ payload }) =>
-      response(
-        Effect.gen(function* () {
-          const ws = yield* resolveWorkspace
-          const [updated, availableBrowsers] = yield* runBadRequest(async () => {
-            const ov = await ws.configureArsenal({
-              ...(payload.toolsRootDir !== undefined ? { toolsRootDir: payload.toolsRootDir } : {}),
-              ...(payload.preferredWslDistro !== undefined ? { preferredWslDistro: payload.preferredWslDistro } : {}),
-              ...(payload.enforceScopeOnCliRuns !== undefined
-                ? { enforceScopeOnCliRuns: payload.enforceScopeOnCliRuns }
-                : {}),
-              ...(payload.slotId !== undefined ? { slotId: payload.slotId } : {}),
-              ...(payload.slotOverride !== undefined
-                ? {
-                    slotOverride: {
-                      ...(payload.slotOverride.customExecutablePath !== undefined
-                        ? { customExecutablePath: payload.slotOverride.customExecutablePath }
-                        : {}),
-                      ...(payload.slotOverride.customEmbedUrl !== undefined
-                        ? { customEmbedUrl: payload.slotOverride.customEmbedUrl }
-                        : {}),
-                      ...(payload.slotOverride.preferredRuntime !== undefined
-                        ? { preferredRuntime: payload.slotOverride.preferredRuntime }
-                        : {}),
-                      ...(payload.slotOverride.defaultArgs !== undefined
-                        ? { defaultArgs: payload.slotOverride.defaultArgs }
-                        : {}),
-                      ...(payload.slotOverride.companionProxyPort !== undefined
-                        ? { companionProxyPort: payload.slotOverride.companionProxyPort }
-                        : {}),
-                    },
-                  }
-                : {}),
-            })
-            return [ov, await ws.listAvailableBrowsers()] as const
-          })
-          const clean = JSON.parse(JSON.stringify(updated)) as typeof updated
-          return { ...clean, availableBrowsers }
-        }),
-      ),
-    )
-    .handle("cyberlab.arsenal.custom.upsert", ({ payload }) =>
-      response(
-        Effect.gen(function* () {
-          const ws = yield* resolveWorkspace
-          const [updated, availableBrowsers] = yield* runBadRequest(async () => {
-            const ov = await ws.upsertCustomArsenalSlot({
-              ...(payload.slotId !== undefined ? { slotId: payload.slotId } : {}),
-              name: payload.name,
-              ...(payload.shortLabel !== undefined ? { shortLabel: payload.shortLabel } : {}),
-              kind: payload.kind,
-              ...(payload.tagline !== undefined ? { tagline: payload.tagline } : {}),
-              ...(payload.description !== undefined ? { description: payload.description } : {}),
-              executableOrUrl: payload.executableOrUrl,
-              ...(payload.preferredRuntime !== undefined ? { preferredRuntime: payload.preferredRuntime } : {}),
-              ...(payload.companionProxyPort !== undefined
-                ? { companionProxyPort: payload.companionProxyPort }
-                : {}),
-              ...(payload.defaultArgsTemplate !== undefined
-                ? { defaultArgsTemplate: payload.defaultArgsTemplate }
-                : {}),
-            })
-            return [ov, await ws.listAvailableBrowsers()] as const
-          })
-          const clean = JSON.parse(JSON.stringify(updated)) as typeof updated
-          return { ...clean, availableBrowsers }
-        }),
-      ),
-    )
-    .handle("cyberlab.arsenal.custom.remove", ({ payload }) =>
-      response(
-        Effect.gen(function* () {
-          const ws = yield* resolveWorkspace
-          const [updated, availableBrowsers] = yield* runBadRequest(async () => {
-            const ov = await ws.removeCustomArsenalSlot(payload.slotId)
-            return [ov, await ws.listAvailableBrowsers()] as const
-          })
-          const clean = JSON.parse(JSON.stringify(updated)) as typeof updated
-          return { ...clean, availableBrowsers }
-        }),
-      ),
-    )
-    .handle("cyberlab.arsenal.launch", ({ payload }) =>
-      response(
-        Effect.gen(function* () {
-          const ws = yield* resolveWorkspace
-          const res = yield* runBadRequest(() =>
-            ws.launchArsenalSlot({
-              slotId: payload.slotId,
-              action: payload.action,
-              ...(payload.target !== undefined ? { target: payload.target } : {}),
-              ...(payload.rawArgs !== undefined ? { rawArgs: payload.rawArgs } : {}),
-              ...(payload.runtimeOverride !== undefined ? { runtimeOverride: payload.runtimeOverride } : {}),
-            }),
-          )
-          return JSON.parse(JSON.stringify(res)) as typeof res
-        }),
-      ),
-    )
-    .handle("cyberlab.arsenal.stop", ({ payload }) =>
-      response(
-        Effect.gen(function* () {
-          const ws = yield* resolveWorkspace
-          const stoppedRun = yield* runBadRequest(() => ws.stopArsenalRun(payload.runId))
-          return { stopped: Boolean(stoppedRun) }
-        }),
-      ),
-    )
-    .handle("cyberlab.arsenal.browser", ({ payload }) =>
-      response(
-        Effect.gen(function* () {
-          const ws = yield* resolveWorkspace
-          const res = yield* runBadRequest(() =>
-            ws.launchCompanionProxyBrowser({
-              ...(payload.proxyPort !== undefined ? { proxyPort: payload.proxyPort } : {}),
-              ...(payload.startUrl !== undefined ? { startUrl: payload.startUrl } : {}),
-              ...(payload.preferredBrowserId !== undefined ? { preferredBrowserId: payload.preferredBrowserId } : {}),
-            }),
-          )
-          return res
-        }),
-      ),
-    )
-    .handle("cyberlab.arsenal.persist", ({ payload }) =>
+    .handle("cyberlab.evidence.persist", ({ payload }) =>
       response(
         Effect.gen(function* () {
           const ws = yield* resolveWorkspace
           return yield* runBadRequest(() =>
-            ws.persistArsenalOutputToEvidence({
+            ws.persistOutputToEvidence({
               title: payload.title,
               content: payload.content,
               ...(payload.slotId !== undefined ? { slotId: payload.slotId } : {}),
-              actor: "operator:arsenal-workbench",
+              actor: "operator:workbench",
             }),
           )
         }),
@@ -781,6 +620,10 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
       response(
         Effect.gen(function* () {
           const ws = yield* resolveWorkspace
+          // v6.7: `reset` regrava arquivos e `stop` derruba o alvo — exigem confirmação.
+          if (payload.action === "reset" || payload.action === "stop") {
+            yield* guardDestructiveEffect(`cyberlab.labs.control.${payload.action}`, payload)
+          }
           if (payload.action === "start") {
             const started = yield* runBadRequest(() =>
               CyberLabWorkspaceManager.global.startTrainingLab({
@@ -851,6 +694,48 @@ export const CyberLabHandler = HttpApiBuilder.group(Api, "server.cyberlab", (han
             projects: CyberLabWorkspaceManager.global.listManagedProjects(),
             labs: CyberLabWorkspaceManager.global.trainingLabs.listLabs(),
           }
+        }),
+      ),
+    )
+    .handle("cyberlab.vault.overview", () =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* Effect.promise(() => ws.getVaultOverview())
+        }),
+      ),
+    )
+    .handle("cyberlab.vault.read", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() => ws.readVaultNote(payload.relativePath))
+        }),
+      ),
+    )
+    .handle("cyberlab.vault.write", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() => ws.writeVaultNote(payload.relativePath, payload.content))
+        }),
+      ),
+    )
+    .handle("cyberlab.vault.delete", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          // v6.7: apagar nota é SEM VOLTA — exige `confirm` + `confirmPhrase` exata.
+          yield* guardDestructiveEffect("cyberlab.vault.delete", payload)
+          return yield* runBadRequest(() => ws.deleteVaultNote(payload.relativePath))
+        }),
+      ),
+    )
+    .handle("cyberlab.vault.config", ({ payload }) =>
+      response(
+        Effect.gen(function* () {
+          const ws = yield* resolveWorkspace
+          return yield* runBadRequest(() => ws.configureVaultRoot(payload.customVaultRootDir ?? null))
         }),
       ),
     ),

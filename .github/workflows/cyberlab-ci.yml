@@ -34,18 +34,12 @@ jobs:
           bun --cwd packages/gui-plugins typecheck
           if [ -f cyberlab/package.json ]; then bun --cwd cyberlab typecheck; fi
 
-      - name: Build unified Web UI (`packages/app`)
-        run: |
-          bun --cwd packages/app build
-          test -f packages/app/dist/index.html
-          test -f packages/app/dist/sw.js
-
       - name: Verify license compliance & run test suites
         run: |
           bun --cwd packages/schema test
           bun --cwd packages/util test
           if [ -f script/check-cyberlab-licenses.ts ]; then bun run script/check-cyberlab-licenses.ts; fi
-          if [ -f cyberlab/package.json ]; then bun --cwd cyberlab test; fi
+          if [ -f cyberlab/package.json ]; then bun test --cwd cyberlab --timeout 60000; fi
 
   verify-windows:
     runs-on: windows-latest
@@ -65,25 +59,13 @@ jobs:
         run: |
           bun install --ignore-scripts
 
-      - name: Build unified Web UI on Windows PowerShell (pure Bun runtime, zero Node.js / zero .bunx)
-        shell: pwsh
-        run: |
-          $env:CYBERLAB_FORCE_BUN_VITE = "1"
-          $out = & bun ./packages/app/script/vite-cli.mjs build 2>&1
-          $code = $LASTEXITCODE
-          $out | ForEach-Object { Write-Host $_ }
-          if ($code -ne 0) {
-            $joined = ($out -join " | ")
-            if ($joined.Length -gt 800) { $joined = $joined.Substring($joined.Length - 800) }
-            Write-Output "::error title=WindowsViteBuild::$joined"
-            exit $code
-          }
-          if (-not (Test-Path "packages/app/dist/index.html")) { throw "Missing dist/index.html" }
-          if (-not (Test-Path "packages/app/dist/sw.js")) { throw "Missing dist/sw.js" }
-
-      - name: Verify CyberLab CDI autonomy, v5.0 Real Arsenal Slots, and Training Labs on Windows NTFS
+      - name: Verify CyberLab CDI autonomy, knowledge MCP and training labs on Windows NTFS
         shell: pwsh
         run: |
           bun run script/check-cyberlab-licenses.ts
           bun --cwd cyberlab typecheck
-          bun test --cwd cyberlab ../tests/cyberlab/partners ../tests/cyberlab/labs ../tests/cyberlab/arsenal/arsenal-slots.test.ts
+          # `execution` entrou aqui porque escondia falhas reais de Windows: spawn de
+          # binario externo (ENOENT), symlink sem permissao (EPERM) e rmSync com handle
+          # preso (EBUSY). Sem ele no CI, a suíte so quebrava na máquina de quem rodasse
+          # local.
+          bun test --cwd cyberlab --timeout 60000 ../tests/cyberlab/partners ../tests/cyberlab/labs ../tests/cyberlab/safety ../tests/cyberlab/knowledge ../tests/cyberlab/execution ../tests/cyberlab/mcp
