@@ -315,7 +315,9 @@ export class CyberLabWorkspace {
       activeScope: this.scopes.getProjectScope(this.projectId),
       capabilityCount: caps.length,
       skillCount: this.skills.list().length,
-      executionCount: this.dispatcher.list(this.projectId).length,
+      // Execuções persistidas (evidência por execution_id). O dispatcher é
+      // em memória e fica em 0 num processo CLI novo — não serve pro status.
+      executionCount: this.evidenceStore.countExecutions(this.projectId),
       pendingApprovalCount: this.approvals.listPending(this.projectId).length,
       evidenceCount: this.evidenceStore.listEvidence(this.projectId).length,
       findingCount: this.evidenceStore.listFindings(this.projectId).length,

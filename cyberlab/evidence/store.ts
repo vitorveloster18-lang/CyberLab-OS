@@ -304,6 +304,20 @@ export class EvidenceStore {
     return rows.map((r) => validateEvidenceRecord(JSON.parse(r.record_json)))
   }
 
+  /**
+   * Conta execuções distintas registradas como evidência (por execution_id).
+   *
+   * O dispatcher é em memória (sempre 0 num processo CLI novo), então o
+   * `executionCount` do status precisa vir do registro persistente: cada
+   * `cyberlab exec` grava evidência com um execution_id único.
+   */
+  countExecutions(projectId: string): number {
+    const row = this.db
+      .query(`SELECT COUNT(DISTINCT execution_id) AS n FROM cyberlab_evidence WHERE project_id = ?`)
+      .get(projectId) as { n: number } | null
+    return row?.n ?? 0
+  }
+
   readRawBytes(evidenceId: string): Uint8Array {
     const record = this.getEvidence(evidenceId)
     if (!record) {

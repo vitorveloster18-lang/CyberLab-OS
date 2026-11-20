@@ -53,7 +53,10 @@ const ProposeFindingInput = Schema.Struct({
   severity: Schema.Literals(["info", "low", "medium", "high", "critical"]),
   confidence: Schema.Number,
   evidenceIds: Schema.Array(Schema.String),
-  affectedAssets: Schema.Array(Schema.String),
+  // Opcional: nem todo finding tem ativos afetados triviais de listar (ex.:
+  // bypass de guard, falha de processo). O schema do finding aceita lista
+  // vazia; exigir o campo só atrapalhava o agente.
+  affectedAssets: Schema.optionalKey(Schema.Array(Schema.String)),
   proposedRemediation: Schema.optionalKey(Schema.String),
 })
 
@@ -222,7 +225,7 @@ export const Plugin = {
                     severity: input.severity,
                     confidence: input.confidence,
                     evidenceIds: [...input.evidenceIds],
-                    affectedAssets: [...input.affectedAssets],
+                    affectedAssets: [...(input.affectedAssets ?? [])],
                     ...(input.proposedRemediation !== undefined
                       ? { proposedRemediation: input.proposedRemediation }
                       : {}),

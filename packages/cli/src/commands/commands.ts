@@ -621,6 +621,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
               Flag.withDescription("Timeout in seconds (default 1800)"),
               Flag.optional,
             ),
+            label: Flag.String("label").pipe(
+              Flag.withDescription("Human-readable label for the evidence title (e.g. \"Guard pos-correcao\")"),
+              Flag.optional,
+            ),
             json: Flag.Boolean("json").pipe(Flag.withDescription("Output as JSON"), Flag.withDefault(false)),
           },
         }),

@@ -694,7 +694,7 @@ export class CdiPartnerHub {
     mode: "generate" | "custom"
     customSecret?: string
     cyberlabCallbackUrl?: string
-  }): { sharedSecret: string; secretPreview: string; cyberlabCallbackUrl: string } {
+  }): { sharedSecret: string; secretPreview: string; cyberlabCallbackUrl: string; configFilePath: string } {
     if (params.mode === "generate") {
       this.sharedSecret = crypto.randomBytes(32).toString("hex")
     } else {
@@ -713,6 +713,7 @@ export class CdiPartnerHub {
       sharedSecret: this.sharedSecret,
       secretPreview: `${this.sharedSecret.slice(0, 6)}...${this.sharedSecret.slice(-4)} (${this.sharedSecret.length} chars)`,
       cyberlabCallbackUrl: this.cyberlabCallbackUrl,
+      configFilePath: this.configPath,
     }
   }
 

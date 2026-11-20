@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { EOL } from "node:os"
 import { formatBlockedMessage, runGuardedNative } from "@cyberlab/core/guard/native-run"
 import { Commands } from "../../commands"
@@ -46,11 +46,10 @@ export default Runtime.handler(
       return
     }
 
-    const timeoutSec = parseTimeoutSec(
-      input.timeout && typeof input.timeout === "string" ? input.timeout : undefined,
-    )
+    const timeoutSec = parseTimeoutSec(Option.getOrUndefined(input.timeout))
 
     const ws = yield* Effect.promise(() => openLocalCyberLabWorkspace())
+    const label = Option.getOrUndefined(input.label)
 
     const result = runGuardedNative({
       projectId: resolveLocalCyberLabProjectId(),
@@ -60,6 +59,7 @@ export default Runtime.handler(
       actor: "cli-operator",
       executorId: `local:${process.platform}`,
       timeoutMs: timeoutSec * 1000,
+      ...(label ? { label } : {}),
     })
 
     if (input.json) {
