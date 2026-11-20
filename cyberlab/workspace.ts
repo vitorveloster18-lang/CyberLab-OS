@@ -91,6 +91,7 @@ export class CyberLabWorkspace {
   readonly cdiHub: CdiPartnerHub
   readonly vault: CyberLabObsidianVault
   private readonly scopePersistencePath: string | null
+  private scopeFileMtimeMs = 0
   private readonly ownedManager?: CyberLabWorkspaceManager
   private initialized = false
 
@@ -183,6 +184,11 @@ export class CyberLabWorkspace {
     try {
       mkdirSync(path.dirname(this.scopePersistencePath), { recursive: true })
       writeFileSync(this.scopePersistencePath, `${JSON.stringify(scope, null, 2)}\n`, "utf8")
+      try {
+        this.scopeFileMtimeMs = statSync(this.scopePersistencePath).mtimeMs
+      } catch {
+        // mtime best-effort
+      }
     } catch {
       // Non-fatal best-effort persistence
     }
@@ -193,6 +199,11 @@ export class CyberLabWorkspace {
     try {
       const parsed = JSON.parse(readFileSync(this.scopePersistencePath, "utf8")) as ProjectScope
       if (!parsed || typeof parsed !== "object") return null
+      try {
+        this.scopeFileMtimeMs = statSync(this.scopePersistencePath).mtimeMs
+      } catch {
+        // mtime best-effort
+      }
       return this.scopes.setProjectScope({
         ...parsed,
         projectId: this.projectId,
@@ -203,9 +214,43 @@ export class CyberLabWorkspace {
     }
   }
 
+  /**
+   * Recarrega o escopo do disco se o arquivo mudou desde a última leitura.
+   *
+   * O CLI (`cyberlab scope`) é um processo separado do servidor: ele grava
+   * `.cyberlab/scope.json`, mas o servidor já inicializado guardava o escopo
+   * antigo em memória até o restart. Sem isto, "escopo não persiste" na
+   * prática — o operador definia e o TUI continuava com o escopo anterior.
+   */
+  refreshScopeFromDiskIfChanged(): void {
+    if (!this.scopePersistencePath || !this.initialized) return
+    let mtimeMs = 0
+    try {
+      if (!existsSync(this.scopePersistencePath)) return
+      mtimeMs = statSync(this.scopePersistencePath).mtimeMs
+    } catch {
+      return
+    }
+    if (mtimeMs === this.scopeFileMtimeMs) return
+    this.tryLoadScopeFromDisk()
+  }
+
   async ensureInitialized(): Promise<this> {
     if (this.initialized) return this
     this.initialized = true
+
+    // Migração de identidade: o CLI antigo gravava evidências/findings sob
+    // `proj-<basename do workspaceRoot>`; o ID unificado (OpenCode) é outro.
+    // Sem isto, os dados legados ficariam órfãos e invisíveis ao MCP.
+    // No-op quando já estão unificados ou quando não há dados legados.
+    try {
+      const legacyProjectId = `proj-${path.basename(this.workspaceRoot).replace(/[^a-zA-Z0-9._-]/g, "-") || "workspace"}`
+      if (legacyProjectId !== this.projectId) {
+        this.evidenceStore.reassignProjectId(legacyProjectId, this.projectId)
+      }
+    } catch {
+      // Migração best-effort: nunca impede a abertura do workspace.
+    }
 
     const restoredScope = this.tryLoadScopeFromDisk()
     if (!restoredScope) {
@@ -851,6 +896,9 @@ export class CyberLabWorkspaceManager {
     const existing = this.instances.get(key)
     if (existing) {
       if (markActive) this.lastActiveKey = key
+      // O CLI pode ter alterado o escopo em disco (processo separado):
+      // recarrega antes de devolver para o chamador (servidor/MCP).
+      existing.refreshScopeFromDiskIfChanged()
       return existing.ensureInitialized()
     }
 

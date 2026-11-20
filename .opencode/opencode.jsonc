@@ -15,6 +15,13 @@
       "description": "Contains opencode logs and data",
     },
   },
+  // CyberLab OS: skills operacionais vivem em skills/ (raiz do repo), que é
+  // também o diretório lido pelo CyberLabSkillCatalog. Sem isto o agente
+  // não enxerga as skills de cybersegurança.
+  "skills": ["../skills"],
+  // CyberLab OS: handoff de sessão para investigações longas (preserva
+  // contexto entre sessões do Orchestrator).
+  "plugin": ["opencode-session-handoff"],
   // CyberLab OS: servidor MCP da Biblioteca de Conhecimento + memória
   // investigativa (search_knowledge, read_document, investigation_memory_*).
   // Sem isto o Orchestrator não acessa a biblioteca nem a memória.

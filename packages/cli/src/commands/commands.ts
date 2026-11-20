@@ -656,6 +656,22 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         Spec.make("findings", {
           description: "List CyberLab security findings and review statuses",
           params: {
+            review: Flag.String("review").pipe(
+              Flag.withDescription("Finding ID to review (records the review decision)"),
+              Flag.optional,
+            ),
+            decision: Flag.String("decision").pipe(
+              Flag.withDescription("Review decision: accept | reject | needs_more_evidence"),
+              Flag.optional,
+            ),
+            by: Flag.String("by").pipe(
+              Flag.withDescription("Reviewer identity recorded in the finding revision"),
+              Flag.optional,
+            ),
+            notes: Flag.String("notes").pipe(
+              Flag.withDescription("Review notes (evidence, remediation commit, rationale)"),
+              Flag.optional,
+            ),
             json: Flag.Boolean("json").pipe(Flag.withDescription("Output findings as JSON"), Flag.withDefault(false)),
           },
         }),

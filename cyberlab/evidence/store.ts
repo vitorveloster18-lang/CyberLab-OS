@@ -579,4 +579,70 @@ export class EvidenceStore {
     }
     return resolved
   }
+
+  /**
+   * Reatribui registros de um projectId legado para o ID unificado.
+   *
+   * O CLI antigo usava `proj-<basename>` e o servidor o ID do projeto
+   * OpenCode — duas partições no mesmo SQLite. Ao unificar a identidade,
+   * os dados da partição legada são movidos (coluna + JSON embutido) para
+   * não ficarem órfãos. Idempotente: sem linhas no ID de origem, é no-op.
+   */
+  reassignProjectId(fromProjectId: string, toProjectId: string): number {
+    if (!fromProjectId || !toProjectId || fromProjectId === toProjectId) return 0
+
+    let moved = 0
+    const tx = this.db.transaction(() => {
+      // Evidência: coluna + record_json.projectId
+      const evRows = this.db
+        .query(`SELECT evidence_id, record_json FROM cyberlab_evidence WHERE project_id = ?`)
+        .all(fromProjectId) as Array<{ evidence_id: string; record_json: string }>
+      for (const row of evRows) {
+        const record = JSON.parse(row.record_json) as Record<string, unknown>
+        record.projectId = toProjectId
+        this.db
+          .query(`UPDATE cyberlab_evidence SET project_id = ?, record_json = ? WHERE evidence_id = ?`)
+          .run(toProjectId, JSON.stringify(record), row.evidence_id)
+        moved++
+      }
+
+      // Custódia: só a coluna (details é texto livre).
+      const custody = this.db
+        .query(`UPDATE cyberlab_custody_events SET project_id = ? WHERE project_id = ?`)
+        .run(toProjectId, fromProjectId)
+      moved += Number(custody.changes ?? 0)
+
+      // Findings: coluna + finding_json.projectId
+      const findingRows = this.db
+        .query(`SELECT finding_id, finding_json FROM cyberlab_findings WHERE project_id = ?`)
+        .all(fromProjectId) as Array<{ finding_id: string; finding_json: string }>
+      for (const row of findingRows) {
+        const finding = JSON.parse(row.finding_json) as Record<string, unknown>
+        finding.projectId = toProjectId
+        this.db
+          .query(`UPDATE cyberlab_findings SET project_id = ?, finding_json = ? WHERE finding_id = ?`)
+          .run(toProjectId, JSON.stringify(finding), row.finding_id)
+        moved++
+      }
+
+      // Revisões: coluna + revision_json.projectId + snapshot.projectId
+      const revisionRows = this.db
+        .query(`SELECT revision_id, revision_json FROM cyberlab_finding_revisions WHERE project_id = ?`)
+        .all(fromProjectId) as Array<{ revision_id: string; revision_json: string }>
+      for (const row of revisionRows) {
+        const revision = JSON.parse(row.revision_json) as Record<string, unknown>
+        revision.projectId = toProjectId
+        const snapshot = revision.snapshot
+        if (snapshot && typeof snapshot === "object") {
+          ;(snapshot as Record<string, unknown>).projectId = toProjectId
+        }
+        this.db
+          .query(`UPDATE cyberlab_finding_revisions SET project_id = ?, revision_json = ? WHERE revision_id = ?`)
+          .run(toProjectId, JSON.stringify(revision), row.revision_id)
+        moved++
+      }
+    })
+    tx()
+    return moved
+  }
 }

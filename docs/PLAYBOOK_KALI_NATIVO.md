@@ -81,11 +81,25 @@ Bloqueios (alvo fora de escopo) e falhas da ferramenta devolvem **exit 1**.
 bun run cyberlab evidence                             # lista os registros com SHA-256
 bun run cyberlab evidence --verify <id da evidência>  # reconfere a custódia
 bun run cyberlab findings                             # achados e status de revisão
+bun run cyberlab findings --review <id> --decision accept --by evidence-reviewer-agent --notes "..."
 bun run cyberlab report > relatorio.md                # relatório reproduzível
 ```
 
 Cada evidência carrega o comando, o alvo, o carimbo de tempo, o `SHA-256` do conteúdo
 e o status de redação — é isso que sustenta a Fase I (documentação reproduzível).
+
+> **Review de findings no terminal:** `findings --review` registra a decisão
+> (`accept` | `reject` | `needs_more_evidence`) com revisor e notas. Sem isto o
+> finding ficava `unreviewed` para sempre no fluxo só-terminal. O finding
+> `find-3f35f19d-5af1-48df-b6d8-623ab87c647d` (bypass do scope guard) foi
+> confirmado por inspeção de código + probe do Orchestrator e remediado no
+> commit `b56fe5b` (fail closed + IPv6/IP decimal/hex). Registre o review com:
+>
+> ```bash
+> bun run cyberlab findings --review find-3f35f19d-5af1-48df-b6d8-623ab87c647d \
+>   --decision accept --by evidence-reviewer-agent \
+>   --notes "Bypass confirmado; remediado em b56fe5b (fail closed + IPv6/decimal/hex)"
+> ```
 
 ---
 
