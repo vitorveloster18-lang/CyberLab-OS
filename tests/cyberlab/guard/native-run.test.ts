@@ -215,4 +215,68 @@ describe("extractTargetsFromArgv: extração de alvos do argv cru", () => {
     const out = extractTargetsFromArgv(["tool", "10.0.0.5", "10.0.0.5"])
     expect(out.networkTargets).toEqual(["10.0.0.5"])
   })
+
+  it("normaliza IPv4 decimal (3232235521 = 192.168.0.1)", () => {
+    expect(extractTargetsFromArgv(["curl", "http://3232235521/"]).networkTargets).toEqual([
+      "192.168.0.1",
+    ])
+  })
+
+  it("normaliza IPv4 hexadecimal (0xc0a80101 = 192.168.1.1)", () => {
+    expect(extractTargetsFromArgv(["curl", "http://0xc0a80101/"]).networkTargets).toEqual([
+      "192.168.1.1",
+    ])
+  })
+
+  it("extrai IPv6 nu e entre colchetes com porta", () => {
+    expect(extractTargetsFromArgv(["nmap", "-6", "2001:db8::1"]).networkTargets).toEqual([
+      "2001:db8::1",
+    ])
+    expect(extractTargetsFromArgv(["nmap", "-6", "::1"]).networkTargets).toEqual(["::1"])
+    expect(extractTargetsFromArgv(["curl", "http://[::1]:8080/"]).networkTargets).toEqual([
+      "::1",
+    ])
+    expect(extractTargetsFromArgv(["curl", "http://[2001:db8::1]:443/x"]).networkTargets).toEqual([
+      "2001:db8::1",
+    ])
+  })
+
+  it("não confunde porta com IPv4 decimal pequeno", () => {
+    // 8080 é porta, não IP decimal — não pode virar alvo.
+    expect(extractTargetsFromArgv(["tool", "8080"]).networkTargets).toEqual([])
+  })
+})
+
+describe("native-run: fail closed para binário de rede sem alvo", () => {
+  it("bloqueia nmap -iL (arquivo de entrada) quando nenhum alvo é extraível", () => {
+    const r = run(["nmap", "-iL", "targets.txt"])
+    expect(r.blocked).toBe(true)
+    expect(r.blockReason).toContain("fail closed")
+  })
+
+  it("bloqueia nuclei -l (arquivo de entrada) quando nenhum alvo é extraível", () => {
+    const r = run(["nuclei", "-l", "urls.txt"])
+    expect(r.blocked).toBe(true)
+    expect(r.blockReason).toContain("fail closed")
+  })
+
+  it("bloqueia curl com IP decimal fora do escopo", () => {
+    const r = run(["curl", "http://3232235521/"])
+    expect(r.blocked).toBe(true)
+  })
+
+  it("bloqueia IPv6 fora do escopo", () => {
+    const r = run(["nmap", "-6", "2001:db8::1"])
+    expect(r.blocked).toBe(true)
+  })
+
+  it("permite binário de rede com alvo dentro do escopo", () => {
+    const r = run(["nmap", "-sV", "192.168.56.10"])
+    expect(r.blocked).toBe(false)
+  })
+
+  it("não bloqueia binário comum sem alvo (echo, ls)", () => {
+    expect(run(["echo", "hello"]).blocked).toBe(false)
+    expect(run(["ls", "-la"]).blocked).toBe(false)
+  })
 })

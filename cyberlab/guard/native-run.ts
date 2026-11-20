@@ -7,6 +7,30 @@ import type { EvidenceStore } from "../evidence/store.js"
 import type { ExtractedTargets, ScopeController } from "../policy/scope.js"
 
 /**
+ * Binários que acessam rede por natureza. Se um destes for invocado e NENHUM
+ * alvo for extraído do argv, o guard falha fechado (bloqueia) — porque um alvo
+ * que a extração não reconheceu (formato novo, arquivo de entrada, stdin)
+ * não pode passar silencioso. É a correção do bypass por "alvo invisível".
+ */
+const NETWORK_BINARIES = new Set([
+  "nmap", "masscan", "zmap", "nuclei", "sqlmap", "ffuf", "gobuster", "dirb", "nikto",
+  "hydra", "john", "hashcat", "metasploit", "msfconsole", "curl", "wget", "httpie",
+  "http", "nc", "ncat", "netcat", "socat", "telnet", "ssh", "scp", "sftp", "ftp",
+  "tftp", "snmpwalk", "snmpget", "dig", "nslookup", "host", "whois", "traceroute",
+  "ping", "arping", "hping3", "tcptraceroute", "mtr", "iperf3", "iperf", "ab",
+  "wrk", "hey", "vegeta", "locust", "jmeter", "burpsuite", "zap", "owasp-zap",
+  "wpscan", "nse", "nessus", "openvas", "qualys", "armitage", "crackmapexec",
+  "netexec", "bloodhound", "sharphound", "responder", "impacket", "psexec",
+  "wmic", "smbclient", "enum4linux", "rpcclient", "showmount", "nfs", "mount",
+])
+
+/** Extrai o nome base do binário (sem caminho, sem extensão .exe). */
+function binaryBaseName(bin: string): string {
+  const base = bin.split(/[\\/]/).pop() ?? bin
+  return base.replace(/\.exe$/i, "").toLowerCase()
+}
+
+/**
  * Execução nativa com governança — o núcleo do CyberLab quando ele roda
  * DENTRO do Kali, em vez de dirigir o Kali de fora.
  *
@@ -91,6 +115,16 @@ export function extractTargetsFromArgv(argv: readonly string[]): ExtractedTarget
   const hostPortRe = new RegExp(`^(${ipv4Source}):(\\d{1,5})$`)
   const urlRe = /^[a-z][a-z0-9+.-]*:\/\//i
   const domainRe = /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/i
+  // IPv6 (com ou sem colchetes, com ou sem :porta). Cobre ::1, 2001:db8::1, fe80::1%eth0.
+  const ipv6Re =
+    /^\[?([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}\]?(:\d{1,5})?$|^\[?::1\]?(:\d{1,5})?$|^\[?::\]?(:\d{1,5})?$/
+  // IPv4 decimal (ex.: 3232235521 = 192.168.1.1) e hexadecimal (0xc0a80101).
+  // Só acima de 65535 para não confundir com porta.
+  const decimalIpRe = /^\d{6,10}$/
+  const hexIpRe = /^0x[0-9a-fA-F]{1,8}$/i
+
+  const toDottedQuad = (n: number): string =>
+    `${(n >>> 24) & 255}.${(n >>> 16) & 255}.${(n >>> 8) & 255}.${n & 255}`
   const FILE_LIKE_RE =
     /\.(txt|json|ya?ml|xml|csv|md|log|conf|cfg|ini|sh|bash|py|js|mjs|cjs|ts|tsx|jsx|exe|dll|bin|tar|tgz|gz|bz2|xz|zip|7z|rar|pdf|png|jpe?g|gif|svg|html?|css|bak|old|tmp|lock|toml|sql|db|sqlite|key|pem|crt|cer|der|p12|pfx|pcap|cap|lst|list|wordlist|gz|iso|img|ova|vdi|qcow2|deb|rpm|apk|jar|war|so|o|a|class|go|rs|c|h|cpp|hpp|rb|pl|php|lua|swift|kt|java|scala|clj|ex|exs|erl|beam)$/i
 
@@ -108,9 +142,15 @@ export function extractTargetsFromArgv(argv: readonly string[]): ExtractedTarget
       // Remove credenciais embutidas (http://user:pass@host).
       const at = candidate.lastIndexOf("@")
       if (at >= 0) candidate = candidate.slice(at + 1)
-      // Remove porta.
-      const colon = candidate.indexOf(":")
-      if (colon > 0) candidate = candidate.slice(0, colon)
+      // Remove porta. IPv6 entre colchetes ([::1]:8080) → fica só [::1];
+      // IPv4/hostname → corta no primeiro ":".
+      if (candidate.startsWith("[")) {
+        const close = candidate.indexOf("]")
+        if (close >= 0) candidate = candidate.slice(0, close + 1)
+      } else {
+        const colon = candidate.indexOf(":")
+        if (colon > 0) candidate = candidate.slice(0, colon)
+      }
     }
 
     if (candidate.length === 0) continue
@@ -120,6 +160,35 @@ export function extractTargetsFromArgv(argv: readonly string[]): ExtractedTarget
       const asHostPort = hostPortRe.exec(candidate)
       found.add(asHostPort ? asHostPort[1]! : candidate)
       continue
+    }
+
+    // IPv6. Com colchetes ([::1]:8080) → extrai o endereço e descarta a porta.
+    // Sem colchetes → é IPv6 "nu" (porta em IPv6 exige colchetes); usa como está,
+    // senão o último hexteto numérico seria confundido com porta (ex.: ::1).
+    if (ipv6Re.test(candidate)) {
+      let v6 = candidate
+      if (v6.startsWith("[")) {
+        const close = v6.indexOf("]")
+        v6 = close >= 0 ? v6.slice(1, close) : v6.replace(/^\[/, "").replace(/\]$/, "")
+      }
+      found.add(v6)
+      continue
+    }
+
+    // IPv4 decimal (3232235521) ou hexadecimal (0xc0a80101) → converte p/ dotted quad.
+    if (decimalIpRe.test(candidate)) {
+      const n = Number(candidate)
+      if (Number.isInteger(n) && n > 65535 && n <= 4294967295) {
+        found.add(toDottedQuad(n))
+        continue
+      }
+    }
+    if (hexIpRe.test(candidate)) {
+      const n = parseInt(candidate, 16)
+      if (Number.isInteger(n) && n >= 0 && n <= 4294967295) {
+        found.add(toDottedQuad(n))
+        continue
+      }
     }
 
     // Extensões de arquivo que parecem TLD. Sem isto, `wordlist.txt` viraria
@@ -173,6 +242,27 @@ export function runGuardedNative(options: GuardedRunOptions): GuardedRunResult {
   // seja objeto estruturado, e usar a string aqui faria o escopo não ver alvo
   // nenhum e liberar a execução (falha silenciosa, o oposto do objetivo).
   const targets = extractTargetsFromArgv(argv)
+
+  // --- 1b. Fail closed: binário de rede sem alvo extraível = recusa ---
+  // Se a ferramenta acessa rede mas nenhum alvo foi reconhecido no argv
+  // (formato não mapeado, arquivo de entrada -iL/-l, stdin), NÃO liberamos:
+  // um alvo invisível não pode passar pelo guard. O operador deve declarar
+  // o alvo explicitamente no escopo ou usar formato reconhecido.
+  if (targets.networkTargets.length === 0 && NETWORK_BINARIES.has(binaryBaseName(bin))) {
+    return {
+      blocked: true,
+      blockReason: `Binário de rede "${binaryBaseName(bin)}" sem alvo identificável no comando. Por segurança (fail closed), recuso executar sem saber o destino. Declare o alvo no escopo ou passe-o explicitamente.`,
+      command,
+      exitCode: null,
+      stdout: "",
+      stderr: "",
+      redacted: false,
+      evidenceId: null,
+      durationMs: Date.now() - startedAt,
+      timedOut: false,
+    }
+  }
+
   const verdict = scope.verifyTargets(projectId, targets)
   if (!verdict.allowed) {
     return {
