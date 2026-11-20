@@ -15,7 +15,17 @@
       "description": "Contains opencode logs and data",
     },
   },
-  "mcp": {},
+  // CyberLab OS: servidor MCP da Biblioteca de Conhecimento + memória
+  // investigativa (search_knowledge, read_document, investigation_memory_*).
+  // Sem isto o Orchestrator não acessa a biblioteca nem a memória.
+  "mcp": {
+    "servers": {
+      "cyberlab-knowledge": {
+        "type": "local",
+        "command": ["bun", "run", "cyberlab/mcp/knowledge-mcp-stdio.ts"]
+      }
+    }
+  },
   "tools": {
     "github-pr-search": false,
   },
