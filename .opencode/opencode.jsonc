@@ -19,9 +19,13 @@
   // também o diretório lido pelo CyberLabSkillCatalog. Sem isto o agente
   // não enxerga as skills de cybersegurança.
   "skills": ["../skills"],
-  // CyberLab OS: handoff de sessão para investigações longas (preserva
-  // contexto entre sessões do Orchestrator).
-  "plugin": ["opencode-session-handoff"],
+  // NOTA: opencode-session-handoff NÃO é usado. O pacote npm (1.1.6) é
+  // formato OpenCode 1.x (exporta função solta) e o OpenCode 2.x exige
+  // { id, setup } — o carregamento falha com "Plugin must export a
+  // default definition with an id and an effect or setup function".
+  // Para investigações longas, use a memória investigativa do CyberLab
+  // (investigation_memory_update/read via MCP), que persiste o estado
+  // na vault entre sessões — mecanismo nativo e estruturado.
   // CyberLab OS: servidor MCP da Biblioteca de Conhecimento + memória
   // investigativa (search_knowledge, read_document, investigation_memory_*).
   // Sem isto o Orchestrator não acessa a biblioteca nem a memória.
