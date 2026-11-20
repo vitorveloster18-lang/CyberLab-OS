@@ -25,11 +25,20 @@
   // CyberLab OS: servidor MCP da Biblioteca de Conhecimento + memória
   // investigativa (search_knowledge, read_document, investigation_memory_*).
   // Sem isto o Orchestrator não acessa a biblioteca nem a memória.
+  //
+  // "cwd": "../.." — o OpenCode spawna o servidor com cwd = diretório da
+  // sessão (packages/cli no launch padrão `bun run cyberlab:tui`), e o
+  // caminho do script é relativo. Sem o cwd, o spawn falha com
+  // "Module not found cyberlab/mcp/knowledge-mcp-stdio.ts". O servidor
+  // também usa process.cwd() como workspaceRoot (vault em <repo>/vault),
+  // então o cwd precisa ser a raiz do repo. Se abrir o TUI a partir da
+  // raiz do repo, troque para ".".
   "mcp": {
     "servers": {
       "cyberlab-knowledge": {
         "type": "local",
-        "command": ["bun", "run", "cyberlab/mcp/knowledge-mcp-stdio.ts"]
+        "command": ["bun", "run", "cyberlab/mcp/knowledge-mcp-stdio.ts"],
+        "cwd": "../.."
       }
     }
   },
