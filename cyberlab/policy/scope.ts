@@ -57,6 +57,67 @@ export function isIpInCidr(ip: string, cidr: string): boolean {
   return (ipNum & mask) === (netNum & mask)
 }
 
+export function isIpv6InCidr(ip: string, cidr: string): boolean {
+  const [networkStr, prefixStr] = cidr.trim().split("/")
+  if (!networkStr || prefixStr === undefined) return false
+  const prefix = Number(prefixStr)
+  if (!Number.isInteger(prefix) || prefix < 0 || prefix > 128) return false
+  const ipNum = ipv6ToBigInt(ip)
+  const netNum = ipv6ToBigInt(networkStr)
+  if (ipNum === undefined || netNum === undefined) return false
+  if (prefix === 0) return true
+  const shift = BigInt(128 - prefix)
+  return ipNum >> shift === netNum >> shift
+}
+
+function ipv6ToBigInt(value: string): bigint | undefined {
+  const address = (value.trim().split("%")[0] ?? "").toLowerCase()
+  if (net.isIP(address) !== 6) return undefined
+
+  let head = address
+  const tailGroups: number[] = []
+  if (address.includes(".")) {
+    // Forma mista (::ffff:192.168.1.1): a cauda IPv4 ocupa dois grupos.
+    const lastColon = address.lastIndexOf(":")
+    if (lastColon === -1) return undefined
+    const v4 = address.slice(lastColon + 1)
+    if (net.isIP(v4) !== 4) return undefined
+    const octets = v4.split(".").map(Number)
+    tailGroups.push(((octets[0] ?? 0) << 8) | (octets[1] ?? 0), ((octets[2] ?? 0) << 8) | (octets[3] ?? 0))
+    head = address.slice(0, lastColon)
+  }
+
+  const [leftText, rightText] = head.split("::") as [string, string | undefined]
+  const left = leftText ? leftText.split(":") : []
+  const right = rightText ? rightText.split(":") : []
+  const compressed = head.includes("::")
+  const missing = 8 - tailGroups.length - left.length - right.length
+  if (compressed ? missing < 1 : missing !== 0) return undefined
+
+  const groups = [
+    ...left.map((group) => Number.parseInt(group, 16)),
+    ...new Array<number>(compressed ? missing : 0).fill(0),
+    ...right.map((group) => Number.parseInt(group, 16)),
+    ...tailGroups,
+  ]
+  if (groups.length !== 8 || groups.some((group) => !Number.isInteger(group) || group < 0 || group > 0xffff)) {
+    return undefined
+  }
+  return groups.reduce((acc, group) => (acc << 16n) | BigInt(group), 0n)
+}
+
+function matchesIpLiteral(host: string, ruleValue: string): boolean {
+  const expected = ruleValue.trim().toLowerCase()
+  if (host === expected) return true
+  // ::1 e 0:0:0:0:0:0:0:1 são o mesmo endereço.
+  if (net.isIP(host) === 6 && net.isIP(expected) === 6) {
+    const actual = ipv6ToBigInt(host)
+    const wanted = ipv6ToBigInt(expected)
+    return actual !== undefined && wanted !== undefined && actual === wanted
+  }
+  return false
+}
+
 export function isPrivateOrLoopbackIp(ip: string): boolean {
   const trimmed = ip.trim().toLowerCase()
   if (trimmed === "::1" || trimmed === "0:0:0:0:0:0:0:1") return true
@@ -154,9 +215,13 @@ function matchesNetworkRule(rawTarget: string, rule: ScopeTargetRule): boolean {
   const { host, origin, normalizedUrl } = normalizeHostFromTarget(rawTarget)
   switch (rule.kind) {
     case "ip":
-      return host === rule.value.trim().toLowerCase()
-    case "cidr":
-      return net.isIP(host) === 4 && isIpInCidr(host, rule.value)
+      return matchesIpLiteral(host, rule.value)
+    case "cidr": {
+      const version = net.isIP(host)
+      if (version === 4) return isIpInCidr(host, rule.value)
+      if (version === 6) return isIpv6InCidr(host, rule.value)
+      return false
+    }
     case "domain":
       return matchesDomainRule(host, rule.value)
     case "url_origin":
